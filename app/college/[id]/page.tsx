@@ -16,6 +16,14 @@ function formatCurrency(num: number | null | undefined) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(num);
 }
 
+// NEW: A clean helper function to format seconds into MM:SS
+function formatTimeSeconds(totalSeconds: number | null) {
+  if (!totalSeconds) return 'N/A';
+  const m = Math.floor(totalSeconds / 60);
+  const s = (totalSeconds % 60).toString().padStart(2, '0');
+  return `${m}:${s}`;
+}
+
 export default function CollegePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const supabase = createClient();
@@ -82,7 +90,7 @@ export default function CollegePage({ params }: { params: Promise<{ id: string }
   return (
     <main className="min-h-screen bg-[#F8FAFC] font-sans pb-24">
       
-      {/* 1. Hero Section */}
+      {/* Hero Section */}
       <div className="relative bg-gradient-to-br from-slate-900 via-[#0f172a] to-blue-950 pt-16 pb-32 px-8 overflow-hidden rounded-b-[2.5rem] shadow-2xl">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-blue-600/20 blur-[120px] rounded-full pointer-events-none"></div>
 
@@ -150,11 +158,8 @@ export default function CollegePage({ params }: { params: Promise<{ id: string }
 
       <div className="max-w-6xl mx-auto px-6 -mt-16 relative z-20 space-y-10">
         
-        {/* ========================================================= */}
-        {/* NEW: UNIVERSITY OVERVIEW (ALWAYS VISIBLE)                 */}
-        {/* ========================================================= */}
+        {/* UNIVERSITY OVERVIEW */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Card 1: Cost & Aid */}
           <div className="bg-white p-6 rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 flex flex-col justify-center">
             <div className="flex items-center space-x-4 mb-3">
               <div className="bg-blue-100 p-3 rounded-2xl">
@@ -174,7 +179,6 @@ export default function CollegePage({ params }: { params: Promise<{ id: string }
             </div>
           </div>
 
-          {/* Card 2: Admissions Profile */}
           <div className="bg-white p-6 rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 flex flex-col justify-center">
             <div className="flex items-center space-x-4 mb-3">
               <div className="bg-indigo-100 p-3 rounded-2xl">
@@ -195,15 +199,12 @@ export default function CollegePage({ params }: { params: Promise<{ id: string }
           </div>
         </div>
 
-        {/* ========================================================= */}
-        {/* ATHLETIC PROGRAMS SECTION                                 */}
-        {/* ========================================================= */}
+        {/* ATHLETIC PROGRAMS SECTION */}
         <div className="pt-6">
           <h2 className="text-2xl font-black text-slate-900 tracking-tight mb-8 px-2">
             Athletic Programs
           </h2>
 
-          {/* Dynamic Empty State if a school doesn't have the sport */}
           {collegeData.programs.length === 0 && (
             <div className="bg-white p-12 rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 text-center">
               <Activity className="w-12 h-12 text-slate-300 mx-auto mb-4" />
@@ -225,7 +226,6 @@ export default function CollegePage({ params }: { params: Promise<{ id: string }
             {collegeData.programs.map((program: any) => (
               <div key={program.id} className="space-y-6">
                 
-                {/* Program Header + Performance Tag */}
                 <div className="flex flex-col md:flex-row md:items-center justify-between bg-white px-6 py-4 rounded-2xl border border-slate-200 shadow-sm">
                   <div className="flex items-center space-x-4">
                     <div className="bg-blue-600 p-2.5 rounded-xl shadow-lg shadow-blue-500/30">
@@ -247,23 +247,41 @@ export default function CollegePage({ params }: { params: Promise<{ id: string }
                   )}
                 </div>
 
-                {/* Standards & Coaches Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   
-                  {/* Target Standards Box */}
+                  {/* UPGRADED: Target Standards Box */}
                   <div className="bg-white p-8 rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 flex flex-col h-full">
-                    <h3 className="text-xl font-bold text-slate-900 mb-6 flex items-center pb-4 border-b border-slate-100">
-                      <Clock className="w-5 h-5 mr-3 text-blue-500"/>
-                      Target Standards
-                    </h3>
+                    <div className="mb-6 pb-5 border-b border-slate-100">
+                      <h3 className="text-xl font-bold text-slate-900 flex items-center">
+                        <Clock className="w-5 h-5 mr-3 text-blue-500"/>
+                        Target Standards
+                      </h3>
+                      <p className="text-[13px] text-slate-500 mt-2 font-medium leading-relaxed pr-4">
+                        *These times represent estimated divisional averages. Coaches often have leniency based on academic profile, progression, and team needs.
+                      </p>
+                    </div>
+
                     {program.recruiting_standards.length > 0 ? (
                       <ul className="space-y-4 flex-grow">
                         {program.recruiting_standards.map((standard: any) => (
-                          <li key={standard.id} className="group flex justify-between items-center p-4 bg-slate-50 hover:bg-blue-50 border border-slate-100 hover:border-blue-100 rounded-2xl transition-all duration-300">
-                            <span className="font-bold text-slate-700 tracking-wide">{standard.event}</span>
-                            <span className="font-black text-2xl text-blue-600 group-hover:scale-105 transition-transform">
-                              {Math.floor(standard.target_time_seconds / 60)}:{(standard.target_time_seconds % 60).toString().padStart(2, '0')}
-                            </span>
+                          <li key={standard.id} className="group flex flex-col p-5 bg-slate-50 hover:bg-blue-50 border border-slate-100 hover:border-blue-100 rounded-2xl transition-all duration-300">
+                            <span className="font-black text-lg text-slate-800 tracking-wide mb-3">{standard.event}</span>
+                            
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="text-sm font-bold text-slate-500 uppercase tracking-wider">Recruit Target</span>
+                              <span className="font-black text-xl text-blue-600 group-hover:scale-105 transition-transform">
+                                {formatTimeSeconds(standard.target_time_seconds)}
+                              </span>
+                            </div>
+
+                            {standard.walk_on_time_seconds && (
+                              <div className="flex justify-between items-center mt-2 pt-2 border-t border-slate-200/60">
+                                <span className="text-sm font-bold text-slate-500 uppercase tracking-wider">Walk-On Target</span>
+                                <span className="font-black text-lg text-slate-700 group-hover:scale-105 transition-transform">
+                                  {formatTimeSeconds(standard.walk_on_time_seconds)}
+                                </span>
+                              </div>
+                            )}
                           </li>
                         ))}
                       </ul>
