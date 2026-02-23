@@ -308,7 +308,7 @@ export default function Home() {
                   <option value="Lacrosse">Lacrosse</option>
                   <option value="Soccer">Soccer</option>
                   <option value="Softball">Softball</option>
-                  <option value="Swimming and Diving">Swimming & Diving</option>
+                  <option value="Swimming and Diving (combined)">Swimming & Diving</option>
                   <option value="Tennis">Tennis</option>
                   <option value="Track & Field">Track & Field</option>
                   <option value="Volleyball">Volleyball</option>
