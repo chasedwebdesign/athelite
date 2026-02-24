@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { createClient } from '@/utils/supabase/client';
-import { MapPin, Trophy, Search, Activity, ChevronRight, BookOpen, Timer, Users, SearchIcon } from 'lucide-react';
+import { MapPin, Trophy, Search, Activity, ChevronRight, BookOpen, Timer, Users, SearchIcon, TrendingUp, Landmark } from 'lucide-react';
 import Link from 'next/link';
 
 interface University {
@@ -14,6 +14,8 @@ interface University {
   student_population: string;
   majors_offered: string[];
   programs: any[];
+  acceptance_rate?: string;
+  median_earnings?: number;
 }
 
 function parseTimeToSeconds(timeStr: string): number | null {
@@ -21,6 +23,11 @@ function parseTimeToSeconds(timeStr: string): number | null {
   const [minutes, seconds] = timeStr.split(':').map(Number);
   if (isNaN(minutes) || isNaN(seconds)) return null;
   return (minutes * 60) + seconds;
+}
+
+function formatCurrency(num: number | null | undefined) {
+  if (!num) return 'N/A';
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(num);
 }
 
 const UMBRELLA_MAP: Record<string, string> = {
@@ -93,7 +100,6 @@ export default function Home() {
   const [selectedEvent, setSelectedEvent] = useState('');
   const [prTime, setPrTime] = useState('');
 
-  // Boolean to check if it's a running sport (to show PR fields)
   const isRunningSport = selectedSport === 'Cross Country' || selectedSport === 'Track & Field';
 
   async function handleSearch() {
@@ -147,7 +153,7 @@ export default function Home() {
     const { data, error } = await query.limit(100);
 
     if (error) {
-      console.error('Database Error:', error.message, error.details, error.hint);
+      console.error('Database Error:', error.message);
       setUniversities([]);
     } else {
       setUniversities(data as unknown as University[]);
@@ -175,7 +181,7 @@ export default function Home() {
       return (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 opacity-60">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="bg-slate-200 h-56 rounded-3xl animate-pulse"></div>
+            <div key={i} className="bg-slate-200 h-64 rounded-3xl animate-pulse"></div>
           ))}
         </div>
       );
@@ -183,9 +189,10 @@ export default function Home() {
 
     if (hasSearched && universities.length === 0) {
       return (
-        <div className="text-center py-12 bg-white rounded-3xl border border-slate-200 border-dashed">
-          <h3 className="text-lg font-bold text-slate-900">No programs found</h3>
-          <p className="text-slate-500 mt-1">Try adjusting your filters or checking your spelling.</p>
+        <div className="text-center py-16 bg-white rounded-3xl border border-slate-200 border-dashed shadow-sm">
+          <Activity className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+          <h3 className="text-xl font-bold text-slate-900">No programs match your exact criteria</h3>
+          <p className="text-slate-500 mt-2 font-medium">Try adjusting your PR time, division, or checking your spelling.</p>
         </div>
       );
     }
@@ -198,7 +205,8 @@ export default function Home() {
               <h3 className="text-xl font-black text-slate-900 leading-tight mb-5 group-hover:text-blue-600 transition-colors">
                 {uni.name}
               </h3>
-              <div className="space-y-3 text-sm font-semibold text-slate-600">
+              
+              <div className="space-y-3 text-sm font-semibold text-slate-600 mb-6">
                 <div className="flex items-center">
                   <div className="w-7 h-7 rounded-full bg-blue-50 flex items-center justify-center mr-3">
                     <MapPin className="w-3.5 h-3.5 text-blue-500" />
@@ -215,25 +223,39 @@ export default function Home() {
                   <div className="w-7 h-7 rounded-full bg-emerald-50 flex items-center justify-center mr-3">
                     <Users className="w-3.5 h-3.5 text-emerald-500" />
                   </div>
-                  {uni.student_population 
-                    ? `${parseInt(uni.student_population).toLocaleString()} Undergrads` 
-                    : 'Population N/A'}
+                  {uni.student_population ? `${parseInt(uni.student_population).toLocaleString()} Undergrads` : 'Population N/A'}
                 </div>
               </div>
+
+              {/* NEW: Data-Rich Dashboard Previews */}
+              <div className="grid grid-cols-2 gap-3 mb-2">
+                <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                  <div className="flex items-center text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                    <Landmark className="w-3 h-3 mr-1" /> Acceptance
+                  </div>
+                  <div className="font-black text-slate-800">{uni.acceptance_rate || 'N/A'}</div>
+                </div>
+                <div className="bg-green-50 rounded-xl p-3 border border-green-100">
+                  <div className="flex items-center text-[10px] font-bold text-green-600 uppercase tracking-wider mb-1">
+                    <TrendingUp className="w-3 h-3 mr-1" /> 10-Yr Salary
+                  </div>
+                  <div className="font-black text-green-700">{uni.median_earnings ? formatCurrency(uni.median_earnings) : 'N/A'}</div>
+                </div>
+              </div>
+
             </div>
-            <div className="mt-6 pt-5 border-t border-slate-100 flex justify-between items-center">
+            <div className="mt-5 pt-5 border-t border-slate-100 flex justify-between items-center">
               <div className="flex items-center text-xs font-bold text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
                 <BookOpen className="w-3.5 h-3.5 mr-1.5 text-slate-400" />
                 {uni.majors_offered ? uni.majors_offered.length : 0} Majors
               </div>
               
-              {/* THE UPGRADE: The URL Smart Link Router! */}
               <Link 
                 href={`/college/${uni.id}?${new URLSearchParams({
                   ...(selectedSport && { sport: selectedSport }),
                   ...(selectedGender && { gender: selectedGender })
                 }).toString()}`}
-                className="text-sm font-black text-blue-600 flex items-center"
+                className="text-sm font-black text-blue-600 flex items-center px-4 py-2 rounded-lg hover:bg-blue-50 transition-colors"
               >
                 View Profile 
                 <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
@@ -252,19 +274,20 @@ export default function Home() {
         <div className="max-w-5xl mx-auto relative z-10 text-center space-y-6">
           <div className="inline-flex items-center px-4 py-2 rounded-full bg-blue-500/10 border border-blue-400/20 text-blue-400 text-sm font-bold tracking-wide mb-4">
             <Activity className="w-4 h-4 mr-2" />
-            The #1 Recruiting Engine
+            The Data-Driven Recruiting Engine
           </div>
           <h1 className="text-6xl md:text-7xl font-black tracking-tighter text-white">
-            Ath<span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300">ELITE</span>
+            Chased<span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300">Sports</span>
           </h1>
           <p className="text-xl text-slate-300 max-w-2xl mx-auto font-medium leading-relaxed">
-            Stop guessing. Instantly discover which college programs match your academic and athletic standards.
+            Stop guessing. Instantly discover which college programs match your athletic standards and financial goals.
           </p>
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto px-6 pb-24">
-        <div className="relative -mt-16 bg-white/80 backdrop-blur-xl p-8 rounded-3xl shadow-xl shadow-blue-900/5 border border-white/50 mb-16 transition-all duration-500">
+        {/* The Control Panel */}
+        <div className="relative -mt-16 bg-white/90 backdrop-blur-2xl p-8 rounded-3xl shadow-xl shadow-blue-900/5 border border-white mb-16 transition-all duration-500">
           <div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
               <div className="space-y-2 lg:col-span-1">
@@ -278,7 +301,7 @@ export default function Home() {
                     placeholder="e.g. Stanford"
                     value={schoolName}
                     onChange={(e) => setSchoolName(e.target.value)}
-                    className="w-full bg-slate-50 border-0 ring-1 ring-slate-200 text-slate-800 rounded-xl pl-9 pr-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold shadow-sm placeholder:font-normal placeholder:text-slate-400"
+                    className="w-full bg-slate-50/50 border border-slate-200 text-slate-800 rounded-xl pl-9 pr-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-semibold shadow-sm placeholder:font-normal placeholder:text-slate-400 transition-all"
                   />
                 </div>
               </div>
@@ -292,7 +315,7 @@ export default function Home() {
                     setSelectedEvent('');
                     setPrTime('');
                   }}
-                  className="w-full bg-slate-50 border-0 ring-1 ring-slate-200 text-slate-800 rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold shadow-sm appearance-none cursor-pointer"
+                  className="w-full bg-slate-50/50 border border-slate-200 text-slate-800 rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-semibold shadow-sm appearance-none cursor-pointer transition-all"
                 >
                   <option value="">Any Sport...</option>
                   <option value="Baseball">Baseball</option>
@@ -322,7 +345,7 @@ export default function Home() {
                 <select 
                   value={selectedGender}
                   onChange={(e) => setSelectedGender(e.target.value)}
-                  className="w-full bg-slate-50 border-0 ring-1 ring-slate-200 text-slate-800 rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold shadow-sm appearance-none cursor-pointer"
+                  className="w-full bg-slate-50/50 border border-slate-200 text-slate-800 rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-semibold shadow-sm appearance-none cursor-pointer transition-all"
                 >
                   <option value="">Any</option>
                   <option value="Men">Men</option>
@@ -335,7 +358,7 @@ export default function Home() {
                 <select 
                   value={selectedDivision}
                   onChange={(e) => setSelectedDivision(e.target.value)}
-                  className="w-full bg-slate-50 border-0 ring-1 ring-slate-200 text-slate-800 rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold shadow-sm appearance-none cursor-pointer"
+                  className="w-full bg-slate-50/50 border border-slate-200 text-slate-800 rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-semibold shadow-sm appearance-none cursor-pointer transition-all"
                 >
                   <option value="">Any Division</option>
                   <option value="NCAA D1">NCAA D1</option>
@@ -354,11 +377,12 @@ export default function Home() {
                   maxLength={2}
                   value={selectedState}
                   onChange={(e) => setSelectedState(e.target.value.toUpperCase())}
-                  className="w-full bg-slate-50 border-0 ring-1 ring-slate-200 text-slate-800 rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold shadow-sm placeholder:font-normal placeholder:text-slate-400"
+                  className="w-full bg-slate-50/50 border border-slate-200 text-slate-800 rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-semibold shadow-sm placeholder:font-normal placeholder:text-slate-400 transition-all"
                 />
               </div>
             </div>
 
+            {/* Advanced Filters Dashboard Section */}
             <div className={`transition-all duration-500 ease-in-out overflow-hidden ${isExpanded ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}`}>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 pt-6 mt-6 border-t border-slate-100">
                 <div className="space-y-2">
@@ -369,7 +393,7 @@ export default function Home() {
                     placeholder="e.g. Nursing, Finance, Art..."
                     value={selectedMajor}
                     onChange={(e) => setSelectedMajor(e.target.value)}
-                    className="w-full bg-slate-50 border-0 ring-1 ring-slate-200 text-slate-800 rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold shadow-sm placeholder:font-normal placeholder:text-slate-400"
+                    className="w-full bg-slate-50/50 border border-slate-200 text-slate-800 rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-semibold shadow-sm placeholder:font-normal placeholder:text-slate-400 transition-all"
                   />
                   <div className="h-4 pl-1">
                     {showMajorHint && (
@@ -400,14 +424,13 @@ export default function Home() {
                   </datalist>
                 </div>
 
-                {/* DYNAMIC RENDER: Only show athletic standards if it's Track/XC */}
                 <div className={`space-y-2 transition-opacity duration-300 ${isRunningSport ? 'opacity-100' : 'opacity-30 pointer-events-none'}`}>
                   <label className="text-xs font-bold text-slate-400 uppercase tracking-widest pl-1">Event</label>
                   <select 
                     value={selectedEvent}
                     onChange={(e) => setSelectedEvent(e.target.value)}
                     disabled={!isRunningSport}
-                    className="w-full bg-slate-50 border-0 ring-1 ring-slate-200 text-slate-800 rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold shadow-sm appearance-none cursor-pointer disabled:opacity-50"
+                    className="w-full bg-slate-50/50 border border-slate-200 text-slate-800 rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-semibold shadow-sm appearance-none cursor-pointer disabled:opacity-50 transition-all"
                   >
                     <option value="">Select Event...</option>
                     {selectedSport === 'Cross Country' ? (
@@ -434,7 +457,7 @@ export default function Home() {
                       disabled={!isRunningSport}
                       value={prTime}
                       onChange={(e) => setPrTime(e.target.value)}
-                      className="w-full bg-slate-50 border-0 ring-1 ring-slate-200 text-slate-800 rounded-xl pl-10 pr-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold shadow-sm placeholder:font-normal placeholder:text-slate-400 disabled:opacity-50"
+                      className="w-full bg-slate-50/50 border border-slate-200 text-slate-800 rounded-xl pl-10 pr-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-semibold shadow-sm placeholder:font-normal placeholder:text-slate-400 disabled:opacity-50 transition-all"
                     />
                   </div>
                 </div>
@@ -443,29 +466,29 @@ export default function Home() {
 
           </div>
 
-          <div className="mt-6 flex justify-end">
+          <div className="mt-6 flex justify-end pt-6 border-t border-slate-100">
             <button 
               onClick={handleSearch}
               disabled={(!selectedSport && !schoolName) || loading}
-              className="group bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 disabled:from-slate-300 disabled:to-slate-300 disabled:cursor-not-allowed text-white px-8 py-3.5 rounded-xl font-bold transition-all shadow-lg shadow-blue-500/25 flex items-center"
+              className="group bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 disabled:from-slate-300 disabled:to-slate-300 disabled:cursor-not-allowed text-white px-10 py-3.5 rounded-xl font-bold transition-all shadow-lg shadow-blue-500/25 flex items-center"
             >
-              {loading ? 'Scanning...' : (
+              {loading ? 'Scanning Database...' : (
                 <>
                   <Search className="w-5 h-5 mr-2 group-hover:scale-110 transition-transform" />
-                  Find Programs
+                  Search Programs
                 </>
               )}
             </button>
           </div>
         </div>
 
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-8 flex items-center justify-between">
           <h2 className="text-2xl font-black text-slate-900 tracking-tight">
             {hasSearched ? 'Search Results' : 'Featured Programs'}
           </h2>
           {hasSearched && !loading && (
-             <span className="bg-slate-200 text-slate-600 py-1 px-3 rounded-full text-sm font-bold">
-               {universities.length} Found
+             <span className="bg-blue-50 text-blue-700 border border-blue-200 py-1.5 px-4 rounded-full text-sm font-bold shadow-sm">
+               {universities.length} Programs Found
              </span>
           )}
         </div>
