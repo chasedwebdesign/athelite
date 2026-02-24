@@ -3,11 +3,12 @@ import { Inter } from 'next/font/google';
 import './globals.css';
 import Link from 'next/link';
 import { Activity } from 'lucide-react';
+import Script from 'next/script';
 
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'AthELITE | College XC & Track Recruiting',
+  title: 'ChasedSports | College XC & Track Recruiting',
   description: 'The free college discovery & standards engine for XC/Track athletes.',
 };
 
@@ -20,6 +21,20 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${inter.className} bg-[#F8FAFC] text-slate-900`}>
         
+        {/* Google Analytics */}
+        <Script 
+          src="https://www.googletagmanager.com/gtag/js?id=G-5WC5D6QFDE" 
+          strategy="afterInteractive" 
+        />
+        <Script id="google-analytics" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', 'G-5WC5D6QFDE');
+          `}
+        </Script>
+
         {/* The Global Navigation Bar */}
         <nav className="sticky top-0 z-50 w-full bg-white/80 backdrop-blur-md border-b border-slate-200 shadow-sm">
           <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
@@ -30,7 +45,7 @@ export default function RootLayout({
                 <Activity className="w-5 h-5 text-white" />
               </div>
               <span className="text-2xl font-black tracking-tight text-slate-900">
-                Ath<span className="text-blue-600">ELITE</span>
+                Chased<span className="text-blue-600">Sports</span>
               </span>
             </Link>
 
