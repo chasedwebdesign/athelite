@@ -16,7 +16,6 @@ function formatCurrency(num: number | null | undefined) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(num);
 }
 
-// NEW: A clean helper function to format seconds into MM:SS
 function formatTimeSeconds(totalSeconds: number | null) {
   if (!totalSeconds) return 'N/A';
   const m = Math.floor(totalSeconds / 60);
@@ -179,21 +178,26 @@ export default function CollegePage({ params }: { params: Promise<{ id: string }
             </div>
           </div>
 
+          {/* UPGRADED: Academics & Outcomes Card */}
           <div className="bg-white p-6 rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 flex flex-col justify-center">
-            <div className="flex items-center space-x-4 mb-3">
+            <div className="flex items-center space-x-4 mb-4">
               <div className="bg-indigo-100 p-3 rounded-2xl">
                 <Landmark className="w-6 h-6 text-indigo-600" />
               </div>
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Admissions Profile</h3>
+              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Academics & Outcomes</h3>
             </div>
-            <div className="grid grid-cols-2 gap-4 mt-2 pl-1">
+            <div className="grid grid-cols-3 gap-4 mt-2 pl-1">
               <div>
-                <span className="block text-xs font-bold text-slate-400 mb-1">Average GPA</span>
-                <span className="text-2xl font-black text-slate-900">{collegeData.average_gpa || 'N/A'}</span>
+                <span className="block text-[11px] font-bold text-slate-400 mb-1 uppercase tracking-wider">Avg GPA</span>
+                <span className="text-xl md:text-2xl font-black text-slate-900">{collegeData.average_gpa || 'N/A'}</span>
               </div>
               <div>
-                <span className="block text-xs font-bold text-slate-400 mb-1">Acceptance Rate</span>
-                <span className="text-2xl font-black text-slate-700">{collegeData.acceptance_rate || 'N/A'}</span>
+                <span className="block text-[11px] font-bold text-slate-400 mb-1 uppercase tracking-wider">Accepted</span>
+                <span className="text-xl md:text-2xl font-black text-slate-700">{collegeData.acceptance_rate || 'N/A'}</span>
+              </div>
+              <div>
+                <span className="block text-[11px] font-bold text-slate-400 mb-1 uppercase tracking-wider">10-Yr Salary</span>
+                <span className="text-xl md:text-2xl font-black text-green-600">{formatCurrency(collegeData.median_earnings)}</span>
               </div>
             </div>
           </div>
@@ -227,17 +231,26 @@ export default function CollegePage({ params }: { params: Promise<{ id: string }
               <div key={program.id} className="space-y-6">
                 
                 <div className="flex flex-col md:flex-row md:items-center justify-between bg-white px-6 py-4 rounded-2xl border border-slate-200 shadow-sm">
-                  <div className="flex items-center space-x-4">
-                    <div className="bg-blue-600 p-2.5 rounded-xl shadow-lg shadow-blue-500/30">
+                  <div className="flex items-center space-x-4 flex-wrap gap-y-2">
+                    <div className="bg-blue-600 p-2.5 rounded-xl shadow-lg shadow-blue-500/30 shrink-0">
                       <Activity className="w-5 h-5 text-white" />
                     </div>
-                    <h2 className="text-2xl font-black text-slate-900 tracking-tight">
+                    <h2 className="text-2xl font-black text-slate-900 tracking-tight mr-2">
                       {program.gender} {program.sport}
                     </h2>
+                    
+                    {program.operating_expense && (
+                      <div className="flex items-center bg-green-50 px-3 py-1.5 rounded-lg border border-green-200">
+                        <Landmark className="w-4 h-4 mr-1.5 text-green-600" />
+                        <span className="text-sm font-bold text-green-700">
+                          {formatCurrency(program.operating_expense)} Budget
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   {program.conference_finish && program.conference_teams && program.conference_name && (
-                    <div className="mt-4 md:mt-0 flex items-center bg-emerald-50 px-4 py-2 rounded-xl border border-emerald-100">
+                    <div className="mt-4 md:mt-0 flex items-center bg-emerald-50 px-4 py-2 rounded-xl border border-emerald-100 shrink-0">
                       <TrendingUp className="w-5 h-5 mr-2 text-emerald-600" />
                       <div>
                         <span className="font-bold text-slate-900">{getOrdinal(program.conference_finish)} of {program.conference_teams}</span>
@@ -249,7 +262,7 @@ export default function CollegePage({ params }: { params: Promise<{ id: string }
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   
-                  {/* UPGRADED: Target Standards Box */}
+                  {/* Target Standards Box */}
                   <div className="bg-white p-8 rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 flex flex-col h-full">
                     <div className="mb-6 pb-5 border-b border-slate-100">
                       <h3 className="text-xl font-bold text-slate-900 flex items-center">
