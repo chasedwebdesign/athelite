@@ -143,7 +143,7 @@ export default function CollegePage({ params }: { params: Promise<{ id: string }
           
           <div className="flex flex-wrap items-center gap-4 mb-8">
             <Link 
-              href="/" 
+              href="/search" 
               className="inline-flex items-center text-sm font-bold text-blue-400 hover:text-white transition-colors bg-blue-500/10 px-5 py-2.5 rounded-full border border-blue-400/20 backdrop-blur-md hover:bg-blue-500/20"
             >
               <ArrowLeft className="w-4 h-4 mr-2" />
