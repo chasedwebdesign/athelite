@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
-import { Search as SearchIcon, Medal, CheckCircle2, MapPin, Activity, Filter, ArrowUpDown } from 'lucide-react';
+import { Search as SearchIcon, Medal, CheckCircle2, MapPin, Activity, Filter, ArrowUpDown, Mail, X, Send } from 'lucide-react';
 import Link from 'next/link';
 
 interface Athlete {
@@ -14,17 +14,16 @@ interface Athlete {
   grad_year: number;
   trust_level: number;
   prs: { event: string; mark: string; date?: string; meet?: string }[];
-  avatar_url?: string | null; // NEW: Added avatar URL
+  avatar_url?: string | null;
+  tier?: { name: string; classes: string }; // NEW: Tier object for the Regal Badge
 }
 
-// Master list of events for the dropdown
 const FILTER_EVENTS = [
   'All Events', '60 Meters', '100 Meters', '200 Meters', '400 Meters', '800 Meters', '1500 Meters', '1600 Meters', 
   '1 Mile', '3000 Meters', '3200 Meters', '5000 Meters', '100m Hurdles', '110m Hurdles', '300m Hurdles', 
   '400m Hurdles', 'Shot Put', 'Discus', 'Javelin', 'High Jump', 'Pole Vault', 'Long Jump', 'Triple Jump'
 ];
 
-// List of Field Events (where a HIGHER number is better)
 const FIELD_EVENTS = ['Shot Put', 'Discus', 'Javelin', 'Hammer', 'High Jump', 'Pole Vault', 'Long Jump', 'Triple Jump'];
 
 export default function DiscoveryEngine() {
@@ -32,9 +31,16 @@ export default function DiscoveryEngine() {
   const [athletes, setAthletes] = useState<Athlete[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // States for Filtering
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedEvent, setSelectedEvent] = useState('All Events');
+
+  const [selectedAthlete, setSelectedAthlete] = useState<Athlete | null>(null);
+  const [senderName, setSenderName] = useState('');
+  const [senderSchool, setSenderSchool] = useState('');
+  const [senderEmail, setSenderEmail] = useState('');
+  const [messageContent, setMessageContent] = useState('');
+  const [isSending, setIsSending] = useState(false);
+  const [sendSuccess, setSendSuccess] = useState(false);
 
   useEffect(() => {
     async function fetchAthletes() {
@@ -50,7 +56,6 @@ export default function DiscoveryEngine() {
     fetchAthletes();
   }, [supabase]);
 
-  // --- THE TRACK & FIELD PARSING ALGORITHM ---
   const parseMarkForSorting = (mark: string, event: string): number => {
     const cleanMark = mark.replace(/[a-zA-Z]/g, '').trim();
     const isField = FIELD_EVENTS.includes(event);
@@ -74,7 +79,7 @@ export default function DiscoveryEngine() {
     return isField ? -val : val;
   };
 
-  // --- FILTER & SORT LOGIC ---
+  // --- FILTER & TIER CALCULATION ---
   let processedAthletes = athletes.filter(athlete => {
     const searchString = `${athlete.first_name} ${athlete.last_name} ${athlete.high_school}`.toLowerCase();
     const matchesSearch = searchString.includes(searchTerm.toLowerCase());
@@ -83,39 +88,92 @@ export default function DiscoveryEngine() {
   });
 
   if (selectedEvent !== 'All Events') {
+    // 1. Sort athletes by this specific event
     processedAthletes.sort((a, b) => {
       const prA = a.prs.find(pr => pr.event === selectedEvent)?.mark || '9999';
       const prB = b.prs.find(pr => pr.event === selectedEvent)?.mark || '9999';
+      return parseMarkForSorting(prA, selectedEvent) - parseMarkForSorting(prB, selectedEvent);
+    });
+
+    // 2. Assign Regal Tiers based on their rank in this view
+    const total = processedAthletes.length;
+    processedAthletes.forEach((athlete, index) => {
+      const percentile = index / total;
       
-      const valA = parseMarkForSorting(prA, selectedEvent);
-      const valB = parseMarkForSorting(prB, selectedEvent);
-      
-      return valA - valB;
+      if (percentile <= 0.01 || index === 0) {
+        athlete.tier = { name: 'LEGEND', classes: 'legend-badge' };
+      } else if (percentile <= 0.05) {
+        athlete.tier = { name: 'GRANDMASTER', classes: 'bg-slate-900 text-slate-100 border border-slate-700 shadow-md' };
+      } else if (percentile <= 0.15) {
+        athlete.tier = { name: 'MASTER', classes: 'bg-purple-100 text-purple-800 border border-purple-300' };
+      } else if (percentile <= 0.30) {
+        athlete.tier = { name: 'ELITE', classes: 'bg-blue-100 text-blue-800 border border-blue-300' };
+      } else if (percentile <= 0.50) {
+        athlete.tier = { name: 'CONTENDER', classes: 'bg-emerald-100 text-emerald-800 border border-emerald-300' };
+      } else if (percentile <= 0.75) {
+        athlete.tier = { name: 'CHALLENGER', classes: 'bg-orange-100 text-orange-800 border border-orange-300' };
+      } else {
+        athlete.tier = { name: 'PROSPECT', classes: 'bg-slate-100 text-slate-600 border border-slate-300' };
+      }
     });
   }
 
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedAthlete) return;
+    
+    setIsSending(true);
+    
+    try {
+      const { error } = await supabase
+        .from('messages')
+        .insert({
+          athlete_id: selectedAthlete.id,
+          sender_name: senderName,
+          sender_school: senderSchool,
+          sender_email: senderEmail,
+          content: messageContent
+        });
+
+      if (error) throw error;
+
+      setSendSuccess(true);
+      
+      setTimeout(() => {
+        setSelectedAthlete(null);
+        setSendSuccess(false);
+        setSenderName('');
+        setSenderSchool('');
+        setSenderEmail('');
+        setMessageContent('');
+      }, 2000);
+
+    } catch (error: any) {
+      alert(`Failed to send message: ${error.message}`);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-[#F8FAFC] font-sans pb-32">
-      <nav className="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2 group">
-            <div className="bg-blue-600 p-1.5 rounded-lg shadow-md group-hover:scale-105 transition-transform">
-              <Activity className="w-5 h-5 text-white" />
-            </div>
-            <span className="text-xl font-black tracking-tight text-slate-900 hidden sm:block">
-              Chased<span className="text-blue-600">Sports</span>
-            </span>
-          </Link>
-          <div className="flex items-center space-x-4">
-            <Link href="/login" className="text-sm font-bold text-slate-600 hover:text-blue-600 transition-colors">
-              Athlete Login
-            </Link>
-            <Link href="/dashboard" className="text-sm font-bold bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg transition-all shadow-sm">
-              My Dashboard
-            </Link>
-          </div>
-        </div>
-      </nav>
+      
+      {/* CUSTOM CSS FOR THE LEGEND SHIMMER */}
+      <style dangerouslySetInnerHTML={{__html: `
+        @keyframes shimmer {
+          0% { background-position: -200% center; }
+          100% { background-position: 200% center; }
+        }
+        .legend-badge {
+          background: linear-gradient(90deg, #FFDF00 0%, #FFF8B0 20%, #FFDF00 40%, #FFF8B0 60%, #FFDF00 80%);
+          background-size: 200% auto;
+          animation: shimmer 3s linear infinite;
+          color: #714200;
+          border: 1px solid #FDE047;
+          box-shadow: 0 0 10px rgba(253, 224, 71, 0.4);
+          font-weight: 900;
+        }
+      `}} />
 
       <div className="max-w-7xl mx-auto px-6 pt-12">
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
@@ -168,11 +226,17 @@ export default function DiscoveryEngine() {
               const displayPRs = targetPR ? [targetPR] : (athlete.prs || []).slice(0, 3);
 
               return (
-                <div key={athlete.id} className="bg-white rounded-[2rem] p-6 border border-slate-200 shadow-sm hover:shadow-xl hover:border-blue-200 transition-all group cursor-pointer flex flex-col h-full">
+                <div key={athlete.id} className="bg-white rounded-[2rem] p-6 border border-slate-200 shadow-sm hover:shadow-xl hover:border-blue-200 transition-all flex flex-col h-full relative overflow-hidden group">
+                  
+                  {/* --- REGAL TIER BADGE --- */}
+                  {athlete.tier && selectedEvent !== 'All Events' && (
+                    <div className={`absolute top-5 right-5 px-3 py-1.5 rounded-lg text-[10px] font-black tracking-widest uppercase ${athlete.tier.classes}`}>
+                      {athlete.tier.name}
+                    </div>
+                  )}
+
                   <div className="flex justify-between items-start mb-4">
                     <div className="flex items-center gap-4">
-                      
-                      {/* DYNAMIC AVATAR UI */}
                       <div className="w-12 h-12 bg-slate-100 border border-slate-200 rounded-full flex items-center justify-center overflow-hidden shrink-0">
                         {athlete.avatar_url ? (
                           <img src={athlete.avatar_url} alt="Profile" className="w-full h-full object-cover" />
@@ -180,9 +244,9 @@ export default function DiscoveryEngine() {
                           <Medal className="w-6 h-6 text-slate-400" />
                         )}
                       </div>
-
                       <div>
-                        <h3 className="font-black text-lg text-slate-900 group-hover:text-blue-600 transition-colors">
+                        {/* Added pr-20 to avoid text overlapping with the absolute positioned badge */}
+                        <h3 className="font-black text-lg text-slate-900 pr-20 group-hover:text-blue-600 transition-colors">
                           {athlete.first_name} {athlete.last_name}
                         </h3>
                         <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
@@ -190,9 +254,12 @@ export default function DiscoveryEngine() {
                         </p>
                       </div>
                     </div>
-                    <div className="bg-green-50 p-1.5 rounded-full border border-green-200" title="Results Verified">
-                      <CheckCircle2 className="w-5 h-5 text-green-500" />
-                    </div>
+                    {/* Hide the little green verified check if the big Regal Badge is showing, keeps UI clean */}
+                    {(!athlete.tier || selectedEvent === 'All Events') && (
+                      <div className="bg-green-50 p-1.5 rounded-full border border-green-200" title="Results Verified">
+                        <CheckCircle2 className="w-5 h-5 text-green-500" />
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex items-center text-sm font-medium text-slate-500 mb-6">
@@ -200,7 +267,7 @@ export default function DiscoveryEngine() {
                     {athlete.high_school} {athlete.state ? `, ${athlete.state}` : ''}
                   </div>
 
-                  <div className="mt-auto space-y-2 border-t border-slate-100 pt-4">
+                  <div className="mt-auto space-y-2 border-t border-slate-100 pt-4 mb-5">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2">
                       {selectedEvent !== 'All Events' ? 'Target Event' : 'Top Verified Marks'}
                     </span>
@@ -211,13 +278,15 @@ export default function DiscoveryEngine() {
                         <span className={`text-sm font-black ${selectedEvent !== 'All Events' ? 'text-blue-700 text-lg' : 'text-blue-600'}`}>{pr.mark}</span>
                       </div>
                     ))}
-
-                    {selectedEvent === 'All Events' && athlete.prs && athlete.prs.length > 3 && (
-                      <p className="text-xs text-center text-slate-400 font-bold mt-2 pt-1">
-                        + {athlete.prs.length - 3} more events
-                      </p>
-                    )}
                   </div>
+
+                  <button 
+                    onClick={() => setSelectedAthlete(athlete)}
+                    className="w-full bg-slate-900 hover:bg-blue-600 text-white font-bold py-3 rounded-xl transition-colors flex items-center justify-center gap-2 shadow-sm"
+                  >
+                    <Mail className="w-4 h-4" /> Message Athlete
+                  </button>
+
                 </div>
               );
             })}
@@ -231,8 +300,71 @@ export default function DiscoveryEngine() {
             )}
           </div>
         )}
-
       </div>
+
+      {/* --- MESSAGING MODAL OVERLAY --- */}
+      {selectedAthlete && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
+            
+            <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
+              <div>
+                <h3 className="font-black text-lg text-slate-900">Message {selectedAthlete.first_name}</h3>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Direct Pitch</p>
+              </div>
+              <button 
+                onClick={() => setSelectedAthlete(null)}
+                className="p-2 hover:bg-slate-200 rounded-full transition-colors"
+              >
+                <X className="w-5 h-5 text-slate-500" />
+              </button>
+            </div>
+
+            {sendSuccess ? (
+              <div className="p-12 flex flex-col items-center justify-center text-center">
+                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
+                  <CheckCircle2 className="w-8 h-8 text-green-600" />
+                </div>
+                <h4 className="text-2xl font-black text-slate-900 mb-2">Pitch Sent!</h4>
+                <p className="text-slate-500 font-medium">Your message has been securely delivered to their dashboard.</p>
+              </div>
+            ) : (
+              <form onSubmit={handleSendMessage} className="p-6 space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Your Name</label>
+                    <input required type="text" value={senderName} onChange={(e) => setSenderName(e.target.value)} className="w-full border border-slate-200 rounded-xl px-4 py-3 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all font-medium text-slate-900" placeholder="Coach Smith" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">University / Program</label>
+                    <input required type="text" value={senderSchool} onChange={(e) => setSenderSchool(e.target.value)} className="w-full border border-slate-200 rounded-xl px-4 py-3 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all font-medium text-slate-900" placeholder="Oregon State" />
+                  </div>
+                </div>
+                
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Coach Email</label>
+                  <input required type="email" value={senderEmail} onChange={(e) => setSenderEmail(e.target.value)} className="w-full border border-slate-200 rounded-xl px-4 py-3 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all font-medium text-slate-900" placeholder="coach@university.edu" />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">The Pitch</label>
+                  <textarea required value={messageContent} onChange={(e) => setMessageContent(e.target.value)} rows={4} className="w-full border border-slate-200 rounded-xl px-4 py-3 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all font-medium text-slate-900 resize-none" placeholder={`Hi ${selectedAthlete.first_name}, I saw your recent PR and we'd love to get you on a visit...`}></textarea>
+                </div>
+
+                <button 
+                  type="submit" 
+                  disabled={isSending}
+                  className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded-xl transition-colors shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {isSending ? 'Sending...' : <><Send className="w-5 h-5" /> Send Message</>}
+                </button>
+              </form>
+            )}
+
+          </div>
+        </div>
+      )}
+
     </main>
   );
 }

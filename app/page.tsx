@@ -1,9 +1,42 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+import { createClient } from '@/utils/supabase/client';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Search, ShieldCheck, Database, LineChart, ArrowRight, Activity, Zap, CheckCircle2 } from 'lucide-react';
 
 export default function LandingPage() {
+  const supabase = createClient();
+  const router = useRouter();
+  const [loading, setLoading] = useState(true);
+
+  // Check if the user is already logged in when they hit the homepage
+  useEffect(() => {
+    async function checkAuth() {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session) {
+        // IF LOGGED IN: Instantly redirect them to their dashboard!
+        router.push('/dashboard');
+      } else {
+        // IF LOGGED OUT: Show them the landing page
+        setLoading(false);
+      }
+    }
+    checkAuth();
+  }, [supabase, router]);
+
+  // Show a quick loading spinner while we check their auth status
+  // so the marketing page doesn't flash on the screen before redirecting
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#F8FAFC] flex flex-col items-center justify-center">
+        <div className="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-[#F8FAFC] font-sans selection:bg-blue-500/30 overflow-hidden relative">
       
@@ -33,31 +66,11 @@ export default function LandingPage() {
         .bg-grid-slate-200 { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' width='32' height='32' fill='none' stroke='%23e2e8f0'%3E%3Cpath d='M0 .5H31.5V32'/%3E%3C/svg%3E"); }
       `}} />
 
-      {/* LIGHT-THEMED NAVIGATION */}
-      <nav className="absolute top-0 left-0 w-full z-50 flex items-center justify-between px-6 py-6 lg:px-12">
-        <div className="flex items-center space-x-2 group cursor-pointer">
-          <div className="bg-blue-600 p-2 rounded-xl group-hover:scale-105 transition-transform shadow-md shadow-blue-600/20">
-            <Activity className="w-5 h-5 text-white" />
-          </div>
-          <span className="text-xl font-black tracking-tighter text-slate-900">Chased<span className="text-blue-600">Sports</span></span>
-        </div>
-        <div className="flex items-center space-x-6">
-          <Link href="/login" className="text-sm font-bold text-slate-500 hover:text-slate-900 transition-colors hidden sm:block">
-            Log In
-          </Link>
-          <Link href="/login" className="text-sm font-bold text-white bg-slate-900 px-5 py-2.5 rounded-full hover:bg-blue-600 transition-all shadow-md hover:shadow-xl">
-            Sign Up Free
-          </Link>
-        </div>
-      </nav>
-
       {/* HERO SECTION */}
-      <div className="relative pt-32 pb-24 lg:pt-48 lg:pb-32 px-6 border-b border-slate-200">
+      <div className="relative pt-32 pb-24 lg:pt-48 lg:pb-32 px-6 border-b border-slate-200 mt-[-4rem]">
         
-        {/* Subtle Tech Grid */}
         <div className="absolute inset-0 bg-grid-slate-200 [mask-image:linear-gradient(to_bottom,white,transparent)] -z-10 pointer-events-none"></div>
 
-        {/* Cloudflare Animated Blobs */}
         <div className="absolute top-0 left-1/4 w-96 h-96 bg-blue-300 rounded-full mix-blend-multiply filter blur-[100px] opacity-40 animate-blob pointer-events-none -z-10"></div>
         <div className="absolute top-0 right-1/4 w-96 h-96 bg-cyan-300 rounded-full mix-blend-multiply filter blur-[100px] opacity-40 animate-blob animation-delay-2000 pointer-events-none -z-10"></div>
         <div className="absolute -bottom-32 left-1/3 w-96 h-96 bg-purple-300 rounded-full mix-blend-multiply filter blur-[100px] opacity-40 animate-blob animation-delay-4000 pointer-events-none -z-10"></div>
@@ -87,22 +100,22 @@ export default function LandingPage() {
               <Search className="w-5 h-5 mr-2" />
               Explore Colleges
             </Link>
+            
             <Link 
               href="/login"
               className="w-full sm:w-auto px-8 py-4 bg-white hover:bg-slate-50 text-slate-900 rounded-full font-bold text-lg transition-all border border-slate-200 shadow-sm flex items-center justify-center group hover:-translate-y-1"
             >
-              Claim Athlete Profile
+              Join the Network
               <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform text-slate-400 group-hover:text-slate-900" />
             </Link>
           </div>
         </div>
       </div>
 
-      {/* TOOL 1: THE DISCOVERY ENGINE (Light Mode) */}
+      {/* TOOL 1: THE DISCOVERY ENGINE */}
       <div className="max-w-7xl mx-auto px-6 py-24 relative z-10">
         <div className="group relative bg-white rounded-[3rem] p-8 md:p-16 lg:p-20 border border-slate-200 overflow-hidden shadow-2xl shadow-slate-200/50 hover:shadow-blue-900/5 transition-all duration-700">
           
-          {/* Subtle Hover Gradient inside the card */}
           <div className="absolute inset-0 bg-gradient-to-br from-blue-50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none"></div>
 
           <div className="relative z-10 flex flex-col lg:flex-row items-center gap-12 lg:gap-20">
@@ -131,9 +144,7 @@ export default function LandingPage() {
               </Link>
             </div>
 
-            {/* FLOATING UI GRAPHIC (Cloudflare style) */}
             <div className="hidden lg:block flex-1 w-full relative h-[400px]">
-              {/* Fake UI Element 1 */}
               <div className="absolute top-10 right-10 w-80 bg-white border border-slate-200 shadow-xl rounded-2xl p-6 animate-float z-20">
                 <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-4">
                   <div className="flex items-center">
@@ -150,7 +161,6 @@ export default function LandingPage() {
                 </div>
               </div>
 
-              {/* Fake UI Element 2 */}
               <div className="absolute bottom-10 left-0 w-72 bg-white border border-slate-200 shadow-2xl rounded-2xl p-6 animate-float-delayed z-30">
                 <div className="h-3 w-32 bg-slate-200 rounded-full mb-4"></div>
                 <div className="flex items-end space-x-2 h-24">
@@ -161,7 +171,6 @@ export default function LandingPage() {
                 </div>
               </div>
 
-              {/* Decorative dotted grid behind elements */}
               <div className="absolute inset-0 bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] [background-size:16px_16px] opacity-50 -z-10"></div>
             </div>
           </div>
@@ -192,18 +201,17 @@ export default function LandingPage() {
                   </li>
                 ))}
               </ul>
+              
               <Link
                 href="/login"
                 className="inline-flex items-center px-8 py-4 bg-slate-900 hover:bg-purple-600 text-white rounded-full font-bold text-lg transition-all shadow-md hover:shadow-xl group/btn"
               >
-                Claim Your Profile <ArrowRight className="w-5 h-5 ml-2 group-hover/btn:translate-x-2 transition-transform" />
+                Join the Network <ArrowRight className="w-5 h-5 ml-2 group-hover/btn:translate-x-2 transition-transform" />
               </Link>
             </div>
 
-            {/* FLOATING UI GRAPHIC 2 */}
             <div className="hidden lg:block flex-1 w-full relative h-[400px]">
               
-              {/* Central Badge Element */}
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 bg-white border border-slate-200 shadow-2xl rounded-[2rem] p-8 animate-float z-30 text-center">
                 <div className="w-20 h-20 bg-gradient-to-br from-purple-500 to-blue-500 rounded-full mx-auto mb-6 shadow-lg shadow-purple-500/30 flex items-center justify-center border-4 border-white">
                   <ShieldCheck className="w-10 h-10 text-white" />
@@ -212,14 +220,12 @@ export default function LandingPage() {
                 <div className="h-3 w-20 bg-purple-100 rounded-full mx-auto"></div>
               </div>
 
-              {/* Floating Stat Element */}
               <div className="absolute top-12 left-0 w-48 bg-white border border-slate-100 shadow-lg rounded-2xl p-4 animate-float-delayed z-20">
                 <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">State Rank</span>
                 <span className="text-3xl font-black text-slate-900">#12</span>
                 <span className="text-sm font-bold text-green-500 ml-2">↑ 4</span>
               </div>
 
-               {/* Floating Data Element */}
                <div className="absolute bottom-16 right-0 w-56 bg-white border border-slate-100 shadow-lg rounded-2xl p-5 animate-float z-20" style={{ animationDelay: '1s'}}>
                 <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Recruit Score</span>
                 <div className="w-full bg-slate-100 rounded-full h-2.5">

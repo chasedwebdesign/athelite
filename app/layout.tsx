@@ -1,14 +1,33 @@
-import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
 import './globals.css';
-import Script from 'next/script';
-import Navbar from '@/components/Navbar'; // Importing our new smart navbar
+import Navbar from '@/components/Navbar';
 
-const inter = Inter({ subsets: ['latin'] });
-
-export const metadata: Metadata = {
-  title: 'ChasedSports | College XC & Track Recruiting',
-  description: 'The free college discovery & standards engine for XC/Track athletes.',
+export const metadata = {
+  title: 'ChasedSports | The Athletic Recruiting Network',
+  description: 'The data-driven recruiting platform connecting high school athletes with college programs. Build your profile, verify your stats, and discover your true market value.',
+  
+  // These make your links look like rich, clickable cards in iMessage and Social Media
+  openGraph: {
+    title: 'ChasedSports | The Athletic Recruiting Network',
+    description: 'The data-driven recruiting platform connecting high school athletes with college programs.',
+    url: 'https://www.chasedsports.com',
+    siteName: 'ChasedSports',
+    images: [
+      {
+        url: '/icon.png', // Pointing directly to your existing icon!
+        width: 512,       // Standard icon width
+        height: 512,      // Standard icon height
+        alt: 'ChasedSports Logo',
+      },
+    ],
+    locale: 'en_US',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary', // Changed to "summary" so it formats your square icon perfectly
+    title: 'ChasedSports | The Athletic Recruiting Network',
+    description: 'The data-driven recruiting platform connecting high school athletes with college programs.',
+    images: ['/icon.png'],
+  },
 };
 
 export default function RootLayout({
@@ -18,28 +37,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={`${inter.className} bg-[#F8FAFC] text-slate-900`}>
-        
-        {/* Google Analytics */}
-        <Script 
-          src="https://www.googletagmanager.com/gtag/js?id=G-5WC5D6QFDE" 
-          strategy="afterInteractive" 
-        />
-        <Script id="google-analytics" strategy="afterInteractive">
-          {`
-            window.dataLayer = window.dataLayer || [];
-            function gtag(){dataLayer.push(arguments);}
-            gtag('js', new Date());
-            gtag('config', 'G-5WC5D6QFDE');
-          `}
-        </Script>
-
-        {/* The Smart Global Navigation Bar */}
+      <body className="bg-[#F8FAFC]">
+        {/* GLOBAL NAVBAR */}
         <Navbar />
-
-        {/* This renders whatever specific page you are currently on */}
-        {children}
         
+        {/* PAGE CONTENT */}
+        {children}
       </body>
     </html>
   );

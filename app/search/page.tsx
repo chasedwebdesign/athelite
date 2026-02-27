@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { createClient } from '@/utils/supabase/client';
-import { MapPin, Trophy, Search, Activity, ChevronRight, BookOpen, Users, SearchIcon, TrendingUp, Landmark, SlidersHorizontal, ChevronDown, ChevronUp, DollarSign, Percent, Award, Gem } from 'lucide-react';
+// NEW: Imported RotateCcw for the reset icon
+import { MapPin, Trophy, Search, Activity, ChevronRight, BookOpen, Users, SearchIcon, TrendingUp, Landmark, SlidersHorizontal, ChevronDown, ChevronUp, DollarSign, Percent, Award, Gem, RotateCcw } from 'lucide-react';
 import Link from 'next/link';
 
 interface University {
@@ -111,7 +112,6 @@ export default function Home() {
       const savedFilters = sessionStorage.getItem('chasedSportsFilters');
       const savedResults = sessionStorage.getItem('chasedSportsResults');
       
-      // FIXED: Using V3 cache keys to force the browser to dump the old broken data
       const savedTopSalary = sessionStorage.getItem('chasedSportsTopSalaryV3');
       const savedTopFunding = sessionStorage.getItem('chasedSportsTopFundingV3');
 
@@ -170,7 +170,6 @@ export default function Home() {
         setTopSalarySchools(salaryData || []);
         setTopFundingPrograms(topFunding);
         
-        // Save to the NEW cache keys so this bug never happens again
         sessionStorage.setItem('chasedSportsTopSalaryV3', JSON.stringify(salaryData || []));
         sessionStorage.setItem('chasedSportsTopFundingV3', JSON.stringify(topFunding));
         
@@ -196,6 +195,29 @@ export default function Home() {
     if (!isInitialized) return;
     sessionStorage.setItem('chasedSportsResults', JSON.stringify(universities));
   }, [isInitialized, universities]);
+
+  // --- NEW: RESET FILTERS FUNCTION ---
+  const handleReset = () => {
+    // 1. Clear all states
+    setSchoolName('');
+    setSelectedSport('');
+    setSelectedGender('');
+    setSelectedDivision('');
+    setSelectedState('');
+    setSelectedMajor('');
+    setMaxAcceptance('');
+    setTuitionType('in_state');
+    setMaxTuition('');
+    setSortBy('');
+    
+    // 2. Reset the view back to the featured home page
+    setHasSearched(false);
+    setUniversities([]);
+    
+    // 3. Clear the saved session data so it doesn't auto-reload on refresh
+    sessionStorage.removeItem('chasedSportsFilters');
+    sessionStorage.removeItem('chasedSportsResults');
+  };
 
   async function handleSearch() {
     if (!selectedSport && !schoolName) {
@@ -238,7 +260,6 @@ export default function Home() {
   const mappedMajor = getUmbrellaMajor(selectedMajor);
   const showMajorHint = selectedMajor.length > 2 && mappedMajor.toLowerCase() !== selectedMajor.toLowerCase();
 
-  // UPGRADED: Ghost School Filter Logic
   const validUniversities = useMemo(() => {
     let filtered = universities.filter((uni) => {
       const hasAcceptanceData = uni.acceptance_rate != null && uni.acceptance_rate !== '';
@@ -665,7 +686,18 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="mt-6 flex justify-end pt-6 border-t border-slate-100">
+          {/* --- NEW: BUTTON ACTION BAR --- */}
+          <div className="mt-6 flex justify-end gap-4 pt-6 border-t border-slate-100">
+            {/* RESET BUTTON */}
+            <button 
+              onClick={handleReset}
+              className="px-6 py-3.5 rounded-xl font-bold transition-all text-slate-500 hover:text-slate-800 hover:bg-slate-100 flex items-center border border-transparent hover:border-slate-200"
+            >
+              <RotateCcw className="w-4 h-4 mr-2" />
+              Reset Filters
+            </button>
+            
+            {/* SEARCH BUTTON */}
             <button 
               onClick={handleSearch}
               disabled={(!selectedSport && !schoolName) || loading}
