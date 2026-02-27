@@ -3,6 +3,9 @@ import puppeteerCore from 'puppeteer-core';
 import chromium from '@sparticuz/chromium';
 import puppeteer from 'puppeteer';
 
+// Force Next.js to run this dynamically on the server
+export const dynamic = 'force-dynamic';
+
 const TRACK_EVENTS = [
   '60 Meters', '100 Meters', '200 Meters', '400 Meters', '800 Meters', '1500 Meters', '1600 Meters', 
   '1 Mile', '3000 Meters', '3200 Meters', '5000 Meters', '10,000 Meters', '100m Hurdles', '110m Hurdles', '300m Hurdles', 
@@ -17,22 +20,29 @@ export async function POST(req: Request) {
     if (!url || !url.includes('athletic.net')) {
       return NextResponse.json({ error: 'Invalid URL' }, { status: 400 });
     }
+
+    console.log(`\n🚀 [DEBUG] Launching browser to scrape: ${url}`);
     
     let browser;
 
     // --- HYBRID BROWSER LAUNCHER ---
     if (process.env.NODE_ENV === 'development') {
-      // Local testing: You can change headless to true if you want it to be invisible on your laptop too!
+      console.log("🖥️ Running in Local Mode");
       browser = await puppeteer.launch({ 
         headless: false, 
         args: ['--no-sandbox', '--disable-setuid-sandbox'] 
       });
     } else {
-      // Live Production Server: Always invisible (headless: true)
+      console.log("☁️ Running in Cloud Mode (Vercel)");
+      
+      // THE FIX: Point directly to the compressed Chrome package on GitHub!
+      // This bypasses Vercel's 50MB limit by downloading it to temp storage at runtime.
+      const chromiumPack = 'https://github.com/Sparticuz/chromium/releases/download/v119.0.2/chromium-v119.0.2-pack.tar';
+      
       browser = await puppeteerCore.launch({
         args: chromium.args,
         defaultViewport: null, 
-        executablePath: await chromium.executablePath(),
+        executablePath: await chromium.executablePath(chromiumPack),
         headless: true,
       });
     }
@@ -52,7 +62,7 @@ export async function POST(req: Request) {
     });
 
     // Wait for the HTML structure to arrive
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 9500 });
     
     // Give Athletic.net React framework 2.5 seconds to paint the data onto the tables
     await new Promise(resolve => setTimeout(resolve, 2500)); 
@@ -132,6 +142,7 @@ export async function POST(req: Request) {
 
   } catch (error: any) {
     console.error("Scraping Error:", error);
-    return NextResponse.json({ error: "Failed to connect to Athletic.net. Please try again." }, { status: 500 });
+    // NEW: Return the EXACT error message from Vercel so we aren't guessing!
+    return NextResponse.json({ error: `System Error: ${error.message}` }, { status: 500 });
   }
 }
