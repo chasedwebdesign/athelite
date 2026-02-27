@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import puppeteerCore from 'puppeteer-core';
+import chromium from '@sparticuz/chromium';
 import puppeteer from 'puppeteer';
 
 const TRACK_EVENTS = [
@@ -12,26 +14,51 @@ export async function POST(req: Request) {
   try {
     const { url } = await req.json();
 
-    if (!url.includes('athletic.net')) {
+    if (!url || !url.includes('athletic.net')) {
       return NextResponse.json({ error: 'Invalid URL' }, { status: 400 });
     }
-
-    console.log(`\n🚀 [DEBUG] Launching visible browser to scrape: ${url}`);
     
-    // We are keeping headless: false so you can watch it load!
-    const browser = await puppeteer.launch({ 
-      headless: false, 
-      args: ['--no-sandbox', '--disable-setuid-sandbox'] 
-    });
+    let browser;
+
+    // --- HYBRID BROWSER LAUNCHER ---
+    if (process.env.NODE_ENV === 'development') {
+      // Local testing: You can change headless to true if you want it to be invisible on your laptop too!
+      browser = await puppeteer.launch({ 
+        headless: false, 
+        args: ['--no-sandbox', '--disable-setuid-sandbox'] 
+      });
+    } else {
+      // Live Production Server: Always invisible (headless: true)
+      browser = await puppeteerCore.launch({
+        args: chromium.args,
+        defaultViewport: null, 
+        executablePath: await chromium.executablePath(),
+        headless: true,
+      });
+    }
     
     const page = await browser.newPage();
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
-    await page.goto(url, { waitUntil: 'networkidle2', timeout: 20000 });
-    console.log(`✅ [DEBUG] Page fully loaded. Executing TreeWalker...`);
+    // Block heavy resources (images, fonts, css) to make the scrape lightning fast
+    await page.setRequestInterception(true);
+    page.on('request', (request) => {
+      const resourceType = request.resourceType();
+      if (['image', 'stylesheet', 'font', 'media'].includes(resourceType)) {
+        request.abort();
+      } else {
+        request.continue();
+      }
+    });
+
+    // Wait for the HTML structure to arrive
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
+    
+    // Give Athletic.net React framework 2.5 seconds to paint the data onto the tables
+    await new Promise(resolve => setTimeout(resolve, 2500)); 
 
     const extractedData = await page.evaluate((eventsList) => {
-      // 1. Identity (TypeScript safe)
+      // 1. Extract Identity
       const h1 = document.querySelector('h1') as HTMLElement;
       let fullName = h1?.innerText || document.title.split('-')[0].trim();
       const firstName = fullName.split(' ')[0] || 'Unknown';
@@ -41,8 +68,7 @@ export async function POST(req: Request) {
       const teamName = document.querySelector('.team-name') as HTMLElement;
       let schoolName = h2?.innerText || teamName?.innerText || 'Unattached / High School';
 
-      // 2. THE TREEWALKER
-      // This strips away all HTML and just creates an array of the raw text blocks.
+      // 2. The TreeWalker Algorithm
       const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
       const allNodes: string[] = [];
       let node;
@@ -51,40 +77,35 @@ export async function POST(req: Request) {
         if (text) allNodes.push(text);
       }
 
-      // 3. THE HUNTER ALGORITHM (Grade-Aware & Context-Aware)
+      // 3. The Hunter Parser
       const prs: { event: string; mark: string; date: string; meet: string }[] = [];
       let currentEvent: string | null = null;
-      let isHighSchool: boolean = true; // Default to assuming High School
+      let isHighSchool: boolean = true; 
 
       for (let i = 0; i < allNodes.length; i++) {
         const text = allNodes[i];
         const lowerText = text.toLowerCase();
 
-        // A. Grade Awareness Check
+        // Grade level logic
         if (lowerText.includes('7th grade') || lowerText.includes('8th grade') || lowerText.includes('6th grade') || lowerText.includes('middle school') || lowerText.endsWith(' ms')) {
           isHighSchool = false;
         } else if (lowerText.includes('9th grade') || lowerText.includes('10th grade') || lowerText.includes('11th grade') || lowerText.includes('12th grade') || lowerText.includes('freshman') || lowerText.includes('sophomore') || lowerText.includes('junior') || lowerText.includes('senior') || lowerText.includes('varsity') || lowerText.includes('high school') || lowerText.endsWith(' hs')) {
           isHighSchool = true;
         }
 
-        // B. Event Check
+        // Event match
         const matchedEvent = eventsList.find(e => text === e || text.startsWith(e));
         if (matchedEvent && text.length < 35) {
           currentEvent = matchedEvent;
           continue;
         }
 
-        // C. Data Extraction Check
+        // Data capture
         if (isHighSchool && currentEvent && (text === 'PB' || text === 'PR' || text === 'SR')) {
-          // Because of how Athletic.net tables are structured, if this node says "PB",
-          // The Time is the node right before it.
-          // The Date is the node right after it.
-          // The Meet is the node after the date.
           let mark = allNodes[i - 1];
           let date = allNodes[i + 1] || 'Unknown Date';
           let meet = allNodes[i + 2] || 'Unknown Meet';
 
-          // Ensure the mark is actually a number, and that we haven't already saved this event
           if (mark && /\d/.test(mark)) {
             if (!prs.find(pr => pr.event === currentEvent)) {
               prs.push({ event: currentEvent, mark, date, meet });
@@ -93,25 +114,10 @@ export async function POST(req: Request) {
         }
       }
 
-      // Create a snippet for the wiretap just in case it fails
-      const startIndex = Math.max(0, allNodes.findIndex(t => t.includes('800 Meters')) - 5);
-      const wiretapSnippet = allNodes.slice(startIndex, startIndex + 50);
-
-      return { firstName, lastName, schoolName, prs, wiretap: wiretapSnippet };
+      return { firstName, lastName, schoolName, prs };
     }, TRACK_EVENTS);
 
     await browser.close();
-    console.log(`🔒 [DEBUG] Browser closed.`);
-
-    // PRINT THE WIRETAP TO THE TERMINAL
-    console.log("\n================ THE WIRETAP ================\n");
-    if (extractedData.prs.length > 0) {
-      console.log(`🎉 SUCCESS! Found PRs:`, extractedData.prs);
-    } else {
-      console.log(`🚨 FAILED TO FIND PRs. Here is the raw text the robot saw near '800 Meters':\n`);
-      console.log(extractedData.wiretap);
-    }
-    console.log("\n=============================================\n");
 
     return NextResponse.json({ 
       success: true, 
@@ -126,6 +132,6 @@ export async function POST(req: Request) {
 
   } catch (error: any) {
     console.error("Scraping Error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: "Failed to connect to Athletic.net. Please try again." }, { status: 500 });
   }
 }

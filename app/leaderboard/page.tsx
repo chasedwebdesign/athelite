@@ -17,7 +17,7 @@ interface Athlete {
   rank?: number;
   tier?: { name: string; classes: string };
   targetMark?: string;
-  targetMeet?: string; // NEW: Added targetMeet to extract the meet location
+  targetMeet?: string; 
   improvementDelta?: number;
 }
 
@@ -75,7 +75,7 @@ export default function LeaderboardPage() {
     filtered.forEach(a => {
       const eventMarks = a.prs.filter(pr => pr.event === selectedEvent);
       a.targetMark = eventMarks[0]?.mark || '';
-      a.targetMeet = eventMarks[0]?.meet || ''; // Extract the meet name!
+      a.targetMeet = eventMarks[0]?.meet || ''; 
       
       if (eventMarks.length > 1) {
         const newestVal = parseMarkForSorting(eventMarks[0].mark, selectedEvent);
@@ -214,24 +214,20 @@ export default function LeaderboardPage() {
                       {athlete.avatar_url ? <img src={athlete.avatar_url} alt="Profile" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><Medal className={`w-10 h-10 ${medalColor}`} /></div>}
                     </div>
                     
-                    <h3 className="text-xl font-black text-white leading-tight mb-0.5 truncate w-full px-2">
-                      {athlete.first_name} {athlete.last_name}
-                    </h3>
+                    <h3 className="text-xl font-black text-white leading-tight mb-0.5 truncate w-full px-2">{athlete.first_name} {athlete.last_name}</h3>
                     
                     {/* Combine High School & State */}
                     <div className="text-sm font-semibold text-slate-300 truncate w-full px-2 mb-1">
                       {athlete.high_school}{athlete.state ? `, ${athlete.state}` : ''}
                     </div>
                     
-                    {/* THE NEW MEET LOCATION PIN */}
-                    <div className="flex items-center justify-center text-xs font-bold text-slate-400 mb-4 w-full px-4">
-                      {athlete.targetMeet ? (
+                    {/* THE MEET LOCATION PIN (Bulletproofed) */}
+                    <div className="flex items-center justify-center text-xs font-bold text-slate-400 mb-4 w-full px-4 h-4">
+                      {athlete.targetMeet && athlete.targetMeet.trim() !== '' && (
                         <>
                           <MapPin className="w-3.5 h-3.5 mr-1 shrink-0 text-blue-400" />
                           <span className="truncate" title={athlete.targetMeet}>{athlete.targetMeet}</span>
                         </>
-                      ) : (
-                        <span className="h-4"></span> // Spacer if meet is somehow missing
                       )}
                     </div>
                     
@@ -262,8 +258,8 @@ export default function LeaderboardPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-4 sm:gap-8 justify-end">
-                      {/* Show the Meet in the list view too! */}
-                      {athlete.targetMeet && (
+                      {/* Show the Meet in the list view (Bulletproofed) */}
+                      {athlete.targetMeet && athlete.targetMeet.trim() !== '' && (
                         <span className="hidden lg:flex items-center text-xs font-medium text-slate-400 truncate max-w-[200px]">
                           <MapPin className="w-3 h-3 mr-1 shrink-0" /> {athlete.targetMeet}
                         </span>
