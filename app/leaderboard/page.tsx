@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
-import { Trophy, Medal, MapPin, Activity, Target, ChevronDown, TrendingUp, Zap } from 'lucide-react';
+import { Trophy, Medal, MapPin, Activity, Target, ChevronDown, TrendingUp } from 'lucide-react';
 
 interface Athlete {
   id: string;
@@ -13,6 +13,7 @@ interface Athlete {
   grad_year: number;
   trust_level: number;
   avatar_url?: string | null;
+  gender?: string; // NEW: Added gender to the interface!
   prs: { event: string; mark: string; date?: string; meet?: string }[];
   rank?: number;
   tier?: { name: string; classes: string };
@@ -36,6 +37,7 @@ export default function LeaderboardPage() {
   const [selectedEvent, setSelectedEvent] = useState('100 Meters');
   const [selectedScope, setSelectedScope] = useState('National');
   const [leaderboardMode, setLeaderboardMode] = useState<'overall' | 'improvement'>('overall');
+  const [selectedGender, setSelectedGender] = useState('Boys'); // NEW: Gender State!
 
   useEffect(() => {
     async function fetchAthletes() {
@@ -69,7 +71,11 @@ export default function LeaderboardPage() {
     let filtered = athletes.filter(a => {
       const hasEvent = a.prs?.some(pr => pr.event === selectedEvent);
       const matchesScope = selectedScope === 'National' || a.state === selectedScope;
-      return hasEvent && matchesScope;
+      
+      // NEW: Filter by Gender! (We treat missing/null data as 'Boys' to catch old profiles)
+      const matchesGender = (a.gender || 'Boys') === selectedGender; 
+      
+      return hasEvent && matchesScope && matchesGender;
     });
 
     filtered.forEach(a => {
@@ -101,7 +107,6 @@ export default function LeaderboardPage() {
       athlete.rank = index + 1;
       const percentile = index / total;
 
-      // THE REGAL RANKING SYSTEM
       if (percentile <= 0.01 || index === 0) {
         athlete.tier = { name: 'LEGEND', classes: 'legend-badge' };
       } else if (percentile <= 0.05) {
@@ -130,7 +135,6 @@ export default function LeaderboardPage() {
   return (
     <main className="min-h-screen bg-[#0f172a] font-sans pb-32 selection:bg-blue-500/30">
       
-      {/* CUSTOM CSS FOR THE LEGEND SHIMMER */}
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes shimmer {
           0% { background-position: -200% center; }
@@ -157,12 +161,28 @@ export default function LeaderboardPage() {
             The Leaderboards
           </h1>
 
-          <div className="flex bg-slate-800/80 p-1.5 rounded-2xl mb-8 max-w-md mx-auto border border-slate-700/50 backdrop-blur-sm">
+          <div className="flex bg-slate-800/80 p-1.5 rounded-2xl mb-6 max-w-md mx-auto border border-slate-700/50 backdrop-blur-sm">
             <button onClick={() => setLeaderboardMode('overall')} className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all flex items-center justify-center ${leaderboardMode === 'overall' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>
               <Trophy className="w-4 h-4 mr-2"/> Overall PRs
             </button>
             <button onClick={() => setLeaderboardMode('improvement')} className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all flex items-center justify-center ${leaderboardMode === 'improvement' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>
               <TrendingUp className="w-4 h-4 mr-2"/> Improvement
+            </button>
+          </div>
+          
+          {/* THE NEW GENDER TOGGLE */}
+          <div className="flex bg-slate-900/80 p-1.5 rounded-2xl mb-6 max-w-[280px] mx-auto border border-slate-700 shadow-inner">
+            <button 
+              onClick={() => setSelectedGender('Boys')} 
+              className={`flex-1 py-2.5 rounded-xl text-sm font-black tracking-widest uppercase transition-all ${selectedGender === 'Boys' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-300'}`}
+            >
+              Boys
+            </button>
+            <button 
+              onClick={() => setSelectedGender('Girls')} 
+              className={`flex-1 py-2.5 rounded-xl text-sm font-black tracking-widest uppercase transition-all ${selectedGender === 'Girls' ? 'bg-pink-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-300'}`}
+            >
+              Girls
             </button>
           </div>
           
@@ -216,12 +236,10 @@ export default function LeaderboardPage() {
                     
                     <h3 className="text-xl font-black text-white leading-tight mb-0.5 truncate w-full px-2">{athlete.first_name} {athlete.last_name}</h3>
                     
-                    {/* Combine High School & State */}
                     <div className="text-sm font-semibold text-slate-300 truncate w-full px-2 mb-1">
                       {athlete.high_school}{athlete.state ? `, ${athlete.state}` : ''}
                     </div>
                     
-                    {/* THE MEET LOCATION PIN (Bulletproofed) */}
                     <div className="flex items-center justify-center text-xs font-bold text-slate-400 mb-4 w-full px-4 h-4">
                       {athlete.targetMeet && athlete.targetMeet.trim() !== '' && (
                         <>
@@ -258,7 +276,6 @@ export default function LeaderboardPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-4 sm:gap-8 justify-end">
-                      {/* Show the Meet in the list view (Bulletproofed) */}
                       {athlete.targetMeet && athlete.targetMeet.trim() !== '' && (
                         <span className="hidden lg:flex items-center text-xs font-medium text-slate-400 truncate max-w-[200px]">
                           <MapPin className="w-3 h-3 mr-1 shrink-0" /> {athlete.targetMeet}

@@ -16,8 +16,8 @@ export async function POST(req: Request) {
   try {
     const { url } = await req.json();
     
-    // 🔑 PASTE YOUR BROWSERLESS API KEY HERE:
-    const BROWSERLESS_API_KEY = "2U3iemcPMpEdfpy11274cfe779a7ad36dfc431b5f1324b3c2";
+    // 🔑 MAKE SURE YOUR BROWSERLESS API KEY IS PASTED HERE:
+    const BROWSERLESS_API_KEY = "YOUR_API_KEY_HERE";
 
     if (!url || !url.includes('athletic.net')) {
       return NextResponse.json({ error: 'Invalid URL' }, { status: 400 });
@@ -32,19 +32,15 @@ export async function POST(req: Request) {
         args: ['--no-sandbox', '--disable-setuid-sandbox'] 
       });
     } else {
-      console.log("☁️ Connecting to Browserless.io to bypass Cloudflare...");
-      // THE MAGIC: Vercel outsources the browsing to Browserless!
+      console.log("☁️ Connecting to Browserless.io...");
       browser = await puppeteerCore.connect({
         browserWSEndpoint: `wss://chrome.browserless.io?token=${BROWSERLESS_API_KEY}&stealth=true`
       });
     }
     
     const page = await browser.newPage();
-    
-    // Use a standard user agent
     await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
-    // Block images to speed it up
     await page.setRequestInterception(true);
     page.on('request', (request) => {
       if (['image', 'media', 'font'].includes(request.resourceType())) {
@@ -56,7 +52,6 @@ export async function POST(req: Request) {
 
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
     
-    // Wait for the specific classes to ensure Cloudflare didn't block us
     await page.waitForFunction(() => {
       const text = document.body.innerText;
       return document.querySelector('.team-name') !== null || text.includes('PB') || text.includes('PR');
@@ -71,6 +66,23 @@ export async function POST(req: Request) {
       const h2 = document.querySelector('h2 a') as HTMLElement;
       const teamName = document.querySelector('.team-name') as HTMLElement;
       let schoolName = h2?.innerText || teamName?.innerText || 'Unattached / High School';
+
+      // ==========================================
+      // 🧬 GENDER DETECTION ALGORITHM
+      // ==========================================
+      let gender = 'Boys'; // Default fallback
+      const allLinks = Array.from(document.querySelectorAll('a'));
+      for (const link of allLinks) {
+        const linkText = link.innerText.toLowerCase();
+        if (linkText === 'womens' || linkText === 'girls' || linkText.includes('womens track') || linkText.includes('girls track')) {
+          gender = 'Girls';
+          break;
+        }
+        if (linkText === 'mens' || linkText === 'boys' || linkText.includes('mens track') || linkText.includes('boys track')) {
+          gender = 'Boys';
+          break;
+        }
+      }
 
       const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
       const allNodes: string[] = [];
@@ -113,7 +125,8 @@ export async function POST(req: Request) {
         }
       }
 
-      return { firstName, lastName, schoolName, prs };
+      // Pass gender back to the dashboard!
+      return { firstName, lastName, schoolName, prs, gender };
     }, TRACK_EVENTS);
 
     await browser.close();
@@ -125,6 +138,7 @@ export async function POST(req: Request) {
         lastName: extractedData.lastName,
         schoolName: extractedData.schoolName,
         prs: extractedData.prs,
+        gender: extractedData.gender,
         url
       } 
     });

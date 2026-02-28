@@ -3,11 +3,11 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
-import { Activity, ShieldCheck, Link as LinkIcon, Trophy, LogOut, Medal, Timer, TrendingUp, CheckCircle2, Search, AlertCircle, Zap, Calendar, MapPin, Camera, Mail, RefreshCw, School } from 'lucide-react';
+import { Activity, ShieldCheck, Link as LinkIcon, Trophy, LogOut, Medal, Timer, TrendingUp, CheckCircle2, Search, AlertCircle, Zap, Calendar, MapPin, Camera, Mail, RefreshCw, School, Lock, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
 import imageCompression from 'browser-image-compression';
 
-interface AthleteProfile { id: string; first_name: string | null; last_name: string | null; grad_year: number | null; high_school: string | null; state: string | null; primary_sport: string; athletic_net_url: string | null; trust_level: number; prs: { event: string; mark: string; date?: string; meet?: string; tier?: { name: string; classes: string } }[] | null; avatar_url: string | null; }
+interface AthleteProfile { id: string; first_name: string | null; last_name: string | null; grad_year: number | null; high_school: string | null; state: string | null; primary_sport: string; athletic_net_url: string | null; trust_level: number; gender: string | null; prs: { event: string; mark: string; date?: string; meet?: string; tier?: { name: string; classes: string } }[] | null; avatar_url: string | null; }
 interface CoachProfile { id: string; first_name: string | null; last_name: string | null; school_name: string | null; coach_type: string; avatar_url: string | null; }
 
 const FIELD_EVENTS = ['Shot Put', 'Discus', 'Javelin', 'Hammer', 'High Jump', 'Pole Vault', 'Long Jump', 'Triple Jump'];
@@ -23,6 +23,8 @@ export default function DashboardPage() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false); 
   const [unreadCount, setUnreadCount] = useState(0);
+  
+  const [claimConflict, setClaimConflict] = useState(false);
 
   const parseMarkForSorting = (mark: string, event: string): number => {
     const cleanMark = mark.replace(/[a-zA-Z]/g, '').trim();
@@ -53,9 +55,7 @@ export default function DashboardPage() {
       if (aData) {
         setUserRole('athlete');
         
-        // --- CALCULATE REGAL TIERS FOR DASHBOARD ---
         if (aData.prs && aData.prs.length > 0) {
-          // Fetch all PRs from DB to calculate percentile
           const { data: allAthletes } = await supabase.from('athletes').select('prs');
           
           if (allAthletes) {
@@ -124,14 +124,44 @@ export default function DashboardPage() {
   const handleSync = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!syncUrl.includes('athletic.net')) return alert("Please enter a valid Athletic.net profile URL.");
+    setClaimConflict(false);
     setIsSyncing(true);
+
     try {
+      const { data: existingUser } = await supabase
+        .from('athletes')
+        .select('id')
+        .eq('athletic_net_url', syncUrl)
+        .neq('id', athleteProfile?.id)
+        .maybeSingle();
+
+      if (existingUser) {
+        setClaimConflict(true);
+        setIsSyncing(false);
+        return;
+      }
+
       const response = await fetch('/api/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: syncUrl }) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error);
-      await supabase.from('athletes').update({ first_name: result.data.firstName, last_name: result.data.lastName, high_school: result.data.schoolName, athletic_net_url: result.data.url, prs: result.data.prs, trust_level: 1 }).eq('id', athleteProfile?.id);
+      
+      const { error: updateError } = await supabase.from('athletes').update({ 
+        first_name: result.data.firstName, 
+        last_name: result.data.lastName, 
+        high_school: result.data.schoolName, 
+        athletic_net_url: result.data.url, 
+        prs: result.data.prs, 
+        gender: result.data.gender, 
+        trust_level: 1 
+      }).eq('id', athleteProfile?.id);
+
+      if (updateError) throw updateError;
+      
       window.location.reload();
-    } catch (err: any) { alert(err.message); setIsSyncing(false); }
+    } catch (err: any) { 
+      alert(err.message); 
+      setIsSyncing(false); 
+    }
   };
 
   const handleReSync = async () => {
@@ -141,8 +171,13 @@ export default function DashboardPage() {
       const response = await fetch('/api/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: athleteProfile.athletic_net_url }) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error);
-      await supabase.from('athletes').update({ prs: result.data.prs }).eq('id', athleteProfile.id);
-      window.location.reload(); // Reload to re-calculate percentiles easily
+      
+      await supabase.from('athletes').update({ 
+        prs: result.data.prs,
+        gender: result.data.gender 
+      }).eq('id', athleteProfile.id);
+      
+      window.location.reload(); 
     } catch (err: any) { alert(`Failed to sync: ${err.message}`); } finally { setIsSyncing(false); }
   };
 
@@ -236,6 +271,7 @@ export default function DashboardPage() {
               </div>
               <h1 className="text-2xl font-black text-slate-900 mb-1">{athleteProfile?.first_name ? `${athleteProfile.first_name} ${athleteProfile.last_name}` : 'New Athlete'}</h1>
               <p className="text-slate-500 font-medium mb-6">{athleteProfile?.high_school ? `${athleteProfile.high_school} ${athleteProfile.grad_year ? `• Class of ${athleteProfile.grad_year}` : ''}` : 'Profile awaiting sync...'}</p>
+              
               <div className="border-t border-slate-100 pt-6">
                 <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Trust Level</span>
                 <div className={`flex items-center px-4 py-3 rounded-xl border ${badge.bg}`}>
@@ -243,6 +279,20 @@ export default function DashboardPage() {
                   <span className={`text-sm font-bold ${badge.color}`}>{badge.text}</span>
                 </div>
               </div>
+
+              {athleteProfile?.trust_level! > 0 && (
+                <div className="border-t border-slate-100 pt-6 mt-6">
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Verified Division</span>
+                  <div className="flex items-center px-4 py-3 rounded-xl border bg-slate-50 border-slate-200">
+                    <span className="text-sm font-bold text-slate-700">{athleteProfile?.gender || 'Boys'} Division</span>
+                    <Lock className="w-4 h-4 ml-auto text-slate-400" />
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-2 text-center flex items-center justify-center">
+                    <ShieldCheck className="w-3 h-3 mr-1" /> Locked via Athletic.net
+                  </p>
+                </div>
+              )}
+
             </div>
           </div>
 
@@ -252,13 +302,73 @@ export default function DashboardPage() {
                 <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/20 blur-[80px] rounded-full pointer-events-none"></div>
                 <div className="relative z-10">
                   <h2 className="text-3xl md:text-4xl font-black text-white tracking-tight mb-3">Auto-Build Your Profile</h2>
-                  <p className="text-blue-200/80 font-medium mb-8">Paste your Athletic.net profile link below. We will extract your PRs and verify your identity.</p>
-                  <form onSubmit={handleSync} className="flex flex-col sm:flex-row gap-3">
-                    <input type="url" required placeholder="https://www.athletic.net/..." value={syncUrl} onChange={(e) => setSyncUrl(e.target.value)} className="w-full flex-grow bg-white/10 border border-white/20 text-white rounded-xl pl-4 pr-4 py-4 focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold" />
-                    <button type="submit" disabled={isSyncing} className="bg-blue-500 hover:bg-blue-400 text-white px-8 py-4 rounded-xl font-black disabled:opacity-50">
-                      {isSyncing ? 'Scraping...' : 'Sync'}
-                    </button>
-                  </form>
+                  
+                  {claimConflict ? (
+                    <div className="bg-red-500/10 border border-red-500/50 rounded-2xl p-6 mb-6">
+                      <div className="flex items-start gap-4">
+                        <AlertTriangle className="w-6 h-6 text-red-400 shrink-0 mt-1" />
+                        <div>
+                          <h3 className="text-xl font-bold text-white mb-2">Profile Already Claimed</h3>
+                          <p className="text-red-200/80 text-sm mb-4">
+                            Another user has already connected this Athletic.net link to their account. If you are the real athlete, click below to verify your identity and we will transfer the profile to you immediately.
+                          </p>
+                          <div className="flex gap-3">
+                            <a 
+                              href={`mailto:support@chasedsports.com?subject=Profile Dispute: ${syncUrl}&body=Hi, I am the real athlete for this profile link and someone else claimed it. My Instagram handle is [Insert IG Handle] so you can verify my identity.`}
+                              className="bg-red-500 hover:bg-red-600 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-colors"
+                            >
+                              Report & Claim Profile
+                            </a>
+                            <button onClick={() => setClaimConflict(false)} className="bg-transparent border border-slate-600 hover:border-slate-400 text-slate-300 text-sm font-bold px-5 py-2.5 rounded-xl transition-colors">
+                              Try Another Link
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="text-blue-200/80 font-medium mb-8 space-y-2">
+                        <p>Paste the exact link to your Athletic.net Track & Field or Cross Country profile.</p>
+                        <p className="text-sm opacity-80 flex items-center bg-black/20 w-fit px-3 py-1.5 rounded-lg border border-blue-800/50">
+                          <span className="font-bold mr-2 text-white">Example:</span> 
+                          <span className="font-mono text-blue-300">https://www.athletic.net/athlete/12345/track-and-field</span>
+                        </p>
+                      </div>
+
+                      <form onSubmit={handleSync} className="flex flex-col sm:flex-row gap-3">
+                        <input type="url" required placeholder="https://www.athletic.net/athlete/..." value={syncUrl} onChange={(e) => setSyncUrl(e.target.value)} className="w-full flex-grow bg-white/10 border border-white/20 text-white rounded-xl pl-4 pr-4 py-4 focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold placeholder:text-blue-300/30" />
+                        <button type="submit" disabled={isSyncing} className="bg-blue-500 hover:bg-blue-400 text-white px-8 py-4 rounded-xl font-black disabled:opacity-50 transition-colors">
+                          {isSyncing ? 'Scraping...' : 'Sync'}
+                        </button>
+                      </form>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* 📥 RECRUITING INBOX WIDGET */}
+            {athleteProfile?.trust_level! > 0 && (
+              <div className="bg-gradient-to-r from-purple-900 to-indigo-900 rounded-[2rem] p-8 border border-purple-700 shadow-xl relative overflow-hidden flex flex-col sm:flex-row items-center justify-between gap-6">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-purple-500/20 blur-[80px] rounded-full pointer-events-none"></div>
+                <div className="relative z-10 flex items-center gap-6 text-center sm:text-left">
+                  <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center border border-white/20 shrink-0 mx-auto sm:mx-0">
+                    <Mail className="w-8 h-8 text-purple-200" />
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-black text-white tracking-tight mb-1">Recruiting Inbox</h3>
+                    <p className="text-purple-200/80 font-medium text-sm">
+                      {unreadCount > 0 
+                        ? `You have ${unreadCount} unread pitches from college coaches!` 
+                        : "Coaches use the Discovery Engine to send you direct pitches."}
+                    </p>
+                  </div>
+                </div>
+                <div className="relative z-10 w-full sm:w-auto shrink-0">
+                  <Link href="/dashboard/messages" className="block w-full text-center bg-white text-purple-900 hover:bg-purple-50 font-black px-8 py-4 rounded-xl shadow-lg transition-colors">
+                    View Messages {unreadCount > 0 && <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full ml-2">{unreadCount}</span>}
+                  </Link>
                 </div>
               </div>
             )}
