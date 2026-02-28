@@ -1,9 +1,7 @@
 import { NextResponse } from 'next/server';
 import puppeteerCore from 'puppeteer-core';
-import chromium from '@sparticuz/chromium';
 import puppeteer from 'puppeteer';
 
-// ⚡ THE LIFESAVER: Force Vercel to give this route 60 seconds instead of 10!
 export const maxDuration = 60; 
 export const dynamic = 'force-dynamic';
 
@@ -17,52 +15,53 @@ const TRACK_EVENTS = [
 export async function POST(req: Request) {
   try {
     const { url } = await req.json();
+    
+    // 🔑 PASTE YOUR BROWSERLESS API KEY HERE:
+    const BROWSERLESS_API_KEY = "2U3iemcPMpEdfpy11274cfe779a7ad36dfc431b5f1324b3c2";
 
     if (!url || !url.includes('athletic.net')) {
       return NextResponse.json({ error: 'Invalid URL' }, { status: 400 });
     }
-    
+
     let browser;
 
     if (process.env.NODE_ENV === 'development') {
+      console.log("🖥️ Running Locally");
       browser = await puppeteer.launch({ 
         headless: false, 
         args: ['--no-sandbox', '--disable-setuid-sandbox'] 
       });
     } else {
-      const chromiumPack = 'https://github.com/Sparticuz/chromium/releases/download/v119.0.2/chromium-v119.0.2-pack.tar';
-      browser = await puppeteerCore.launch({
-        args: chromium.args,
-        defaultViewport: null, 
-        executablePath: await chromium.executablePath(chromiumPack),
-        headless: true,
+      console.log("☁️ Connecting to Browserless.io to bypass Cloudflare...");
+      // THE MAGIC: Vercel outsources the browsing to Browserless!
+      browser = await puppeteerCore.connect({
+        browserWSEndpoint: `wss://chrome.browserless.io?token=${BROWSERLESS_API_KEY}&stealth=true`
       });
     }
     
     const page = await browser.newPage();
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+    
+    // Use a standard user agent
+    await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
+    // Block images to speed it up
     await page.setRequestInterception(true);
     page.on('request', (request) => {
-      const resourceType = request.resourceType();
-      if (['image', 'stylesheet', 'font', 'media'].includes(resourceType)) {
+      if (['image', 'media', 'font'].includes(request.resourceType())) {
         request.abort();
       } else {
         request.continue();
       }
     });
 
-    // 1. Go to the URL (Increased timeout to 30 seconds for Vercel's slower network)
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
     
-    // 2. THE SMART WAIT: Give Vercel time to paint the React data!
+    // Wait for the specific classes to ensure Cloudflare didn't block us
     await page.waitForFunction(() => {
-      // Look for the school name class OR the letters "PB" / "PR" to exist on screen
       const text = document.body.innerText;
       return document.querySelector('.team-name') !== null || text.includes('PB') || text.includes('PR');
-    }, { timeout: 15000 }).catch(() => console.log("Smart wait timed out. Proceeding anyway."));
+    }, { timeout: 15000 }).catch(() => console.log("Timeout waiting for PRs. Proceeding to evaluate."));
 
-    // 3. Extract the Data
     const extractedData = await page.evaluate((eventsList) => {
       const h1 = document.querySelector('h1') as HTMLElement;
       let fullName = h1?.innerText || document.title.split('-')[0].trim();
@@ -132,6 +131,6 @@ export async function POST(req: Request) {
 
   } catch (error: any) {
     console.error("Scraping Error:", error);
-    return NextResponse.json({ error: `System Error: ${error.message}` }, { status: 500 });
+    return NextResponse.json({ error: `Scraper Error: ${error.message}` }, { status: 500 });
   }
 }
