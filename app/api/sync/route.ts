@@ -3,7 +3,6 @@ import puppeteerCore from 'puppeteer-core';
 import chromium from '@sparticuz/chromium';
 import puppeteer from 'puppeteer';
 
-// Force Next.js to run this dynamically on the server
 export const dynamic = 'force-dynamic';
 
 const TRACK_EVENTS = [
@@ -21,24 +20,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Invalid URL' }, { status: 400 });
     }
 
-    console.log(`\n🚀 [DEBUG] Launching browser to scrape: ${url}`);
-    
     let browser;
 
-    // --- HYBRID BROWSER LAUNCHER ---
     if (process.env.NODE_ENV === 'development') {
-      console.log("🖥️ Running in Local Mode");
       browser = await puppeteer.launch({ 
         headless: false, 
         args: ['--no-sandbox', '--disable-setuid-sandbox'] 
       });
     } else {
-      console.log("☁️ Running in Cloud Mode (Vercel)");
-      
-      // THE FIX: Point directly to the compressed Chrome package on GitHub!
-      // This bypasses Vercel's 50MB limit by downloading it to temp storage at runtime.
       const chromiumPack = 'https://github.com/Sparticuz/chromium/releases/download/v119.0.2/chromium-v119.0.2-pack.tar';
-      
       browser = await puppeteerCore.launch({
         args: chromium.args,
         defaultViewport: null, 
@@ -50,7 +40,7 @@ export async function POST(req: Request) {
     const page = await browser.newPage();
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
-    // Block heavy resources (images, fonts, css) to make the scrape lightning fast
+    // Block heavy resources so the slow Vercel server can focus purely on the text
     await page.setRequestInterception(true);
     page.on('request', (request) => {
       const resourceType = request.resourceType();
@@ -61,14 +51,19 @@ export async function POST(req: Request) {
       }
     });
 
-    // Wait for the HTML structure to arrive
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 9500 });
+    // 1. Go to the URL
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 8000 });
     
-    // Give Athletic.net React framework 2.5 seconds to paint the data onto the tables
-    await new Promise(resolve => setTimeout(resolve, 2500)); 
+    // =================================================================
+    // ⚡ THE SMART WAIT: Wait specifically for the React Data to paint!
+    // =================================================================
+    await page.waitForFunction(() => {
+      // Look for the school name link OR the letters "PR" to exist on screen
+      return document.querySelector('h2 a') !== null || document.body.innerText.includes('PR');
+    }, { timeout: 4500 }).catch(() => console.log("Smart wait timed out. Proceeding with what we have."));
 
+    // 3. Extract the Data
     const extractedData = await page.evaluate((eventsList) => {
-      // 1. Extract Identity
       const h1 = document.querySelector('h1') as HTMLElement;
       let fullName = h1?.innerText || document.title.split('-')[0].trim();
       const firstName = fullName.split(' ')[0] || 'Unknown';
@@ -78,7 +73,6 @@ export async function POST(req: Request) {
       const teamName = document.querySelector('.team-name') as HTMLElement;
       let schoolName = h2?.innerText || teamName?.innerText || 'Unattached / High School';
 
-      // 2. The TreeWalker Algorithm
       const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
       const allNodes: string[] = [];
       let node;
@@ -87,7 +81,6 @@ export async function POST(req: Request) {
         if (text) allNodes.push(text);
       }
 
-      // 3. The Hunter Parser
       const prs: { event: string; mark: string; date: string; meet: string }[] = [];
       let currentEvent: string | null = null;
       let isHighSchool: boolean = true; 
@@ -96,21 +89,18 @@ export async function POST(req: Request) {
         const text = allNodes[i];
         const lowerText = text.toLowerCase();
 
-        // Grade level logic
         if (lowerText.includes('7th grade') || lowerText.includes('8th grade') || lowerText.includes('6th grade') || lowerText.includes('middle school') || lowerText.endsWith(' ms')) {
           isHighSchool = false;
         } else if (lowerText.includes('9th grade') || lowerText.includes('10th grade') || lowerText.includes('11th grade') || lowerText.includes('12th grade') || lowerText.includes('freshman') || lowerText.includes('sophomore') || lowerText.includes('junior') || lowerText.includes('senior') || lowerText.includes('varsity') || lowerText.includes('high school') || lowerText.endsWith(' hs')) {
           isHighSchool = true;
         }
 
-        // Event match
         const matchedEvent = eventsList.find(e => text === e || text.startsWith(e));
         if (matchedEvent && text.length < 35) {
           currentEvent = matchedEvent;
           continue;
         }
 
-        // Data capture
         if (isHighSchool && currentEvent && (text === 'PB' || text === 'PR' || text === 'SR')) {
           let mark = allNodes[i - 1];
           let date = allNodes[i + 1] || 'Unknown Date';
@@ -142,7 +132,6 @@ export async function POST(req: Request) {
 
   } catch (error: any) {
     console.error("Scraping Error:", error);
-    // NEW: Return the EXACT error message from Vercel so we aren't guessing!
     return NextResponse.json({ error: `System Error: ${error.message}` }, { status: 500 });
   }
 }
