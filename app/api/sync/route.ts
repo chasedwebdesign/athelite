@@ -3,6 +3,8 @@ import puppeteerCore from 'puppeteer-core';
 import chromium from '@sparticuz/chromium';
 import puppeteer from 'puppeteer';
 
+// ⚡ THE LIFESAVER: Force Vercel to give this route 60 seconds instead of 10!
+export const maxDuration = 60; 
 export const dynamic = 'force-dynamic';
 
 const TRACK_EVENTS = [
@@ -19,7 +21,7 @@ export async function POST(req: Request) {
     if (!url || !url.includes('athletic.net')) {
       return NextResponse.json({ error: 'Invalid URL' }, { status: 400 });
     }
-
+    
     let browser;
 
     if (process.env.NODE_ENV === 'development') {
@@ -40,7 +42,6 @@ export async function POST(req: Request) {
     const page = await browser.newPage();
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
-    // Block heavy resources so the slow Vercel server can focus purely on the text
     await page.setRequestInterception(true);
     page.on('request', (request) => {
       const resourceType = request.resourceType();
@@ -51,16 +52,15 @@ export async function POST(req: Request) {
       }
     });
 
-    // 1. Go to the URL
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 8000 });
+    // 1. Go to the URL (Increased timeout to 30 seconds for Vercel's slower network)
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
     
-    // =================================================================
-    // ⚡ THE SMART WAIT: Wait specifically for the React Data to paint!
-    // =================================================================
+    // 2. THE SMART WAIT: Give Vercel time to paint the React data!
     await page.waitForFunction(() => {
-      // Look for the school name link OR the letters "PR" to exist on screen
-      return document.querySelector('h2 a') !== null || document.body.innerText.includes('PR');
-    }, { timeout: 4500 }).catch(() => console.log("Smart wait timed out. Proceeding with what we have."));
+      // Look for the school name class OR the letters "PB" / "PR" to exist on screen
+      const text = document.body.innerText;
+      return document.querySelector('.team-name') !== null || text.includes('PB') || text.includes('PR');
+    }, { timeout: 15000 }).catch(() => console.log("Smart wait timed out. Proceeding anyway."));
 
     // 3. Extract the Data
     const extractedData = await page.evaluate((eventsList) => {
