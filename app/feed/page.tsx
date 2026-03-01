@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
-import { MessageSquare, Send, Clock, ShieldCheck, Medal, CheckCircle2, MapPin, Mail, Lock, X, Trophy, ExternalLink, GraduationCap, ChevronDown } from 'lucide-react';
+import { useRouter } from 'next/navigation'; // IMPORTED ROUTER
+import { MessageSquare, Send, Clock, ShieldCheck, Medal, CheckCircle2, MapPin, Mail, Lock, X, Trophy, ExternalLink, GraduationCap, ChevronDown, School, UserCircle2 } from 'lucide-react';
 import Link from 'next/link';
 
 interface AthleteData {
@@ -28,13 +29,16 @@ interface Post {
 
 export default function FeedPage() {
   const supabase = createClient();
+  const router = useRouter(); // INITIALIZED ROUTER
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   
   // User State
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string>(''); 
   const [currentUserProfile, setCurrentUserProfile] = useState<AthleteData | null>(null);
   const [viewerRole, setViewerRole] = useState<'guest' | 'athlete' | 'coach'>('guest');
+  const [coachType, setCoachType] = useState<string | null>(null);
   const [isVerifiedAthlete, setIsVerifiedAthlete] = useState(false);
   const [isVerifiedCoach, setIsVerifiedCoach] = useState(false);
   const [myPRs, setMyPRs] = useState<{event: string, mark: string}[]>([]);
@@ -51,9 +55,12 @@ export default function FeedPage() {
   const [isMessageModalOpen, setIsMessageModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'pitch' | 'chat'>('pitch');
   const [selectedPostForMessage, setSelectedPostForMessage] = useState<Post | null>(null);
+  
+  // Auto-filled sender info
   const [senderName, setSenderName] = useState('');
   const [senderSchool, setSenderSchool] = useState('');
   const [senderEmail, setSenderEmail] = useState('');
+  
   const [messageContent, setMessageContent] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [sendSuccess, setSendSuccess] = useState(false);
@@ -67,11 +74,32 @@ export default function FeedPage() {
     
     if (session) {
       setCurrentUserId(session.user.id);
+      setCurrentUserEmail(session.user.email || '');
+
+      const { data: messageData } = await supabase
+        .from('messages')
+        .select('id, athlete_id, chat_history')
+        .or(`athlete_id.eq.${session.user.id},sender_email.eq.${session.user.email}`)
+        .eq('is_read', false);
+
+      if (messageData) {
+        const realUnreadCount = messageData.filter((msg: any) => {
+          const history = msg.chat_history || [];
+          if (history.length > 0) {
+            return history[history.length - 1].sender_id !== session.user.id;
+          }
+          return msg.athlete_id === session.user.id;
+        }).length;
+      }
       
-      const { data: cData } = await supabase.from('coaches').select('trust_level').eq('id', session.user.id).maybeSingle();
+      const { data: cData } = await supabase.from('coaches').select('trust_level, first_name, last_name, school_name, coach_type').eq('id', session.user.id).maybeSingle();
       if (cData) {
         setViewerRole('coach');
         setIsVerifiedCoach(cData.trust_level > 0);
+        setCoachType(cData.coach_type);
+        setSenderName(`${cData.first_name} ${cData.last_name}`);
+        setSenderSchool(cData.school_name || '');
+        setSenderEmail(session.user.email || '');
       } else {
         const { data: aData } = await supabase
           .from('athletes')
@@ -84,6 +112,9 @@ export default function FeedPage() {
           setIsVerifiedAthlete(aData.trust_level > 0);
           setCurrentUserProfile(aData as AthleteData);
           setMyMajors(aData.majors || '');
+          setSenderName(`${aData.first_name} ${aData.last_name}`);
+          setSenderSchool(aData.high_school || '');
+          setSenderEmail(session.user.email || '');
           
           if (aData.prs) setMyPRs(aData.prs);
           
@@ -155,8 +186,9 @@ export default function FeedPage() {
   };
 
   const handleContactClick = (post: Post) => {
+    // UPDATED: GRACEFUL GUEST REDIRECT
     if (viewerRole === 'guest' || !currentUserId) {
-      alert("Please create an account or log in to contact athletes.");
+      router.push('/login?reason=contact');
       return;
     }
     if (viewerRole === 'coach' && !isVerifiedCoach) {
@@ -167,30 +199,53 @@ export default function FeedPage() {
       alert("Please sync your Athletic.net profile to message other athletes.");
       return;
     }
-    openMessageModal(post, viewerRole === 'coach' ? 'pitch' : 'chat');
+
+    const mode = (viewerRole === 'coach' && coachType === 'college') ? 'pitch' : 'chat';
+    openMessageModal(post, mode);
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedPostForMessage) return;
     setIsSending(true);
+    
     try {
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const checkEmail = currentUserEmail || senderEmail;
+      
+      const { count } = await supabase
+        .from('messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('sender_email', checkEmail)
+        .gte('created_at', twentyFourHoursAgo);
+
+      if (count !== null && count >= 10) {
+        alert("Daily Limit Reached: To protect athletes from spam, you can only send 10 new connection requests or pitches per day. Please try again tomorrow!");
+        setIsSending(false);
+        return;
+      }
+
       const { error } = await supabase.from('messages').insert({
         athlete_id: selectedPostForMessage.athlete_id,
-        sender_name: senderName,
-        sender_school: senderSchool,
-        sender_email: senderEmail,
-        content: messageContent
+        sender_name: senderName, 
+        sender_school: senderSchool, 
+        sender_email: senderEmail, 
+        content: messageContent,
+        status: 'pending' 
       });
+      
       if (error) throw error;
       setSendSuccess(true);
       setTimeout(() => {
         setIsMessageModalOpen(false);
         setSendSuccess(false);
-        setSenderName(''); setSenderSchool(''); setSenderEmail(''); setMessageContent('');
+        setMessageContent('');
       }, 2000);
-    } catch (error: any) { alert(`Failed to send message: ${error.message}`); } 
-    finally { setIsSending(false); }
+    } catch (error: any) { 
+      alert(`Failed to send message: ${error.message}`); 
+    } finally { 
+      setIsSending(false); 
+    }
   };
 
   const openMessageModal = (post: Post, mode: 'pitch' | 'chat') => {
@@ -211,12 +266,11 @@ export default function FeedPage() {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
   };
 
-  // NEW: Helper function to apply the glowing card class!
   const getCardGlowClass = (border?: string | null) => {
     if (border === 'border-legend') return 'card-legend';
     if (border === 'border-champion') return 'card-champion';
     if (border === 'border-elite') return 'card-elite';
-    return 'border-slate-200 shadow-sm hover:shadow-md'; // Default styling
+    return 'border-slate-200 shadow-sm hover:shadow-md'; 
   };
 
   if (loading) {
@@ -231,7 +285,6 @@ export default function FeedPage() {
   return (
     <main className="min-h-screen bg-[#F8FAFC] font-sans pb-32">
       
-      {/* SYNCHRONIZED CUSTOM BORDERS & CARD GLOWS CSS */}
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes liquidPan { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
         
@@ -308,7 +361,6 @@ export default function FeedPage() {
                   <div className="p-6 md:p-8 flex-1 bg-slate-50/50 flex flex-col items-center justify-center relative">
                     <span className="absolute top-4 right-6 text-[10px] font-black tracking-widest uppercase text-slate-400">Live Preview</span>
                     
-                    {/* APPLYING THE DYNAMIC GLOW CLASS TO THE PREVIEW CONTAINER */}
                     <div className={`bg-white rounded-[2rem] p-6 border w-full pointer-events-none mt-6 transition-all duration-300 ${getCardGlowClass(currentUserProfile?.equipped_border)}`}>
                       <div className="flex items-start gap-4 mb-4">
                         
@@ -377,7 +429,6 @@ export default function FeedPage() {
               const isSelf = currentUserId === post.athlete_id;
 
               return (
-                // APPLYING THE DYNAMIC GLOW CLASS TO THE REAL CARDS IN THE FEED
                 <div key={post.id} className={`bg-white rounded-[2rem] p-6 sm:p-8 border transition-all duration-300 group relative ${getCardGlowClass(post.athletes.equipped_border)}`}>
                   
                   {/* POST HEADER */}
@@ -463,14 +514,14 @@ export default function FeedPage() {
         </div>
       </div>
 
-      {/* --- MESSAGING MODAL --- */}
+      {/* --- SIMPLIFIED MESSAGING MODAL --- */}
       {isMessageModalOpen && selectedPostForMessage && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
           <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
             <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
               <div>
                 <h3 className="font-black text-lg text-slate-900">{modalMode === 'pitch' ? `Message ${selectedPostForMessage.athletes.first_name}` : `Connect with ${selectedPostForMessage.athletes.first_name}`}</h3>
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">{modalMode === 'pitch' ? 'Direct Pitch' : 'Athlete Chat Request'}</p>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">{modalMode === 'pitch' ? 'College Coach Pitch' : 'Connection Request'}</p>
               </div>
               <button onClick={() => setIsMessageModalOpen(false)} className="p-2 hover:bg-slate-200 rounded-full transition-colors"><X className="w-5 h-5 text-slate-500" /></button>
             </div>
@@ -482,25 +533,31 @@ export default function FeedPage() {
                 <p className="text-slate-500 font-medium">Your message has been securely delivered to their dashboard.</p>
               </div>
             ) : (
-              <form onSubmit={handleSendMessage} className="p-6 space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Your Name</label>
-                    <input required type="text" value={senderName} onChange={(e) => setSenderName(e.target.value)} className="w-full border border-slate-200 rounded-xl px-4 py-3 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 font-medium" placeholder="John Doe" />
+              <form onSubmit={handleSendMessage} className="p-6 space-y-5 relative">
+                
+                <p className="text-[10px] font-black text-amber-500 bg-amber-50 rounded-lg px-3 py-2 text-center uppercase tracking-widest border border-amber-200 flex items-center justify-center gap-1.5 mb-2">
+                  <Clock className="w-3.5 h-3.5" /> Daily Limit: 10 Pitches/Requests
+                </p>
+
+                {/* VISUAL "SENDING AS" CARD */}
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex items-center justify-between shadow-sm">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-white border border-slate-200 rounded-full flex items-center justify-center shrink-0 shadow-sm">
+                      {viewerRole === 'coach' ? <School className="w-5 h-5 text-blue-600" /> : <UserCircle2 className="w-5 h-5 text-blue-600" />}
+                    </div>
+                    <div>
+                      <p className="text-sm font-black text-slate-900">{senderName}</p>
+                      <p className="text-xs font-bold text-slate-500 truncate max-w-[200px]">{senderSchool} • {senderEmail}</p>
+                    </div>
                   </div>
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">{modalMode === 'pitch' ? 'University' : 'Your High School'}</label>
-                    <input required type="text" value={senderSchool} onChange={(e) => setSenderSchool(e.target.value)} className="w-full border border-slate-200 rounded-xl px-4 py-3 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 font-medium" placeholder={modalMode === 'pitch' ? "Oregon State" : "South Albany HS"} />
-                  </div>
+                  <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0" />
                 </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Your Email</label>
-                  <input required type="email" value={senderEmail} onChange={(e) => setSenderEmail(e.target.value)} className="w-full border border-slate-200 rounded-xl px-4 py-3 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 font-medium" placeholder="name@example.com" />
-                </div>
-                <div className="space-y-1.5">
+
+                <div className="space-y-1.5 mt-2">
                   <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Message</label>
-                  <textarea required value={messageContent} onChange={(e) => setMessageContent(e.target.value)} rows={4} className="w-full border border-slate-200 rounded-xl px-4 py-3 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 font-medium resize-none" placeholder={modalMode === 'pitch' ? `Hi ${selectedPostForMessage.athletes.first_name}...` : `Hey ${selectedPostForMessage.athletes.first_name}...`}></textarea>
+                  <textarea required value={messageContent} onChange={(e) => setMessageContent(e.target.value)} rows={5} className="w-full border border-slate-200 rounded-xl px-4 py-3 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 font-medium resize-none" placeholder={modalMode === 'pitch' ? `Hi ${selectedPostForMessage.athletes.first_name}...` : `Hey ${selectedPostForMessage.athletes.first_name}...`}></textarea>
                 </div>
+
                 <button type="submit" disabled={isSending} className={`w-full text-white font-black py-4 rounded-xl shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 ${modalMode === 'pitch' ? 'bg-slate-900 hover:bg-slate-800' : 'bg-blue-600 hover:bg-blue-500'}`}>
                   {isSending ? 'Sending...' : <><Send className="w-5 h-5" /> Send Message</>}
                 </button>

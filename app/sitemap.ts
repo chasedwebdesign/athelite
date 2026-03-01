@@ -13,7 +13,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticRoutes = [
     '',
     '/search',
-    '/athletes',
+    '/feed', // Make sure to include the feed!
     '/leaderboard',
     '/login'
   ].map((route) => ({
@@ -28,13 +28,26 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     .from('universities')
     .select('id');
 
-  const dynamicRoutes = (universities || []).map((uni) => ({
+  const universityRoutes = (universities || []).map((uni) => ({
     url: `${baseUrl}/college/${uni.id}`,
     lastModified: new Date(),
     changeFrequency: 'weekly' as const,
     priority: 0.6,
   }));
 
-  // 3. Return them all merged together
-  return [...staticRoutes, ...dynamicRoutes];
+  // 3. NEW: Fetch all VERIFIED athletes to dynamically add their profiles to the sitemap
+  const { data: athletes } = await supabase
+    .from('athletes')
+    .select('id')
+    .gt('trust_level', 0); // Only index real, verified profiles for better SEO!
+
+  const athleteRoutes = (athletes || []).map((athlete) => ({
+    url: `${baseUrl}/athlete/${athlete.id}`,
+    lastModified: new Date(),
+    changeFrequency: 'daily' as const, // Set to daily since their PRs and Feed posts can update often
+    priority: 0.7,
+  }));
+
+  // 4. Return them all merged together
+  return [...staticRoutes, ...universityRoutes, ...athleteRoutes];
 }

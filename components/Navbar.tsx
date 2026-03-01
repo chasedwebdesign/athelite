@@ -16,8 +16,7 @@ export default function Navbar() {
   const [unreadCount, setUnreadCount] = useState(0);
   
   // --- UI STATE ---
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false); // NEW: Mobile Menu State
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false); 
   
   // --- GLOBAL SEARCH STATE ---
   const [searchQuery, setSearchQuery] = useState('');
@@ -26,7 +25,7 @@ export default function Navbar() {
   const searchRef = useRef<HTMLDivElement>(null);
   const mobileSearchRef = useRef<HTMLDivElement>(null);
   
-  // Close dropdowns if clicked outside
+  // Close search results if clicked outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
@@ -35,7 +34,6 @@ export default function Navbar() {
       if (mobileSearchRef.current && !mobileSearchRef.current.contains(event.target as Node)) {
         setSearchResults([]);
       }
-      setDropdownOpen(false);
     };
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
@@ -83,8 +81,24 @@ export default function Navbar() {
         const { data: profile } = await supabase.from('athletes').select('avatar_url').eq('id', session.user.id).single();
         if (profile) setAvatarUrl(profile.avatar_url);
 
-        const { count } = await supabase.from('messages').select('id', { count: 'exact' }).eq('athlete_id', session.user.id).eq('is_read', false);
-        setUnreadCount(count || 0);
+        // "Smart" Unread Counter
+        const { data: messageData } = await supabase
+          .from('messages')
+          .select('id, athlete_id, chat_history')
+          .or(`athlete_id.eq.${session.user.id},sender_email.eq.${session.user.email}`)
+          .eq('is_read', false);
+
+        if (messageData) {
+          const realUnreadCount = messageData.filter((msg: any) => {
+            const history = msg.chat_history || [];
+            if (history.length > 0) {
+              return history[history.length - 1].sender_id !== session.user.id;
+            }
+            return msg.athlete_id === session.user.id;
+          }).length;
+          
+          setUnreadCount(realUnreadCount);
+        }
       }
     }
     
@@ -98,7 +112,6 @@ export default function Navbar() {
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     setSession(null);
-    setDropdownOpen(false);
     setIsMobileMenuOpen(false);
     router.push('/login');
   };
@@ -163,6 +176,8 @@ export default function Navbar() {
           <div className="hidden md:flex items-center space-x-6 shrink-0">
             <Link href="/feed" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors flex items-center"><Globe className="w-4 h-4 mr-1.5" /> Feed</Link>
             <Link href="/leaderboard" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors flex items-center"><Trophy className="w-4 h-4 mr-1.5" /> Leaderboards</Link>
+            {/* NEW: COLLEGE FINDER DESKTOP LINK */}
+            <Link href="/search" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors flex items-center"><School className="w-4 h-4 mr-1.5" /> College Finder</Link>
 
             {session ? (
               <>
@@ -171,16 +186,18 @@ export default function Navbar() {
                   <Mail className="w-4 h-4 mr-1.5" /> <span>Inbox</span>
                   {unreadCount > 0 && <span className="absolute -top-2.5 -right-3.5 bg-red-500 text-white text-[10px] leading-none font-black min-w-[18px] h-[18px] flex items-center justify-center rounded-full border-2 border-white shadow-sm px-1">{unreadCount}</span>}
                 </Link>
-                <div className="relative ml-2">
-                  <button onClick={(e) => { e.stopPropagation(); setDropdownOpen(!dropdownOpen); }} className="w-10 h-10 rounded-full border-2 border-slate-200 hover:border-blue-500 transition-colors overflow-hidden flex items-center justify-center bg-slate-100">
-                    {avatarUrl ? <img src={avatarUrl} alt="Profile" className="w-full h-full object-cover" /> : <User className="w-5 h-5 text-slate-400" />}
-                  </button>
-                  {dropdownOpen && (
-                    <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-2xl shadow-xl py-2 flex flex-col animate-in fade-in slide-in-from-top-2 duration-200">
-                      <button onClick={handleSignOut} className="px-4 py-2 text-sm font-bold text-red-600 hover:bg-red-50 text-left flex items-center w-full rounded-xl"><LogOut className="w-4 h-4 mr-2" /> Log Out</button>
-                    </div>
-                  )}
-                </div>
+                
+                {/* UPGRADED: ONE-CLICK LOGOUT AVATAR */}
+                <button 
+                  onClick={handleSignOut} 
+                  title="Log Out" 
+                  className="relative ml-2 w-10 h-10 rounded-full border-2 border-slate-200 hover:border-red-400 transition-all overflow-hidden flex items-center justify-center bg-slate-100 group shadow-sm"
+                >
+                  {avatarUrl ? <img src={avatarUrl} alt="Profile" className="w-full h-full object-cover group-hover:opacity-30 transition-opacity" /> : <User className="w-5 h-5 text-slate-400 group-hover:opacity-30 transition-opacity" />}
+                  <div className="absolute inset-0 bg-red-500/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <LogOut className="w-4 h-4 text-red-600 drop-shadow-md" />
+                  </div>
+                </button>
               </>
             ) : (
               <Link href="/login" className="text-sm font-bold bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-xl transition-all shadow-sm shadow-blue-600/20">Log In</Link>
@@ -245,6 +262,9 @@ export default function Navbar() {
             <div className="flex flex-col gap-2">
               <Link href="/feed" onClick={closeMobileMenu} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-50 text-slate-700 font-bold text-lg transition-colors"><Globe className="w-6 h-6 text-blue-500" /> The Feed</Link>
               <Link href="/leaderboard" onClick={closeMobileMenu} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-50 text-slate-700 font-bold text-lg transition-colors"><Trophy className="w-6 h-6 text-blue-500" /> Leaderboards</Link>
+              
+              {/* NEW: COLLEGE FINDER MOBILE LINK */}
+              <Link href="/search" onClick={closeMobileMenu} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-50 text-slate-700 font-bold text-lg transition-colors"><School className="w-6 h-6 text-blue-500" /> College Finder</Link>
               
               {session ? (
                 <>

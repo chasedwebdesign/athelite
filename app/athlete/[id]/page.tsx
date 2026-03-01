@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
-import { Medal, CheckCircle2, MapPin, Mail, X, Send, MessageSquare, Lock, Trophy, Calendar, Share2, ArrowLeft, Activity, Globe } from 'lucide-react';
+import { Medal, CheckCircle2, MapPin, Mail, X, Send, MessageSquare, Lock, Trophy, Calendar, Share2, ArrowLeft, Activity, Globe, School, UserCircle2, Clock } from 'lucide-react';
 import Link from 'next/link';
 
 interface AthleteProfile {
@@ -40,15 +40,24 @@ export default function PublicAthleteProfile() {
   
   const [activeTab, setActiveTab] = useState<'accolades' | 'activity'>('accolades');
 
+  // USER STATE
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string>('');
   const [viewerRole, setViewerRole] = useState<'guest' | 'athlete' | 'coach'>('guest');
+  const [coachType, setCoachType] = useState<string | null>(null);
   const [isVerifiedCoach, setIsVerifiedCoach] = useState(false);
+  const [isVerifiedAthlete, setIsVerifiedAthlete] = useState(false);
   const [isSelf, setIsSelf] = useState(false);
   
+  // MESSAGING STATE
   const [isMessageModalOpen, setIsMessageModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'pitch' | 'chat'>('pitch');
+  
+  // Auto-filled sender info
   const [senderName, setSenderName] = useState('');
   const [senderSchool, setSenderSchool] = useState('');
   const [senderEmail, setSenderEmail] = useState('');
+  
   const [messageContent, setMessageContent] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [sendSuccess, setSendSuccess] = useState(false);
@@ -56,6 +65,7 @@ export default function PublicAthleteProfile() {
 
   useEffect(() => {
     async function fetchProfileAndUser() {
+      // 1. Fetch the Profile being viewed
       const { data: athleteData } = await supabase
         .from('athletes')
         .select('*')
@@ -66,6 +76,7 @@ export default function PublicAthleteProfile() {
         setAthlete(athleteData as AthleteProfile);
       }
 
+      // 2. Fetch their posts
       const { data: postData } = await supabase
         .from('posts')
         .select('*')
@@ -76,21 +87,33 @@ export default function PublicAthleteProfile() {
         setPosts(postData as AthletePost[]);
       }
 
+      // 3. Fetch current logged-in user to see if they can interact
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session) {
+        setCurrentUserId(session.user.id);
+        setCurrentUserEmail(session.user.email || '');
+
         if (session.user.id === athleteId) {
           setIsSelf(true);
         }
 
-        const { data: cData } = await supabase.from('coaches').select('trust_level').eq('id', session.user.id).maybeSingle();
+        const { data: cData } = await supabase.from('coaches').select('trust_level, first_name, last_name, school_name, coach_type').eq('id', session.user.id).maybeSingle();
         if (cData) {
           setViewerRole('coach');
           setIsVerifiedCoach(cData.trust_level > 0);
+          setCoachType(cData.coach_type);
+          setSenderName(`${cData.first_name} ${cData.last_name}`);
+          setSenderSchool(cData.school_name || '');
+          setSenderEmail(session.user.email || '');
         } else {
-          const { data: aData } = await supabase.from('athletes').select('id').eq('id', session.user.id).maybeSingle();
+          const { data: aData } = await supabase.from('athletes').select('id, trust_level, first_name, last_name, high_school').eq('id', session.user.id).maybeSingle();
           if (aData) {
             setViewerRole('athlete');
+            setIsVerifiedAthlete(aData.trust_level > 0);
+            setSenderName(`${aData.first_name} ${aData.last_name}`);
+            setSenderSchool(aData.high_school || '');
+            setSenderEmail(session.user.email || '');
           }
         }
       }
@@ -102,27 +125,72 @@ export default function PublicAthleteProfile() {
     }
   }, [athleteId, supabase]);
 
+  // SMART ROUTING BUTTON CLICK
+  const handleContactClick = () => {
+    if (viewerRole === 'guest' || !currentUserId) {
+      alert("Please create an account or log in to contact athletes.");
+      router.push('/login');
+      return;
+    }
+    if (viewerRole === 'coach' && !isVerifiedCoach) {
+      alert("Please verify your coaching profile on the dashboard to send direct pitches.");
+      return;
+    }
+    if (viewerRole === 'athlete' && !isVerifiedAthlete) {
+      alert("Please sync your Athletic.net profile to message other athletes.");
+      return;
+    }
+
+    const mode = (viewerRole === 'coach' && coachType === 'college') ? 'pitch' : 'chat';
+    setModalMode(mode);
+    setIsMessageModalOpen(true);
+  };
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!athlete) return;
     setIsSending(true);
+    
     try {
+      // RATE LIMITER: 10 per day maximum
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const checkEmail = currentUserEmail || senderEmail;
+      
+      const { count } = await supabase
+        .from('messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('sender_email', checkEmail)
+        .gte('created_at', twentyFourHoursAgo);
+
+      if (count !== null && count >= 10) {
+        alert("Daily Limit Reached: To protect athletes from spam, you can only send 10 new connection requests or pitches per day. Please try again tomorrow!");
+        setIsSending(false);
+        return;
+      }
+
+      // SEND THE MESSAGE
       const { error } = await supabase.from('messages').insert({
         athlete_id: athlete.id,
-        sender_name: senderName,
-        sender_school: senderSchool,
-        sender_email: senderEmail,
-        content: messageContent
+        sender_name: senderName, // Auto-filled
+        sender_school: senderSchool, // Auto-filled
+        sender_email: senderEmail, // Auto-filled
+        content: messageContent,
+        status: 'pending' // Drops into temporary queue
       });
+      
       if (error) throw error;
+      
       setSendSuccess(true);
       setTimeout(() => {
         setIsMessageModalOpen(false);
         setSendSuccess(false);
-        setSenderName(''); setSenderSchool(''); setSenderEmail(''); setMessageContent('');
+        setMessageContent('');
       }, 2000);
-    } catch (error: any) { alert(`Failed to send message: ${error.message}`); } 
-    finally { setIsSending(false); }
+    } catch (error: any) { 
+      alert(`Failed to send message: ${error.message}`); 
+    } finally { 
+      setIsSending(false); 
+    }
   };
 
   const handleCopyLink = () => {
@@ -137,12 +205,11 @@ export default function PublicAthleteProfile() {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
-  // Helper function to apply the glowing card class!
   const getCardGlowClass = (border?: string | null) => {
     if (border === 'border-legend') return 'card-legend';
     if (border === 'border-champion') return 'card-champion';
     if (border === 'border-elite') return 'card-elite';
-    return 'border-slate-200 shadow-xl'; // Default styling
+    return 'border-slate-200 shadow-xl'; 
   };
 
   if (loading) {
@@ -167,7 +234,7 @@ export default function PublicAthleteProfile() {
   return (
     <main className="min-h-screen bg-[#F8FAFC] font-sans pb-32">
       
-      {/* GLOBAL ANIMATION CLASSES FOR AVATAR BORDERS AND CARDS */}
+      {/* GLOBAL ANIMATION CLASSES */}
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes liquidPan { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
         
@@ -186,7 +253,6 @@ export default function PublicAthleteProfile() {
 
       <div className="max-w-4xl mx-auto px-6 pt-10">
         
-        {/* DYNAMIC BACK BUTTON */}
         <button 
           onClick={() => router.back()} 
           className="inline-flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 mb-6 transition-colors"
@@ -194,16 +260,12 @@ export default function PublicAthleteProfile() {
           <ArrowLeft className="w-4 h-4 mr-2" /> Back
         </button>
 
-        {/* ========================================================= */}
-        {/* ==================== HERO SECTION ======================= */}
-        {/* ========================================================= */}
-        {/* APPLYING THE DYNAMIC GLOW CLASS TO THE HERO CARD */}
+        {/* HERO CARD */}
         <div className={`bg-white rounded-[2.5rem] p-8 md:p-12 border relative overflow-hidden mb-6 transition-all duration-300 ${getCardGlowClass(athlete.equipped_border)}`}>
           <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 blur-[80px] rounded-full pointer-events-none"></div>
           
           <div className="relative z-10 flex flex-col md:flex-row items-center md:items-start gap-8">
             
-            {/* DYNAMIC GLOWING AVATAR FOR HERO */}
             <div className={`${athlete.equipped_border && athlete.equipped_border !== 'none' ? athlete.equipped_border : 'border-4 border-white shadow-lg'} rounded-full shrink-0 flex items-center justify-center`}>
               <div className="w-32 h-32 md:w-40 md:h-40 bg-slate-100 rounded-full flex items-center justify-center overflow-hidden">
                 {athlete.avatar_url ? (
@@ -238,22 +300,19 @@ export default function PublicAthleteProfile() {
               <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
                 {!isSelf && (
                   <>
-                    {viewerRole === 'coach' && isVerifiedCoach ? (
-                      <button onClick={() => { setModalMode('pitch'); setIsMessageModalOpen(true); }} className="w-full sm:w-auto bg-slate-900 hover:bg-blue-600 text-white font-black py-3.5 px-8 rounded-xl transition-colors flex items-center justify-center gap-2 shadow-lg">
-                        <Mail className="w-5 h-5" /> Direct Pitch
-                      </button>
-                    ) : viewerRole === 'athlete' ? (
-                      <button onClick={() => { setModalMode('chat'); setIsMessageModalOpen(true); }} className="w-full sm:w-auto bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-bold py-3.5 px-8 rounded-xl transition-colors flex items-center justify-center gap-2">
-                        <MessageSquare className="w-5 h-5" /> Request to Chat
-                      </button>
-                    ) : viewerRole === 'coach' && !isVerifiedCoach ? (
+                    {/* NEW: UNIFIED CONTACT BUTTON WITH SMART ROUTING */}
+                    {viewerRole === 'guest' ? (
+                      <Link href="/login" className="w-full sm:w-auto bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-3.5 px-8 rounded-xl transition-colors flex items-center justify-center gap-2 border border-slate-200">
+                        <Lock className="w-5 h-5" /> Log in to Connect
+                      </Link>
+                    ) : (viewerRole === 'coach' && !isVerifiedCoach) ? (
                       <div className="w-full sm:w-auto bg-slate-100 text-slate-400 font-bold py-3.5 px-8 rounded-xl flex items-center justify-center gap-2 border border-slate-200">
                         <Lock className="w-5 h-5" /> Verify to Message
                       </div>
                     ) : (
-                      <Link href="/login" className="w-full sm:w-auto bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-3.5 px-8 rounded-xl transition-colors flex items-center justify-center gap-2 border border-slate-200">
-                        <Lock className="w-5 h-5" /> Log in to Connect
-                      </Link>
+                      <button onClick={handleContactClick} className="w-full sm:w-auto bg-slate-900 hover:bg-blue-600 text-white font-black py-3.5 px-8 rounded-xl transition-colors flex items-center justify-center gap-2 shadow-lg">
+                        <Mail className="w-5 h-5" /> Contact
+                      </button>
                     )}
                   </>
                 )}
@@ -266,9 +325,7 @@ export default function PublicAthleteProfile() {
           </div>
         </div>
 
-        {/* ========================================================= */}
-        {/* ==================== TAB NAVIGATION ===================== */}
-        {/* ========================================================= */}
+        {/* TABS */}
         <div className="flex border-b border-slate-200 mb-8">
           <button 
             onClick={() => setActiveTab('accolades')}
@@ -284,9 +341,7 @@ export default function PublicAthleteProfile() {
           </button>
         </div>
 
-        {/* ========================================================= */}
-        {/* ==================== ACCOLADES TAB ====================== */}
-        {/* ========================================================= */}
+        {/* ACCOLADES */}
         {activeTab === 'accolades' && (
           <div className="animate-in fade-in duration-300">
             {athlete.prs && athlete.prs.length > 0 ? (
@@ -321,9 +376,7 @@ export default function PublicAthleteProfile() {
           </div>
         )}
 
-        {/* ========================================================= */}
-        {/* ===================== ACTIVITY TAB ====================== */}
-        {/* ========================================================= */}
+        {/* ACTIVITY */}
         {activeTab === 'activity' && (
           <div className="animate-in fade-in duration-300 space-y-4">
             {posts.length > 0 ? (
@@ -331,23 +384,18 @@ export default function PublicAthleteProfile() {
                 <div key={post.id} className="bg-white p-6 rounded-[1.5rem] border border-slate-200 shadow-sm">
                   <div className="flex justify-between items-start mb-4">
                     <div className="flex items-center gap-3">
-                      
-                      {/* DYNAMIC GLOWING AVATAR FOR ACTIVITY FEED */}
                       <div className={`${athlete.equipped_border && athlete.equipped_border !== 'none' ? athlete.equipped_border : 'border border-slate-200'} rounded-full shrink-0 flex items-center justify-center`}>
                         <div className="w-10 h-10 bg-slate-100 rounded-full overflow-hidden flex items-center justify-center">
                           {athlete.avatar_url ? <img src={athlete.avatar_url} alt="Profile" className="w-full h-full object-cover" /> : <Medal className="w-5 h-5 text-slate-400" />}
                         </div>
                       </div>
-
                       <div>
                         <h4 className="font-black text-slate-900 leading-tight">{athlete.first_name} {athlete.last_name}</h4>
                         <span className="text-xs font-bold text-slate-400">{formatDate(post.created_at)}</span>
                       </div>
                     </div>
                   </div>
-                  
                   <p className="text-slate-700 font-medium text-[15px] mb-4 whitespace-pre-wrap">{post.content}</p>
-                  
                   {post.linked_pr_event && (
                     <div className="inline-flex items-center bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200/60 px-3 py-1.5 rounded-xl shadow-sm mt-2">
                       <Trophy className="w-3.5 h-3.5 text-blue-500 mr-2" />
@@ -369,14 +417,14 @@ export default function PublicAthleteProfile() {
 
       </div>
 
-      {/* --- MESSAGING MODAL --- */}
+      {/* --- SIMPLIFIED MESSAGING MODAL --- */}
       {isMessageModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
             <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
               <div>
                 <h3 className="font-black text-lg text-slate-900">{modalMode === 'pitch' ? `Message ${athlete.first_name}` : `Connect with ${athlete.first_name}`}</h3>
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">{modalMode === 'pitch' ? 'Direct Pitch' : 'Athlete Chat Request'}</p>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">{modalMode === 'pitch' ? 'College Coach Pitch' : 'Connection Request'}</p>
               </div>
               <button onClick={() => setIsMessageModalOpen(false)} className="p-2 hover:bg-slate-200 rounded-full transition-colors"><X className="w-5 h-5 text-slate-500" /></button>
             </div>
@@ -387,26 +435,32 @@ export default function PublicAthleteProfile() {
                 <p className="text-slate-500 font-medium">Your message has been securely delivered to their dashboard.</p>
               </div>
             ) : (
-              <form onSubmit={handleSendMessage} className="p-6 space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Your Name</label>
-                    <input required type="text" value={senderName} onChange={(e) => setSenderName(e.target.value)} className="w-full border border-slate-200 rounded-xl px-4 py-3 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 font-medium" placeholder="John Doe" />
+              <form onSubmit={handleSendMessage} className="p-6 space-y-5 relative">
+                
+                <p className="text-[10px] font-black text-amber-500 bg-amber-50 rounded-lg px-3 py-2 text-center uppercase tracking-widest border border-amber-200 flex items-center justify-center gap-1.5 mb-2">
+                  <Clock className="w-3.5 h-3.5" /> Daily Limit: 10 Pitches/Requests
+                </p>
+
+                {/* VISUAL "SENDING AS" CARD */}
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex items-center justify-between shadow-sm">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-white border border-slate-200 rounded-full flex items-center justify-center shrink-0 shadow-sm">
+                      {viewerRole === 'coach' ? <School className="w-5 h-5 text-blue-600" /> : <UserCircle2 className="w-5 h-5 text-blue-600" />}
+                    </div>
+                    <div>
+                      <p className="text-sm font-black text-slate-900">{senderName}</p>
+                      <p className="text-xs font-bold text-slate-500 truncate max-w-[200px]">{senderSchool} • {senderEmail}</p>
+                    </div>
                   </div>
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">{modalMode === 'pitch' ? 'University' : 'Your High School'}</label>
-                    <input required type="text" value={senderSchool} onChange={(e) => setSenderSchool(e.target.value)} className="w-full border border-slate-200 rounded-xl px-4 py-3 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 font-medium" placeholder={modalMode === 'pitch' ? "Oregon State" : "South Albany HS"} />
-                  </div>
+                  <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0" />
                 </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Your Email</label>
-                  <input required type="email" value={senderEmail} onChange={(e) => setSenderEmail(e.target.value)} className="w-full border border-slate-200 rounded-xl px-4 py-3 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 font-medium" placeholder="name@example.com" />
-                </div>
-                <div className="space-y-1.5">
+
+                <div className="space-y-1.5 mt-2">
                   <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Message</label>
-                  <textarea required value={messageContent} onChange={(e) => setMessageContent(e.target.value)} rows={4} className="w-full border border-slate-200 rounded-xl px-4 py-3 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 font-medium resize-none" placeholder={modalMode === 'pitch' ? `Hi ${athlete.first_name}...` : `Hey ${athlete.first_name}...`}></textarea>
+                  <textarea required value={messageContent} onChange={(e) => setMessageContent(e.target.value)} rows={5} className="w-full border border-slate-200 rounded-xl px-4 py-3 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 font-medium resize-none" placeholder={modalMode === 'pitch' ? `Hi ${athlete.first_name}...` : `Hey ${athlete.first_name}...`}></textarea>
                 </div>
-                <button type="submit" disabled={isSending} className={`w-full text-white font-black py-4 rounded-xl shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 ${modalMode === 'pitch' ? 'bg-slate-900 hover:bg-blue-600 shadow-blue-600/20' : 'bg-blue-600 hover:bg-blue-500 shadow-blue-600/20'}`}>
+
+                <button type="submit" disabled={isSending} className={`w-full text-white font-black py-4 rounded-xl shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 ${modalMode === 'pitch' ? 'bg-slate-900 hover:bg-slate-800' : 'bg-blue-600 hover:bg-blue-500'}`}>
                   {isSending ? 'Sending...' : <><Send className="w-5 h-5" /> Send Message</>}
                 </button>
               </form>

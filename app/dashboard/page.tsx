@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
-import { Activity, ShieldCheck, Link as LinkIcon, Trophy, LogOut, Medal, Timer, TrendingUp, CheckCircle2, Search, AlertCircle, Zap, Calendar, MapPin, Camera, Mail, RefreshCw, School, Lock, AlertTriangle, ExternalLink, ChevronRight, Check } from 'lucide-react';
+import { Activity, ShieldCheck, Link as LinkIcon, Trophy, LogOut, Medal, Timer, TrendingUp, CheckCircle2, Search, AlertCircle, Zap, Calendar, MapPin, Camera, Mail, RefreshCw, School, Lock, AlertTriangle, ExternalLink, ChevronRight, Check, Clock } from 'lucide-react';
 import Link from 'next/link';
 import imageCompression from 'browser-image-compression';
 
@@ -29,6 +29,9 @@ export default function DashboardPage() {
   const [equippedBorder, setEquippedBorder] = useState<string>('none');
   const [isEquipping, setIsEquipping] = useState(false);
 
+  const [canSync, setCanSync] = useState(true);
+  const [syncTimeLeft, setSyncTimeLeft] = useState('');
+
   const parseMarkForSorting = (mark: string, event: string): number => {
     const cleanMark = mark.replace(/[a-zA-Z]/g, '').trim();
     const isField = FIELD_EVENTS.includes(event);
@@ -49,9 +52,39 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
+    const lastSyncStr = localStorage.getItem('last_sync_time');
+    if (lastSyncStr) {
+      const lastSyncTime = parseInt(lastSyncStr, 10);
+      const timePassed = new Date().getTime() - lastSyncTime;
+      const oneDay = 24 * 60 * 60 * 1000;
+      
+      if (timePassed < oneDay) {
+        setCanSync(false);
+        const hoursLeft = Math.ceil((oneDay - timePassed) / (1000 * 60 * 60));
+        setSyncTimeLeft(`${hoursLeft}h`);
+      }
+    }
+
     async function loadDashboardData() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { router.push('/login'); return; }
+
+      const { data: messageData } = await supabase
+        .from('messages')
+        .select('id, athlete_id, chat_history')
+        .or(`athlete_id.eq.${session.user.id},sender_email.eq.${session.user.email}`)
+        .eq('is_read', false);
+
+      if (messageData) {
+        const realUnreadCount = messageData.filter((msg: any) => {
+          const history = msg.chat_history || [];
+          if (history.length > 0) {
+            return history[history.length - 1].sender_id !== session.user.id;
+          }
+          return msg.athlete_id === session.user.id;
+        }).length;
+        setUnreadCount(realUnreadCount);
+      }
 
       const { data: aData } = await supabase.from('athletes').select('*').eq('id', session.user.id).maybeSingle();
       
@@ -62,7 +95,8 @@ export default function DashboardPage() {
         let bestPercentileFound = 1.0;
 
         if (aData.prs && aData.prs.length > 0) {
-          const { data: allAthletes } = await supabase.from('athletes').select('prs');
+          // 🚨 CRITICAL FIX: Only compare against athletes of the SAME GENDER!
+          const { data: allAthletes } = await supabase.from('athletes').select('prs').eq('gender', aData.gender || 'Boys');
           
           if (allAthletes) {
             aData.prs = aData.prs.map((myPr: any) => {
@@ -77,7 +111,6 @@ export default function DashboardPage() {
               const rankIndex = allMarks.findIndex(m => parseMarkForSorting(m, event) === myVal);
               const percentile = Math.max(0, rankIndex / allMarks.length);
               
-              // FIXED: Re-added the global rank calculator!
               const globalRank = rankIndex !== -1 ? rankIndex + 1 : 1;
 
               if (percentile < bestPercentileFound) bestPercentileFound = percentile;
@@ -92,7 +125,6 @@ export default function DashboardPage() {
               else if (percentile <= 0.75) tier = { name: 'CHALLENGER', classes: 'bg-orange-100 text-orange-800 border border-orange-300' };
               else tier = { name: 'PROSPECT', classes: 'bg-slate-100 text-slate-600 border border-slate-300' };
 
-              // FIXED: Passing globalRank to the UI
               return { ...myPr, tier, globalRank };
             });
           }
@@ -100,9 +132,6 @@ export default function DashboardPage() {
 
         setHighestPercentile(bestPercentileFound);
         setAthleteProfile(aData);
-        
-        const { data: messageData } = await supabase.from('messages').select('id').eq('athlete_id', session.user.id).eq('is_read', false);
-        if (messageData) setUnreadCount(messageData.length);
         setLoading(false);
         return;
       }
@@ -189,6 +218,7 @@ export default function DashboardPage() {
       }).eq('id', athleteProfile?.id);
 
       if (updateError) throw updateError;
+      localStorage.setItem('last_sync_time', new Date().getTime().toString());
       window.location.reload();
     } catch (err: any) { 
       alert(err.message); 
@@ -213,6 +243,7 @@ export default function DashboardPage() {
         grad_year: result.data.gradYear       
       }).eq('id', athleteProfile.id);
       
+      localStorage.setItem('last_sync_time', new Date().getTime().toString());
       window.location.reload(); 
     } catch (err: any) { alert(`Failed to sync: ${err.message}`); } finally { setIsSyncing(false); }
   };
@@ -493,9 +524,14 @@ export default function DashboardPage() {
                   <p className="text-slate-500 font-medium">Your official meet results & national rank.</p>
                 </div>
                 {athleteProfile?.trust_level! > 0 && (
-                  <button onClick={handleReSync} disabled={isSyncing} className="flex items-center justify-center bg-slate-900 hover:bg-blue-600 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-colors disabled:opacity-50">
-                    <RefreshCw className={`w-4 h-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
-                    {isSyncing ? 'Syncing...' : 'Sync Latest PRs'}
+                  <button onClick={handleReSync} disabled={isSyncing || !canSync} className="flex items-center justify-center bg-slate-900 hover:bg-blue-600 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-colors disabled:opacity-50">
+                    {isSyncing ? (
+                      <><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Syncing...</>
+                    ) : canSync ? (
+                      <><RefreshCw className="w-4 h-4 mr-2" /> Sync Latest PRs</>
+                    ) : (
+                      <><Clock className="w-4 h-4 mr-2" /> Available in {syncTimeLeft}</>
+                    )}
                   </button>
                 )}
               </div>
@@ -530,7 +566,6 @@ export default function DashboardPage() {
                             <span className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-widest">Global Status</span>
                             {pr.tier ? (
                               <div className="flex items-center gap-2 mt-0.5">
-                                {/* FIXED: Re-added the numeric rank display here! */}
                                 <span className="text-sm font-black text-slate-400 group-hover:text-blue-500 transition-colors">#{pr.globalRank}</span>
                                 <span className={`px-3 py-1 rounded-lg text-[10px] font-black tracking-widest uppercase ${pr.tier.classes}`}>
                                   {pr.tier.name}
@@ -577,7 +612,7 @@ export default function DashboardPage() {
                 <div className="text-center py-12 bg-slate-50 rounded-2xl border border-slate-200 border-dashed">
                   <Activity className="w-12 h-12 text-slate-300 mx-auto mb-4" />
                   <h4 className="text-lg font-black text-slate-900">No times found</h4>
-                  <p className="text-sm text-slate-500 font-medium mt-1">Sync your profile to populate this board.</p>
+                  <p className="text-slate-500 font-medium mt-1">Sync your profile to populate this board.</p>
                 </div>
               )}
             </div>
