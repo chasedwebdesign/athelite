@@ -3,11 +3,11 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
-import { Activity, ShieldCheck, Link as LinkIcon, Trophy, LogOut, Medal, Timer, TrendingUp, CheckCircle2, Search, AlertCircle, Zap, Calendar, MapPin, Camera, Mail, RefreshCw, School, Lock, AlertTriangle } from 'lucide-react';
+import { Activity, ShieldCheck, Link as LinkIcon, Trophy, LogOut, Medal, Timer, TrendingUp, CheckCircle2, Search, AlertCircle, Zap, Calendar, MapPin, Camera, Mail, RefreshCw, School, Lock, AlertTriangle, ExternalLink, ChevronRight, Check } from 'lucide-react';
 import Link from 'next/link';
 import imageCompression from 'browser-image-compression';
 
-interface AthleteProfile { id: string; first_name: string | null; last_name: string | null; grad_year: number | null; high_school: string | null; state: string | null; primary_sport: string; athletic_net_url: string | null; trust_level: number; gender: string | null; prs: { event: string; mark: string; date?: string; meet?: string; tier?: { name: string; classes: string } }[] | null; avatar_url: string | null; }
+interface AthleteProfile { id: string; first_name: string | null; last_name: string | null; grad_year: number | null; high_school: string | null; state: string | null; school_size: string | null; conference: string | null; primary_sport: string; athletic_net_url: string | null; trust_level: number; gender: string | null; prs: { event: string; mark: string; date?: string; meet?: string; tier?: { name: string; classes: string }; globalRank?: number }[] | null; avatar_url: string | null; equipped_border: string | null; }
 interface CoachProfile { id: string; first_name: string | null; last_name: string | null; school_name: string | null; coach_type: string; avatar_url: string | null; }
 
 const FIELD_EVENTS = ['Shot Put', 'Discus', 'Javelin', 'Hammer', 'High Jump', 'Pole Vault', 'Long Jump', 'Triple Jump'];
@@ -23,8 +23,11 @@ export default function DashboardPage() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false); 
   const [unreadCount, setUnreadCount] = useState(0);
-  
   const [claimConflict, setClaimConflict] = useState(false);
+
+  const [highestPercentile, setHighestPercentile] = useState<number>(1.0);
+  const [equippedBorder, setEquippedBorder] = useState<string>('none');
+  const [isEquipping, setIsEquipping] = useState(false);
 
   const parseMarkForSorting = (mark: string, event: string): number => {
     const cleanMark = mark.replace(/[a-zA-Z]/g, '').trim();
@@ -54,7 +57,10 @@ export default function DashboardPage() {
       
       if (aData) {
         setUserRole('athlete');
+        setEquippedBorder(aData.equipped_border || 'none');
         
+        let bestPercentileFound = 1.0;
+
         if (aData.prs && aData.prs.length > 0) {
           const { data: allAthletes } = await supabase.from('athletes').select('prs');
           
@@ -70,22 +76,31 @@ export default function DashboardPage() {
               const myVal = parseMarkForSorting(myPr.mark, event);
               const rankIndex = allMarks.findIndex(m => parseMarkForSorting(m, event) === myVal);
               const percentile = Math.max(0, rankIndex / allMarks.length);
+              
+              // FIXED: Re-added the global rank calculator!
+              const globalRank = rankIndex !== -1 ? rankIndex + 1 : 1;
+
+              if (percentile < bestPercentileFound) bestPercentileFound = percentile;
+              if (rankIndex === 0) bestPercentileFound = 0; 
 
               let tier;
               if (percentile <= 0.01 || rankIndex === 0) tier = { name: 'LEGEND', classes: 'legend-badge' };
-              else if (percentile <= 0.05) tier = { name: 'GRANDMASTER', classes: 'bg-slate-900 text-slate-100 border border-slate-700' };
-              else if (percentile <= 0.15) tier = { name: 'MASTER', classes: 'bg-purple-100 text-purple-800 border border-purple-300' };
-              else if (percentile <= 0.30) tier = { name: 'ELITE', classes: 'bg-blue-100 text-blue-800 border border-blue-300' };
+              else if (percentile <= 0.05) tier = { name: 'CHAMPION', classes: 'champion-badge' };
+              else if (percentile <= 0.15) tier = { name: 'ELITE', classes: 'elite-badge' };
+              else if (percentile <= 0.30) tier = { name: 'MASTER', classes: 'bg-blue-100 text-blue-800 border border-blue-300' };
               else if (percentile <= 0.50) tier = { name: 'CONTENDER', classes: 'bg-emerald-100 text-emerald-800 border border-emerald-300' };
               else if (percentile <= 0.75) tier = { name: 'CHALLENGER', classes: 'bg-orange-100 text-orange-800 border border-orange-300' };
               else tier = { name: 'PROSPECT', classes: 'bg-slate-100 text-slate-600 border border-slate-300' };
 
-              return { ...myPr, tier };
+              // FIXED: Passing globalRank to the UI
+              return { ...myPr, tier, globalRank };
             });
           }
         }
 
+        setHighestPercentile(bestPercentileFound);
         setAthleteProfile(aData);
+        
         const { data: messageData } = await supabase.from('messages').select('id').eq('athlete_id', session.user.id).eq('is_read', false);
         if (messageData) setUnreadCount(messageData.length);
         setLoading(false);
@@ -121,6 +136,20 @@ export default function DashboardPage() {
     } catch (error: any) { alert(`Error uploading image: ${error.message}`); } finally { setIsUploadingAvatar(false); }
   };
 
+  const handleEquipBorder = async (borderId: string) => {
+    if (!athleteProfile) return;
+    setIsEquipping(true);
+    try {
+      const { error } = await supabase.from('athletes').update({ equipped_border: borderId }).eq('id', athleteProfile.id);
+      if (error) throw error;
+      setEquippedBorder(borderId);
+    } catch (err: any) {
+      alert(`Failed to equip border: ${err.message}`);
+    } finally {
+      setIsEquipping(false);
+    }
+  };
+
   const handleSync = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!syncUrl.includes('athletic.net')) return alert("Please enter a valid Athletic.net profile URL.");
@@ -152,11 +181,14 @@ export default function DashboardPage() {
         athletic_net_url: result.data.url, 
         prs: result.data.prs, 
         gender: result.data.gender, 
+        state: result.data.state,                
+        school_size: result.data.schoolSize,     
+        conference: result.data.conference, 
+        grad_year: result.data.gradYear,      
         trust_level: 1 
       }).eq('id', athleteProfile?.id);
 
       if (updateError) throw updateError;
-      
       window.location.reload();
     } catch (err: any) { 
       alert(err.message); 
@@ -174,7 +206,11 @@ export default function DashboardPage() {
       
       await supabase.from('athletes').update({ 
         prs: result.data.prs,
-        gender: result.data.gender 
+        gender: result.data.gender,
+        state: result.data.state,                
+        school_size: result.data.schoolSize,     
+        conference: result.data.conference,
+        grad_year: result.data.gradYear       
       }).eq('id', athleteProfile.id);
       
       window.location.reload(); 
@@ -217,10 +253,10 @@ export default function DashboardPage() {
               {coachProfile?.school_name || 'Update your program settings.'} • {coachProfile?.coach_type === 'college' ? 'NCAA Recruiting' : 'High School Program'}
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 w-full max-w-2xl">
-              <Link href="/athletes" className="bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-200 rounded-3xl p-8 transition-all group cursor-pointer block">
+              <Link href="/feed" className="bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-200 rounded-3xl p-8 transition-all group cursor-pointer block">
                 <div className="w-14 h-14 bg-white rounded-full shadow-sm flex items-center justify-center mb-6 mx-auto group-hover:scale-110 transition-transform"><Search className="w-6 h-6 text-blue-600" /></div>
                 <h3 className="text-xl font-black text-slate-900 mb-2">Find Recruits</h3>
-                <p className="text-slate-500 font-medium text-sm">Access the Discovery Engine to find verified high school athletes.</p>
+                <p className="text-slate-500 font-medium text-sm">Access the Live Feed to find verified high school athletes.</p>
               </Link>
               <Link href="/dashboard/messages" className="bg-slate-50 hover:bg-purple-50 border border-slate-200 hover:border-purple-200 rounded-3xl p-8 transition-all group cursor-pointer block">
                 <div className="w-14 h-14 bg-white rounded-full shadow-sm flex items-center justify-center mb-6 mx-auto group-hover:scale-110 transition-transform"><Mail className="w-6 h-6 text-purple-600" /></div>
@@ -247,11 +283,27 @@ export default function DashboardPage() {
   const badge = getTrustBadge(athleteProfile?.trust_level || 0);
   const hasPRs = athleteProfile?.prs && athleteProfile.prs.length > 0;
 
+  const CUSTOM_BORDERS = [
+    { id: 'none', name: 'Standard Profile', reqPercentile: 1.0, badgeClass: 'bg-slate-200 border-2 border-slate-300' },
+    { id: 'border-elite', name: 'Elite Card', reqPercentile: 0.15, badgeClass: 'elite-badge', unlockText: 'Reach Top 15%' },
+    { id: 'border-champion', name: 'Champion Card', reqPercentile: 0.05, badgeClass: 'champion-badge', unlockText: 'Reach Top 5%' },
+    { id: 'border-legend', name: 'Legend Card', reqPercentile: 0.01, badgeClass: 'legend-badge', unlockText: 'Reach Top 1%' },
+  ];
+
   return (
     <main className="min-h-screen bg-[#F8FAFC] font-sans pb-32">
       <style dangerouslySetInnerHTML={{__html: `
-        @keyframes shimmer { 0% { background-position: -200% center; } 100% { background-position: 200% center; } }
-        .legend-badge { background: linear-gradient(90deg, #FFDF00 0%, #FFF8B0 20%, #FFDF00 40%, #FFF8B0 60%, #FFDF00 80%); background-size: 200% auto; animation: shimmer 3s linear infinite; color: #714200; border: 1px solid #FDE047; box-shadow: 0 0 10px rgba(253, 224, 71, 0.4); font-weight: 900; }
+        @keyframes liquidPan { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+        @keyframes shimmerSlow { 0% { background-position: -200% center; } 100% { background-position: 200% center; } }
+        
+        .legend-badge { background: linear-gradient(90deg, #6b21a8 0%, #d946ef 20%, #6b21a8 40%, #d946ef 60%, #6b21a8 80%); background-size: 200% auto; animation: shimmerSlow 4s linear infinite; color: white; border: 1px solid #e879f9; box-shadow: 0 0 15px rgba(217, 70, 239, 0.5); font-weight: 900; }
+        .border-legend { background: linear-gradient(135deg, #7e22ce, #d946ef, #a21caf, #7e22ce); background-size: 300% 300%; animation: liquidPan 8s ease-in-out infinite; padding: 4px; border-radius: 50%; box-shadow: 0 0 20px rgba(217, 70, 239, 0.5); }
+
+        .champion-badge { background: linear-gradient(90deg, #991b1b 0%, #ef4444 20%, #991b1b 40%, #ef4444 60%, #991b1b 80%); background-size: 200% auto; animation: shimmerSlow 4s linear infinite; color: white; border: 1px solid #f87171; box-shadow: 0 0 15px rgba(239, 68, 68, 0.5); font-weight: 900; }
+        .border-champion { background: linear-gradient(135deg, #b91c1c, #ef4444, #dc2626, #b91c1c); background-size: 300% 300%; animation: liquidPan 8s ease-in-out infinite; padding: 4px; border-radius: 50%; box-shadow: 0 0 20px rgba(239, 68, 68, 0.5); }
+
+        .elite-badge { background: linear-gradient(90deg, #0f172a 0%, #475569 20%, #0f172a 40%, #475569 60%, #0f172a 80%); background-size: 200% auto; animation: shimmerSlow 4s linear infinite; color: white; border: 1px solid #94a3b8; box-shadow: 0 0 15px rgba(148, 163, 184, 0.3); font-weight: 900; }
+        .border-elite { background: linear-gradient(135deg, #1e293b, #64748b, #475569, #1e293b); background-size: 300% 300%; animation: liquidPan 8s ease-in-out infinite; padding: 4px; border-radius: 50%; box-shadow: 0 0 20px rgba(148, 163, 184, 0.4); }
       `}} />
 
       <div className="max-w-7xl mx-auto px-6 pt-10">
@@ -259,9 +311,11 @@ export default function DashboardPage() {
           
           <div className="lg:col-span-1 space-y-6">
             <div className="bg-white rounded-[2rem] p-8 border border-slate-200 shadow-sm">
-              <div className="relative w-24 h-24 mb-6 group">
-                <div className={`w-full h-full rounded-full border border-slate-300 shadow-inner overflow-hidden bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center ${isUploadingAvatar ? 'animate-pulse' : ''}`}>
-                  {athleteProfile?.avatar_url ? <img src={athleteProfile.avatar_url} alt="Profile" className="w-full h-full object-cover" /> : <Medal className="w-10 h-10 text-slate-400" />}
+              <div className="relative w-28 h-28 mb-6 group mx-auto md:mx-0">
+                <div className={`${equippedBorder !== 'none' ? equippedBorder : 'border-4 border-slate-200'} w-full h-full rounded-full transition-all duration-300`}>
+                  <div className={`w-full h-full rounded-full overflow-hidden bg-slate-100 flex items-center justify-center shadow-inner ${isUploadingAvatar ? 'animate-pulse' : ''}`}>
+                    {athleteProfile?.avatar_url ? <img src={athleteProfile.avatar_url} alt="Profile" className="w-full h-full object-cover" /> : <Medal className="w-10 h-10 text-slate-400" />}
+                  </div>
                 </div>
                 <label className="absolute inset-0 bg-black/40 rounded-full flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
                   <Camera className="w-6 h-6 text-white mb-1" />
@@ -270,7 +324,18 @@ export default function DashboardPage() {
                 </label>
               </div>
               <h1 className="text-2xl font-black text-slate-900 mb-1">{athleteProfile?.first_name ? `${athleteProfile.first_name} ${athleteProfile.last_name}` : 'New Athlete'}</h1>
-              <p className="text-slate-500 font-medium mb-6">{athleteProfile?.high_school ? `${athleteProfile.high_school} ${athleteProfile.grad_year ? `• Class of ${athleteProfile.grad_year}` : ''}` : 'Profile awaiting sync...'}</p>
+              
+              <p className="text-slate-500 font-medium leading-relaxed mb-6">
+                {athleteProfile?.high_school ? (
+                  <>
+                    {athleteProfile.high_school} 
+                    {athleteProfile.grad_year && ` • Class of ${athleteProfile.grad_year}`}
+                    {athleteProfile.state && ` • ${athleteProfile.state}`}
+                    {athleteProfile.school_size && ` • ${athleteProfile.school_size}`}
+                    {athleteProfile.conference && ` • ${athleteProfile.conference}`}
+                  </>
+                ) : 'Profile awaiting sync...'}
+              </p>
               
               <div className="border-t border-slate-100 pt-6">
                 <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Trust Level</span>
@@ -284,16 +349,65 @@ export default function DashboardPage() {
                 <div className="border-t border-slate-100 pt-6 mt-6">
                   <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Verified Division</span>
                   <div className="flex items-center px-4 py-3 rounded-xl border bg-slate-50 border-slate-200">
+                    <CheckCircle2 className="w-4 h-4 mr-3 text-slate-400" />
                     <span className="text-sm font-bold text-slate-700">{athleteProfile?.gender || 'Boys'} Division</span>
-                    <Lock className="w-4 h-4 ml-auto text-slate-400" />
                   </div>
-                  <p className="text-[10px] text-slate-400 mt-2 text-center flex items-center justify-center">
-                    <ShieldCheck className="w-3 h-3 mr-1" /> Locked via Athletic.net
-                  </p>
                 </div>
               )}
-
             </div>
+            
+            {athleteProfile?.trust_level! > 0 && (
+              <div className="bg-white rounded-[2rem] p-8 border border-slate-200 shadow-sm">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h3 className="text-xl font-black text-slate-900 tracking-tight">Locker Room</h3>
+                    <p className="text-xs text-slate-500 font-medium mt-1">Equip your unlocked badges.</p>
+                  </div>
+                  <Trophy className="w-6 h-6 text-slate-300" />
+                </div>
+
+                <div className="space-y-3">
+                  {CUSTOM_BORDERS.map((border) => {
+                    const isUnlocked = highestPercentile <= border.reqPercentile;
+                    const isEquipped = equippedBorder === border.id;
+
+                    return (
+                      <button 
+                        key={border.id}
+                        disabled={!isUnlocked || isEquipping}
+                        onClick={() => handleEquipBorder(border.id)}
+                        className={`w-full flex items-center justify-between p-3.5 rounded-2xl border transition-all text-left ${
+                          isEquipped 
+                            ? 'bg-blue-50 border-blue-300 shadow-sm' 
+                            : isUnlocked 
+                              ? 'bg-slate-50 border-slate-200 hover:border-slate-300 hover:bg-slate-100 hover:-translate-y-0.5' 
+                              : 'bg-slate-50/50 border-slate-100 opacity-60 cursor-not-allowed'
+                        }`}
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className={`w-10 h-12 rounded-t-md rounded-b-xl flex items-center justify-center shrink-0 overflow-hidden relative shadow-md ${isUnlocked && border.id !== 'none' ? border.badgeClass : 'bg-slate-200 border-2 border-slate-300'}`}>
+                            {isUnlocked && border.id !== 'none' && (
+                              <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-white/30 mix-blend-overlay"></div>
+                            )}
+                            {border.id === 'border-legend' && isUnlocked && <Trophy className="w-4 h-4 text-white drop-shadow-md relative z-10" />}
+                            {border.id === 'border-champion' && isUnlocked && <Medal className="w-4 h-4 text-white drop-shadow-md relative z-10" />}
+                            {border.id === 'border-elite' && isUnlocked && <Activity className="w-4 h-4 text-white drop-shadow-md relative z-10" />}
+                          </div>
+
+                          <div>
+                            <span className={`block font-bold ${isEquipped ? 'text-blue-900' : 'text-slate-700'}`}>{border.name}</span>
+                            {!isUnlocked && <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5"><Lock className="w-3 h-3 inline mr-1 -mt-0.5" />{border.unlockText}</span>}
+                            {isUnlocked && !isEquipped && <span className="block text-[10px] font-bold text-emerald-500 uppercase tracking-wider mt-0.5">Unlocked</span>}
+                          </div>
+                        </div>
+                        {isEquipped && <CheckCircle2 className="w-5 h-5 text-blue-500" />}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
           </div>
 
           <div className="lg:col-span-2 space-y-6">
@@ -348,7 +462,6 @@ export default function DashboardPage() {
               </div>
             )}
 
-            {/* 📥 RECRUITING INBOX WIDGET */}
             {athleteProfile?.trust_level! > 0 && (
               <div className="bg-gradient-to-r from-purple-900 to-indigo-900 rounded-[2rem] p-8 border border-purple-700 shadow-xl relative overflow-hidden flex flex-col sm:flex-row items-center justify-between gap-6">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-purple-500/20 blur-[80px] rounded-full pointer-events-none"></div>
@@ -389,38 +502,76 @@ export default function DashboardPage() {
 
               {hasPRs ? (
                 <div className="grid grid-cols-1 gap-4">
-                  {athleteProfile!.prs!.map((pr, index) => (
-                    <div key={index} className="flex flex-col sm:flex-row sm:items-center justify-between p-5 rounded-2xl border border-slate-200 bg-slate-50 gap-4 group hover:bg-white hover:border-blue-300 transition-colors">
-                      <div className="flex-1">
-                        <span className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-widest">Event</span>
-                        <span className="font-black text-xl text-slate-800">{pr.event}</span>
-                        {(pr.date || pr.meet) && (
-                          <div className="flex items-center gap-2 text-xs text-slate-500 font-medium mt-2">
-                            <span className="flex items-center"><Calendar className="w-3 h-3 mr-1 text-slate-400" /> {pr.date}</span>
-                            <span className="hidden sm:inline text-slate-300">•</span>
-                            <span className="flex items-center truncate pr-2"><MapPin className="w-3 h-3 mr-1 text-slate-400" /> {pr.meet}</span>
-                          </div>
-                        )}
-                      </div>
-                      
-                      <div className="flex items-center gap-5 sm:border-l sm:border-slate-200 sm:pl-5">
-                        <div className="flex flex-col items-start sm:items-end">
-                          <span className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-widest">Status</span>
-                          {pr.tier ? (
-                            <span className={`px-3 py-1 rounded-lg text-[10px] font-black tracking-widest uppercase ${pr.tier.classes}`}>
-                              {pr.tier.name}
-                            </span>
-                          ) : (
-                            <span className="px-3 py-1 rounded-lg text-[10px] font-black tracking-widest uppercase bg-slate-100 text-slate-400 border border-slate-200">UNRANKED</span>
+                  {athleteProfile!.prs!.map((pr, index) => {
+                    const queryParams = new URLSearchParams({
+                      event: pr.event,
+                      gender: athleteProfile.gender || 'Boys'
+                    });
+                    const leaderboardLink = `/leaderboard?${queryParams.toString()}#${athleteProfile.id}`;
+
+                    return (
+                      <Link href={leaderboardLink} key={index} className="flex flex-col sm:flex-row sm:items-center justify-between p-5 rounded-2xl border border-slate-200 bg-slate-50 gap-4 group hover:bg-blue-50 hover:border-blue-300 transition-colors cursor-pointer relative overflow-hidden">
+                        <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <ExternalLink className="w-4 h-4 text-blue-500" />
+                        </div>
+                        <div className="flex-1">
+                          <span className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-widest group-hover:text-blue-500 transition-colors">Event</span>
+                          <span className="font-black text-xl text-slate-800">{pr.event}</span>
+                          {(pr.date || pr.meet) && (
+                            <div className="flex items-center gap-2 text-xs text-slate-500 font-medium mt-2">
+                              <span className="flex items-center"><Calendar className="w-3 h-3 mr-1 text-slate-400" /> {pr.date}</span>
+                              <span className="hidden sm:inline text-slate-300">•</span>
+                              <span className="flex items-center truncate pr-2"><MapPin className="w-3 h-3 mr-1 text-slate-400" /> {pr.meet}</span>
+                            </div>
                           )}
                         </div>
-                        <div className="text-right ml-auto sm:ml-0">
-                          <span className="block text-[10px] font-bold text-blue-400 mb-1 uppercase tracking-widest">Mark</span>
-                          <span className="font-black text-3xl text-blue-600">{pr.mark}</span>
+                        <div className="flex items-center gap-5 sm:border-l sm:border-slate-200 sm:pl-5 pr-4">
+                          <div className="flex flex-col items-start sm:items-end">
+                            <span className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-widest">Global Status</span>
+                            {pr.tier ? (
+                              <div className="flex items-center gap-2 mt-0.5">
+                                {/* FIXED: Re-added the numeric rank display here! */}
+                                <span className="text-sm font-black text-slate-400 group-hover:text-blue-500 transition-colors">#{pr.globalRank}</span>
+                                <span className={`px-3 py-1 rounded-lg text-[10px] font-black tracking-widest uppercase ${pr.tier.classes}`}>
+                                  {pr.tier.name}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="px-3 py-1 rounded-lg text-[10px] font-black tracking-widest uppercase bg-slate-100 text-slate-400 border border-slate-200">UNRANKED</span>
+                            )}
+                          </div>
+                          <div className="text-right ml-auto sm:ml-0">
+                            <span className="block text-[10px] font-bold text-blue-400 mb-1 uppercase tracking-widest">Mark</span>
+                            <span className="font-black text-3xl text-blue-600">{pr.mark}</span>
+                          </div>
                         </div>
+                      </Link>
+                    )
+                  })}
+                  
+                  {athleteProfile?.state && (
+                    <div className="mt-8 pt-6 border-t border-slate-100">
+                      <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Explore Local Leaderboards</h4>
+                      <div className="flex flex-wrap gap-3">
+                        <Link href={`/leaderboard?state=${athleteProfile.state}&gender=${athleteProfile.gender || 'Boys'}`} className="flex items-center text-sm font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2.5 rounded-xl transition-colors group">
+                          📍 {athleteProfile.state} Rankings
+                          <ChevronRight className="w-4 h-4 ml-1 text-slate-400 group-hover:text-slate-600 group-hover:translate-x-1 transition-all" />
+                        </Link>
+                        {athleteProfile.school_size && (
+                          <Link href={`/leaderboard?state=${athleteProfile.state}&size=${athleteProfile.school_size}&gender=${athleteProfile.gender || 'Boys'}`} className="flex items-center text-sm font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2.5 rounded-xl transition-colors group">
+                            👥 {athleteProfile.school_size} Division
+                            <ChevronRight className="w-4 h-4 ml-1 text-slate-400 group-hover:text-slate-600 group-hover:translate-x-1 transition-all" />
+                          </Link>
+                        )}
+                        {athleteProfile.conference && (
+                          <Link href={`/leaderboard?state=${athleteProfile.state}&size=${athleteProfile.school_size || 'All'}&conference=${athleteProfile.conference}&gender=${athleteProfile.gender || 'Boys'}`} className="flex items-center text-sm font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2.5 rounded-xl transition-colors group">
+                            🏆 {athleteProfile.conference} Conf.
+                            <ChevronRight className="w-4 h-4 ml-1 text-slate-400 group-hover:text-slate-600 group-hover:translate-x-1 transition-all" />
+                          </Link>
+                        )}
                       </div>
                     </div>
-                  ))}
+                  )}
                 </div>
               ) : (
                 <div className="text-center py-12 bg-slate-50 rounded-2xl border border-slate-200 border-dashed">
