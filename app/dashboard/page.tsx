@@ -5,7 +5,7 @@ import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
 import AthleteDashboard from '@/components/dashboards/AthleteDashboard';
 import CollegeCoachDashboard from '@/components/dashboards/CollegeCoachDashboard';
-import HighSchoolCoachDashboard from '@/components/dashboards/HighSchoolCoachDashboard';
+
 
 export default function DashboardRouter() {
   const supabase = createClient();
@@ -60,7 +60,6 @@ export default function DashboardRouter() {
   // TRAFFIC COP ROUTING
   if (role === 'athlete') return <AthleteDashboard />;
   if (role === 'college_coach') return <CollegeCoachDashboard />;
-  if (role === 'hs_coach') return <HighSchoolCoachDashboard />;
 
   return null;
 }
