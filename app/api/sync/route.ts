@@ -23,9 +23,17 @@ export async function POST(req: Request) {
     }
 
     console.log("☁️ Connecting securely to Browserless.io...");
-    const browser = await puppeteerCore.connect({
-      browserWSEndpoint: `wss://chrome.browserless.io?token=${BROWSERLESS_API_KEY}&stealth=true`
-    });
+    
+    // 🚨 QUEUE CATCHER 1: Catch initial connection limits
+    let browser;
+    try {
+        browser = await puppeteerCore.connect({
+          browserWSEndpoint: `wss://chrome.browserless.io?token=${BROWSERLESS_API_KEY}&stealth=true`
+        });
+    } catch (connectionErr: any) {
+        console.log("Browserless Queue Full. Retrying...");
+        return NextResponse.json({ error: 'SCRAPER_BUSY' }, { status: 429 });
+    }
     
     const page = await browser.newPage();
     
@@ -328,6 +336,13 @@ export async function POST(req: Request) {
 
   } catch (error: any) {
     console.error("Scraping Error:", error);
+    
+    // 🚨 QUEUE CATCHER 2: Catch any mid-scrape limits or dropped websocket connections
+    const msg = error.message || "";
+    if (msg.includes('429') || msg.includes('Too Many Requests') || msg.includes('concurrency') || msg.includes('WebSocket')) {
+      return NextResponse.json({ error: 'SCRAPER_BUSY' }, { status: 429 });
+    }
+
     return NextResponse.json({ error: `Scraper Error: ${error.message}` }, { status: 500 });
   }
 }

@@ -14,7 +14,7 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [isSignUp, setIsSignUp] = useState(false);
   
-  // NEW: Dual-sided marketplace state
+  // Dual-sided marketplace state
   const [userType, setUserType] = useState<'athlete' | 'coach'>('athlete');
   const [coachType, setCoachType] = useState<'high_school' | 'college'>('college');
 
@@ -25,6 +25,15 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setError(null);
+
+    // 🚨 NEW: STRICT .EDU EMAIL VERIFICATION FOR COLLEGE COACHES
+    if (isSignUp && userType === 'coach' && coachType === 'college') {
+      if (!email.toLowerCase().endsWith('.edu')) {
+        setError("NCAA/College coaches must register with a valid .edu university email address to verify their identity.");
+        setLoading(false);
+        return;
+      }
+    }
 
     try {
       if (isSignUp) {
@@ -39,14 +48,23 @@ export default function LoginPage() {
         // Route to the correct database table based on their selection
         if (authData.user) {
           if (userType === 'athlete') {
-            await supabase.from('athletes').insert({ id: authData.user.id });
+            const { error: athleteErr } = await supabase.from('athletes').insert({ id: authData.user.id });
+            if (athleteErr && !athleteErr.message.includes('duplicate')) {
+                throw new Error(`Failed to build athlete profile: ${athleteErr.message}`);
+            }
           } else {
-            await supabase.from('coaches').insert({ 
+            // SAFETY SWEEP: If a Supabase trigger automatically created an athlete row, delete it!
+            await supabase.from('athletes').delete().eq('id', authData.user.id);
+            
+            const { error: coachErr } = await supabase.from('coaches').insert({ 
               id: authData.user.id,
               coach_type: coachType
             });
+            
+            if (coachErr) throw new Error(`Failed to build coach profile: ${coachErr.message}`);
           }
         }
+        
         router.push('/dashboard');
         router.refresh();
 
@@ -174,7 +192,7 @@ export default function LoginPage() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder={userType === 'coach' ? "coach@university.edu" : "athlete@example.com"}
+                  placeholder={userType === 'coach' && coachType === 'college' ? "coach@university.edu" : userType === 'coach' ? "coach@school.org" : "athlete@example.com"}
                   className="w-full bg-white border border-slate-200 text-slate-900 rounded-xl pl-10 pr-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold shadow-sm placeholder:font-normal placeholder:text-slate-400 transition-all"
                 />
               </div>
