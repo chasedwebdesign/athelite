@@ -23,7 +23,7 @@ export default function DashboardPage() {
   // VERIFICATION, SYNC, & QUEUE STATES
   const [syncUrl, setSyncUrl] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
-  const [isQueued, setIsQueued] = useState(false); // 🚦 NEW QUEUE STATE
+  const [isQueued, setIsQueued] = useState(false); 
   const [verificationCode, setVerificationCode] = useState('');
   const [showVerificationStep, setShowVerificationStep] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
@@ -97,13 +97,29 @@ export default function DashboardPage() {
         let bestPercentileFound = 1.0;
 
         if (aData.prs && aData.prs.length > 0) {
-          const { data: allAthletes } = await supabase.from('athletes').select('prs').eq('gender', aData.gender || 'Boys');
           
-          if (allAthletes) {
+          // 🚨 BUG FIX: Only pull VERIFIED athletes to establish the true global baseline!
+          const { data: verifiedAthletes } = await supabase
+            .from('athletes')
+            .select('prs')
+            .eq('gender', aData.gender || 'Boys')
+            .gt('trust_level', 0); 
+          
+          if (verifiedAthletes) {
+            let athletesPool = [...verifiedAthletes];
+
+            // 🚨 BUG FIX: If the current athlete is unverified, inject them into their OWN local pool 
+            // so they can see their hypothetical rank against the verified group without polluting the DB!
+            if (aData.trust_level === 0) {
+              athletesPool.push(aData);
+            }
+
             aData.prs = aData.prs.map((myPr: any) => {
               const event = myPr.event;
-              const allMarks = allAthletes.map(a => a.prs?.find((p: any) => p.event === event)?.mark).filter(Boolean);
+              const allMarks = athletesPool.map(a => a.prs?.find((p: any) => p.event === event)?.mark).filter(Boolean);
+              
               allMarks.sort((a, b) => parseMarkForSorting(a, event) - parseMarkForSorting(b, event));
+              
               const myVal = parseMarkForSorting(myPr.mark, event);
               const rankIndex = allMarks.findIndex(m => parseMarkForSorting(m, event) === myVal);
               const percentile = Math.max(0, rankIndex / allMarks.length);
@@ -149,7 +165,6 @@ export default function DashboardPage() {
         body: JSON.stringify({ url }) 
       });
       
-      // If the scraper returns a 429 limit, activate the queue UI and wait 5 seconds.
       if (response.status === 429) {
         setIsQueued(true);
         await new Promise(res => setTimeout(res, 5000)); 
@@ -160,10 +175,10 @@ export default function DashboardPage() {
       const result = await response.json();
       if (!response.ok) {
          if (result.error && result.error.includes('SCRAPER_BUSY')) {
-            setIsQueued(true);
-            await new Promise(res => setTimeout(res, 5000));
-            attempts++;
-            continue;
+           setIsQueued(true);
+           await new Promise(res => setTimeout(res, 5000));
+           attempts++;
+           continue;
          }
          throw new Error(result.error);
       }
@@ -177,6 +192,12 @@ export default function DashboardPage() {
   const validateAthleticUrl = (url: string) => {
     if (!url) return "Please enter a URL.";
     if (!url.includes('athletic.net')) return "Must be a valid Athletic.net link.";
+    
+    // Cross Country Blocker
+    if (url.toLowerCase().includes('cross-country') || url.toLowerCase().includes('crosscountry')) {
+      return "Please provide your Track & Field link. We currently only support Track & Field profiles, not Cross Country.";
+    }
+
     if (url.includes('/team/')) return "This is a team link. Please click on your specific name first to get your athlete link.";
     if (url.includes('/meet/')) return "This is a meet results link. Go to your personal athlete profile page.";
     if (!url.includes('/athlete/') && !url.toLowerCase().includes('athlete.aspx')) return "Make sure the link points directly to your athlete profile (it usually has /athlete/ in the URL).";
@@ -210,7 +231,6 @@ export default function DashboardPage() {
         return;
       }
 
-      // Calls our brand new Queue function instead of a direct fetch!
       const result = await fetchWithQueue(syncUrl);
       
       const { error: updateError } = await supabase.from('athletes').update({ 
@@ -276,7 +296,6 @@ export default function DashboardPage() {
     setIsSyncing(true);
     setIsQueued(false);
     try {
-      // Use the new queue function here too!
       const result = await fetchWithQueue(athleteProfile.athletic_net_url);
       
       await supabase.from('athletes').update({ 

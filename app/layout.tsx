@@ -1,5 +1,6 @@
 import './globals.css';
 import Navbar from '@/components/Navbar';
+import { Analytics } from '@vercel/analytics/react'; // 🚨 NEW IMPORT
 
 export const metadata = {
   title: 'ChasedSports | The Athletic Recruiting Network',
@@ -43,6 +44,9 @@ export default function RootLayout({
         
         {/* PAGE CONTENT */}
         {children}
+
+        {/* 🚨 VERCEL ANALYTICS */}
+        <Analytics />
       </body>
     </html>
   );

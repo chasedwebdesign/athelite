@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
-import { Medal, CheckCircle2, MapPin, Mail, X, Send, MessageSquare, Lock, Trophy, Calendar, Share2, ArrowLeft, Activity, Globe, School, UserCircle2, Clock } from 'lucide-react';
+import { Medal, CheckCircle2, MapPin, Mail, X, Send, MessageSquare, Lock, Trophy, Calendar, Share2, ArrowLeft, Activity, Globe, School, UserCircle2, Clock, Star } from 'lucide-react';
 import Link from 'next/link';
 
 interface AthleteProfile {
@@ -49,6 +49,10 @@ export default function PublicAthleteProfile() {
   const [isVerifiedAthlete, setIsVerifiedAthlete] = useState(false);
   const [isSelf, setIsSelf] = useState(false);
   
+  // WATCHLIST STATE
+  const [isSaved, setIsSaved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
   // MESSAGING STATE
   const [isMessageModalOpen, setIsMessageModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'pitch' | 'chat'>('pitch');
@@ -98,16 +102,42 @@ export default function PublicAthleteProfile() {
           setIsSelf(true);
         }
 
-        const { data: cData } = await supabase.from('coaches').select('trust_level, first_name, last_name, school_name, coach_type').eq('id', session.user.id).maybeSingle();
+        // 🚨 FIX: Removed 'trust_level' which was causing the query to fail for coaches!
+        const { data: cData } = await supabase
+          .from('coaches')
+          .select('first_name, last_name, school_name, coach_type')
+          .eq('id', session.user.id)
+          .maybeSingle();
+
         if (cData) {
           setViewerRole('coach');
-          setIsVerifiedCoach(cData.trust_level > 0);
+          
+          // A coach is verified to send messages once they fill out their basic profile
+          const hasCompleteProfile = !!(cData.first_name && cData.last_name && cData.school_name);
+          setIsVerifiedCoach(hasCompleteProfile);
+          
           setCoachType(cData.coach_type);
-          setSenderName(`${cData.first_name} ${cData.last_name}`);
-          setSenderSchool(cData.school_name || '');
+          setSenderName(`${cData.first_name || 'Coach'} ${cData.last_name || ''}`.trim());
+          setSenderSchool(cData.school_name || 'Unknown University');
           setSenderEmail(session.user.email || '');
+
+          // Check if this athlete is already on the coach's watchlist
+          const { data: savedData } = await supabase
+            .from('saved_recruits')
+            .select('id')
+            .eq('coach_id', session.user.id)
+            .eq('athlete_id', athleteId)
+            .maybeSingle();
+          
+          if (savedData) setIsSaved(true);
+
         } else {
-          const { data: aData } = await supabase.from('athletes').select('id, trust_level, first_name, last_name, high_school').eq('id', session.user.id).maybeSingle();
+          const { data: aData } = await supabase
+            .from('athletes')
+            .select('id, trust_level, first_name, last_name, high_school')
+            .eq('id', session.user.id)
+            .maybeSingle();
+            
           if (aData) {
             setViewerRole('athlete');
             setIsVerifiedAthlete(aData.trust_level > 0);
@@ -125,6 +155,25 @@ export default function PublicAthleteProfile() {
     }
   }, [athleteId, supabase]);
 
+  // TOGGLE WATCHLIST FUNCTION
+  const handleToggleSave = async () => {
+    if (!currentUserId || viewerRole !== 'coach') return;
+    setIsSaving(true);
+    try {
+      if (isSaved) {
+        await supabase.from('saved_recruits').delete().eq('coach_id', currentUserId).eq('athlete_id', athleteId);
+        setIsSaved(false);
+      } else {
+        await supabase.from('saved_recruits').insert({ coach_id: currentUserId, athlete_id: athleteId });
+        setIsSaved(true);
+      }
+    } catch (err: any) {
+      alert(`Failed to update watchlist: ${err.message}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   // SMART ROUTING BUTTON CLICK
   const handleContactClick = () => {
     if (viewerRole === 'guest' || !currentUserId) {
@@ -133,7 +182,7 @@ export default function PublicAthleteProfile() {
       return;
     }
     if (viewerRole === 'coach' && !isVerifiedCoach) {
-      alert("Please verify your coaching profile on the dashboard to send direct pitches.");
+      alert("Please complete your coach profile (Name & School) on your dashboard to send direct pitches.");
       return;
     }
     if (viewerRole === 'athlete' && !isVerifiedAthlete) {
@@ -171,11 +220,11 @@ export default function PublicAthleteProfile() {
       // SEND THE MESSAGE
       const { error } = await supabase.from('messages').insert({
         athlete_id: athlete.id,
-        sender_name: senderName, // Auto-filled
-        sender_school: senderSchool, // Auto-filled
-        sender_email: senderEmail, // Auto-filled
+        sender_name: senderName, 
+        sender_school: senderSchool, 
+        sender_email: senderEmail, 
         content: messageContent,
-        status: 'pending' // Drops into temporary queue
+        status: 'pending' 
       });
       
       if (error) throw error;
@@ -300,18 +349,33 @@ export default function PublicAthleteProfile() {
               <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
                 {!isSelf && (
                   <>
-                    {/* NEW: UNIFIED CONTACT BUTTON WITH SMART ROUTING */}
                     {viewerRole === 'guest' ? (
                       <Link href="/login" className="w-full sm:w-auto bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-3.5 px-8 rounded-xl transition-colors flex items-center justify-center gap-2 border border-slate-200">
                         <Lock className="w-5 h-5" /> Log in to Connect
                       </Link>
                     ) : (viewerRole === 'coach' && !isVerifiedCoach) ? (
                       <div className="w-full sm:w-auto bg-slate-100 text-slate-400 font-bold py-3.5 px-8 rounded-xl flex items-center justify-center gap-2 border border-slate-200">
-                        <Lock className="w-5 h-5" /> Verify to Message
+                        <Lock className="w-5 h-5" /> Update Profile to Message
                       </div>
                     ) : (
                       <button onClick={handleContactClick} className="w-full sm:w-auto bg-slate-900 hover:bg-blue-600 text-white font-black py-3.5 px-8 rounded-xl transition-colors flex items-center justify-center gap-2 shadow-lg">
                         <Mail className="w-5 h-5" /> Contact
+                      </button>
+                    )}
+
+                    {/* NEW: COACH WATCHLIST BUTTON */}
+                    {viewerRole === 'coach' && (
+                      <button 
+                        onClick={handleToggleSave} 
+                        disabled={isSaving} 
+                        className={`w-full sm:w-auto border py-3.5 px-6 rounded-xl transition-all flex items-center justify-center gap-2 font-bold shadow-sm ${
+                          isSaved 
+                            ? 'bg-yellow-50 text-yellow-600 border-yellow-300 hover:bg-yellow-100 hover:border-yellow-400' 
+                            : 'bg-white text-slate-600 border-slate-200 hover:border-yellow-400 hover:text-yellow-600 hover:shadow-md'
+                        }`}
+                      >
+                        <Star className={`w-5 h-5 transition-colors ${isSaved ? 'fill-yellow-500 text-yellow-500' : 'text-slate-400 group-hover:text-yellow-500'}`} />
+                        {isSaved ? 'Saved to Watchlist' : 'Save Recruit'}
                       </button>
                     )}
                   </>
