@@ -12,6 +12,9 @@ const TRACK_EVENTS = [
 ];
 
 export async function POST(req: Request) {
+  // 🚨 KILL SWITCH PREP: Declare browser at the absolute top so the finally block can see it
+  let browser; 
+
   try {
     const { url } = await req.json();
     
@@ -25,7 +28,6 @@ export async function POST(req: Request) {
     console.log("☁️ Connecting securely to Browserless.io...");
     
     // 🚨 QUEUE CATCHER 1: Catch initial connection limits
-    let browser;
     try {
         browser = await puppeteerCore.connect({
           browserWSEndpoint: `wss://chrome.browserless.io?token=${BROWSERLESS_API_KEY}&stealth=true`
@@ -344,5 +346,17 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ error: `Scraper Error: ${error.message}` }, { status: 500 });
+  
+  } finally {
+    // 🚨 THE KILL SWITCH: This ALWAYS runs, even if the code crashes, errors, or you refresh the page.
+    // It guarantees the zombie headless browser is destroyed immediately to free up your connection.
+    if (browser) {
+      try {
+        await browser.close();
+        console.log("💀 Kill switch activated: Zombie browser destroyed.");
+      } catch (e) {
+        // Fails silently if it was already closed
+      }
+    }
   }
 }
