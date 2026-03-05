@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
-import { Activity, ShieldCheck, Link as LinkIcon, Trophy, LogOut, Medal, Timer, TrendingUp, CheckCircle2, Search, AlertCircle, Zap, Calendar, MapPin, Camera, Mail, RefreshCw, School, Lock, AlertTriangle, ExternalLink, ChevronRight, Check, Clock, Edit2, MousePointer2 } from 'lucide-react';
+import { Activity, ShieldCheck, Link as LinkIcon, Trophy, LogOut, Medal, Timer, TrendingUp, CheckCircle2, Search, AlertCircle, Zap, Calendar, MapPin, Camera, Mail, RefreshCw, School, Lock, AlertTriangle, ExternalLink, ChevronRight, Check, Clock, Edit2, MousePointer2, Flame, Bookmark, Share2, Instagram } from 'lucide-react';
 import Link from 'next/link';
 import imageCompression from 'browser-image-compression';
 
@@ -27,7 +27,6 @@ export default function DashboardPage() {
   const [showVerificationStep, setShowVerificationStep] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const [claimConflict, setClaimConflict] = useState(false);
 
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false); 
   const [unreadCount, setUnreadCount] = useState(0);
@@ -36,6 +35,15 @@ export default function DashboardPage() {
   const [isEquipping, setIsEquipping] = useState(false);
   const [canSync, setCanSync] = useState(true);
   const [syncTimeLeft, setSyncTimeLeft] = useState('');
+  
+  // 🔥 DAILY STREAK STATE
+  const [streak, setStreak] = useState(0);
+
+  // 🎯 SAVED COLLEGES STATE
+  const [savedColleges, setSavedColleges] = useState<any[]>([]);
+
+  // 📱 SHARE STATE
+  const [isCopied, setIsCopied] = useState(false);
 
   const parseMarkForSorting = (mark: string, event: string): number => {
     const cleanMark = mark.replace(/[a-zA-Z]/g, '').trim();
@@ -87,12 +95,65 @@ export default function DashboardPage() {
         setUnreadCount(realUnreadCount);
       }
 
+      // 🚨 CRITICAL FIX: We use universities(*) to guarantee it never crashes on missing columns!
+      try {
+        const { data: savedCollegesData, error: scError } = await supabase
+          .from('saved_colleges')
+          .select(`
+            id,
+            college_id,
+            universities (*)
+          `)
+          .eq('athlete_id', session.user.id);
+          
+        if (scError) {
+          console.error("Dashboard Fetch Error:", scError.message);
+        } else if (savedCollegesData) {
+          setSavedColleges(savedCollegesData);
+        }
+      } catch (e) {
+        console.log("Saved colleges table error:", e);
+      }
+
       const { data: aData } = await supabase.from('athletes').select('*').eq('id', session.user.id).maybeSingle();
       
       if (aData) {
         setUserRole('athlete');
         setEquippedBorder(aData.equipped_border || 'none');
         
+        const today = new Date().toLocaleDateString('en-CA');
+        const storageKey = `cs_streak_${aData.id}`;
+        const storedStreak = localStorage.getItem(storageKey);
+
+        if (storedStreak) {
+          try {
+            const parsed = JSON.parse(storedStreak);
+            if (parsed.lastDate === today) {
+              setStreak(parsed.count);
+            } else {
+              const lastDate = new Date(parsed.lastDate);
+              const currentDate = new Date(today);
+              const diffTime = Math.abs(currentDate.getTime() - lastDate.getTime());
+              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+              if (diffDays === 1) {
+                const newStreak = parsed.count + 1;
+                setStreak(newStreak);
+                localStorage.setItem(storageKey, JSON.stringify({ count: newStreak, lastDate: today }));
+              } else {
+                setStreak(1);
+                localStorage.setItem(storageKey, JSON.stringify({ count: 1, lastDate: today }));
+              }
+            }
+          } catch (e) {
+            setStreak(1);
+            localStorage.setItem(storageKey, JSON.stringify({ count: 1, lastDate: today }));
+          }
+        } else {
+          setStreak(1);
+          localStorage.setItem(storageKey, JSON.stringify({ count: 1, lastDate: today }));
+        }
+
         let bestPercentileFound = 1.0;
 
         if (aData.prs && aData.prs.length > 0) {
@@ -154,11 +215,7 @@ export default function DashboardPage() {
   const validateAthleticUrl = (url: string) => {
     if (!url) return "Please enter a URL.";
     if (!url.includes('athletic.net')) return "Must be a valid Athletic.net link.";
-    
-    if (url.toLowerCase().includes('cross-country') || url.toLowerCase().includes('crosscountry')) {
-      return "Please provide your Track & Field link. We currently only support Track & Field profiles, not Cross Country.";
-    }
-
+    if (url.toLowerCase().includes('cross-country') || url.toLowerCase().includes('crosscountry')) return "Please provide your Track & Field link. We currently only support Track & Field profiles, not Cross Country.";
     if (url.includes('/team/')) return "This is a team link. Please click on your specific name first to get your athlete link.";
     if (url.includes('/meet/')) return "This is a meet results link. Go to your personal athlete profile page.";
     if (!url.includes('/athlete/') && !url.toLowerCase().includes('athlete.aspx')) return "Make sure the link points directly to your athlete profile (it usually has /athlete/ in the URL).";
@@ -178,12 +235,7 @@ export default function DashboardPage() {
     setIsSyncing(true);
     
     try {
-      const { data: existingUser } = await supabase
-        .from('athletes')
-        .select('id')
-        .eq('athletic_net_url', syncUrl)
-        .neq('id', athleteProfile?.id)
-        .maybeSingle();
+      const { data: existingUser } = await supabase.from('athletes').select('id').eq('athletic_net_url', syncUrl).neq('id', athleteProfile?.id).maybeSingle();
 
       if (existingUser) {
         setErrorMessage("Someone has already claimed this profile. If this is you, contact support@chasedsports.com to dispute it.");
@@ -191,7 +243,6 @@ export default function DashboardPage() {
         return;
       }
 
-      // CLEAN DIRECT FETCH - NO MORE QUEUE
       const response = await fetch('/api/sync', { 
         method: 'POST', 
         headers: { 'Content-Type': 'application/json' }, 
@@ -334,6 +385,40 @@ export default function DashboardPage() {
     }
   };
 
+  const handleShareProfile = async () => {
+    if (!athleteProfile) return;
+    
+    const profileUrl = `https://www.chasedsports.com/athlete/${athleteProfile.id}`;
+    
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `${athleteProfile.first_name} ${athleteProfile.last_name} | ChasedSports`,
+          text: `Check out my verified Track & Field stats and national rank on ChasedSports! 🏃💨`,
+          url: profileUrl,
+        });
+      } catch (err) {
+        console.log('Share canceled or failed:', err);
+      }
+    } else {
+      try {
+        await navigator.clipboard.writeText(profileUrl);
+        setIsCopied(true);
+        setTimeout(() => setIsCopied(false), 3000);
+      } catch (err) {
+        alert("Failed to copy link. Please manually copy the URL.");
+      }
+    }
+  };
+
+  const getStreakStyle = () => {
+    if (streak >= 30) return { bg: 'bg-slate-900 border-slate-700 shadow-[0_0_15px_rgba(217,70,239,0.5)]', text: 'bg-gradient-to-r from-fuchsia-400 via-cyan-400 to-fuchsia-400 text-transparent bg-clip-text animate-pulse', icon: 'text-cyan-400 fill-fuchsia-500 animate-bounce' }; 
+    if (streak >= 14) return { bg: 'bg-purple-50 border-purple-200', text: 'text-purple-700', icon: 'text-purple-500 fill-purple-400 animate-pulse' }; 
+    if (streak >= 7) return { bg: 'bg-cyan-50 border-cyan-200', text: 'text-cyan-800', icon: 'text-cyan-500 fill-cyan-400' }; 
+    if (streak >= 3) return { bg: 'bg-red-50 border-red-200', text: 'text-red-700', icon: 'text-red-500 fill-red-500 animate-pulse' }; 
+    return { bg: 'bg-orange-50 border-orange-200', text: 'text-orange-700', icon: 'text-orange-500 fill-orange-400' }; 
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#F8FAFC] flex flex-col items-center justify-center">
@@ -343,7 +428,6 @@ export default function DashboardPage() {
     );
   }
 
-  // --- COACH DASHBOARD ---
   if (userRole === 'coach') {
     return (
       <main className="min-h-screen bg-[#F8FAFC] font-sans pb-32">
@@ -387,9 +471,9 @@ export default function DashboardPage() {
     );
   }
 
-  // --- ATHLETE DASHBOARD ---
   const isUnverified = athleteProfile?.trust_level === 0 && !!athleteProfile?.athletic_net_url;
   const noProfileLinked = !athleteProfile?.athletic_net_url;
+  const streakTheme = getStreakStyle();
 
   const getTrustBadge = (level: number) => {
     switch(level) {
@@ -425,7 +509,6 @@ export default function DashboardPage() {
 
       <div className="max-w-7xl mx-auto px-6 pt-10">
         
-        {/* NO PROFILE STATE (STAGE 1) */}
         {noProfileLinked && (
           <div className="bg-gradient-to-br from-blue-900 via-indigo-950 to-slate-900 rounded-[2.5rem] p-8 md:p-16 border border-blue-800 shadow-2xl relative overflow-hidden mb-10 max-w-4xl mx-auto">
             <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/20 blur-[100px] rounded-full pointer-events-none"></div>
@@ -439,7 +522,6 @@ export default function DashboardPage() {
                 <span className="block mt-2 text-sm opacity-80 text-yellow-300">You don't have to be logged in to Athletic.net. Just go to Athletic.net in your browser, look up your name, go to your Track & Field Bio, then copy that link and you're set!</span>
               </p>
 
-              {/* ERROR MESSAGE BANNER */}
               {errorMessage && (
                 <div className="bg-red-500/20 border border-red-500/50 text-red-200 p-4 rounded-xl mb-8 text-sm font-bold flex items-center justify-center gap-3 animate-in fade-in slide-in-from-top-4 max-w-2xl mx-auto">
                   <AlertCircle className="w-5 h-5 shrink-0 text-red-400" />
@@ -456,7 +538,6 @@ export default function DashboardPage() {
                   onChange={(e) => setSyncUrl(e.target.value)} 
                   className="w-full flex-grow bg-white/10 border border-white/20 text-white rounded-2xl pl-6 pr-4 py-4 focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold placeholder:text-blue-300/30 text-lg shadow-inner" 
                 />
-                {/* DYNAMIC SUBMIT BUTTON */}
                 <button type="submit" disabled={isSyncing} className="bg-blue-500 hover:bg-blue-400 text-white px-10 py-4 rounded-2xl font-black disabled:opacity-50 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg flex items-center justify-center text-lg">
                   {isSyncing ? (
                     <><RefreshCw className="w-5 h-5 mr-2 animate-spin" /> Finding...</>
@@ -469,7 +550,6 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* VERIFICATION BANNER (STAGE 2) */}
         {isUnverified && (
           <div className="bg-gradient-to-r from-amber-500 to-orange-600 rounded-[2rem] p-8 md:p-10 border border-orange-400 shadow-2xl relative overflow-hidden mb-8 text-white">
             <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
@@ -511,7 +591,6 @@ export default function DashboardPage() {
                       </div>
                     </div>
 
-                    {/* ANIMATED DIAGRAM */}
                     <div className="bg-white p-6 rounded-2xl shadow-xl border border-slate-200 text-slate-800 relative hidden sm:block transform rotate-1 hover:rotate-0 transition-transform">
                       <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-4 border-b pb-2">Example Athletic.net Header</div>
                       <div className="flex items-center gap-4">
@@ -552,19 +631,18 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* DASHBOARD RENDER (Shows if Profile Exists, regardless of verification status) */}
         {athleteProfile && (
           <div className={`grid grid-cols-1 lg:grid-cols-3 gap-8 ${isUnverified ? 'opacity-80 grayscale-[20%]' : ''}`}>
             
             <div className="lg:col-span-1 space-y-6">
-              <div className="bg-white rounded-[2rem] p-8 border border-slate-200 shadow-sm">
+              <div className="bg-white rounded-[2rem] p-8 border border-slate-200 shadow-sm relative">
+                
                 <div className="relative w-28 h-28 mb-6 group mx-auto md:mx-0">
                   <div className={`${equippedBorder !== 'none' ? equippedBorder : 'border-4 border-slate-200'} w-full h-full rounded-full transition-all duration-300`}>
                     <div className={`w-full h-full rounded-full overflow-hidden bg-slate-100 flex items-center justify-center shadow-inner ${isUploadingAvatar ? 'animate-pulse' : ''}`}>
                       {athleteProfile.avatar_url ? <img src={athleteProfile.avatar_url} alt="Profile" className="w-full h-full object-cover" /> : <Medal className="w-10 h-10 text-slate-400" />}
                     </div>
                   </div>
-                  {/* Disable avatar upload if unverified */}
                   {!isUnverified && (
                     <label className="absolute inset-0 bg-black/40 rounded-full flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
                       <Camera className="w-6 h-6 text-white mb-1" />
@@ -573,7 +651,16 @@ export default function DashboardPage() {
                     </label>
                   )}
                 </div>
-                <h1 className="text-2xl font-black text-slate-900 mb-1">{athleteProfile.first_name} {athleteProfile.last_name}</h1>
+
+                <div className="flex flex-wrap items-center gap-3 mb-1">
+                  <h1 className="text-2xl font-black text-slate-900">{athleteProfile.first_name} {athleteProfile.last_name}</h1>
+                  {streak > 0 && (
+                    <div className={`flex items-center px-2.5 py-1 rounded-lg border text-[10px] font-black tracking-widest uppercase ${streakTheme.bg}`}>
+                      <Flame className={`w-3.5 h-3.5 mr-1 ${streakTheme.icon}`} />
+                      <span className={streakTheme.text}>{streak} Day Streak</span>
+                    </div>
+                  )}
+                </div>
                 
                 <p className="text-slate-500 font-medium leading-relaxed mb-6">
                   {athleteProfile.high_school} 
@@ -598,6 +685,21 @@ export default function DashboardPage() {
                     <span className="text-sm font-bold text-slate-700">{athleteProfile.gender || 'Boys'}</span>
                   </div>
                 </div>
+
+                <div className="border-t border-slate-100 pt-6 mt-6">
+                  <button 
+                    onClick={handleShareProfile}
+                    disabled={isUnverified}
+                    className="w-full bg-gradient-to-r from-[#f9ce34] via-[#ee2a7b] to-[#6228d7] hover:opacity-90 text-white font-black py-3.5 rounded-xl flex items-center justify-center transition-opacity shadow-md disabled:opacity-50 disabled:grayscale"
+                  >
+                    {isCopied ? (
+                      <><Check className="w-5 h-5 mr-2" /> Link Copied!</>
+                    ) : (
+                      <><Instagram className="w-5 h-5 mr-2" /> Share Profile</>
+                    )}
+                  </button>
+                </div>
+
               </div>
               
               <div className="bg-white rounded-[2rem] p-8 border border-slate-200 shadow-sm relative">
@@ -680,10 +782,69 @@ export default function DashboardPage() {
                   </div>
                 </div>
                 <div className="relative z-10 w-full sm:w-auto shrink-0">
-                  <button disabled={isUnverified} className="block w-full text-center bg-white text-purple-900 hover:bg-purple-50 font-black px-8 py-4 rounded-xl shadow-lg transition-colors disabled:opacity-50">
+                  <Link href="/dashboard/messages" className="block w-full text-center bg-white text-purple-900 hover:bg-purple-50 font-black px-8 py-4 rounded-xl shadow-lg transition-colors">
                     View Messages {unreadCount > 0 && <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full ml-2">{unreadCount}</span>}
-                  </button>
+                  </Link>
                 </div>
+              </div>
+
+              {/* 🎯 TARGET SCHOOLS CARD */}
+              <div className="bg-white rounded-[2rem] p-8 md:p-10 border border-slate-200 shadow-sm relative overflow-hidden">
+                {isUnverified && (
+                  <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px] z-20 rounded-[2rem] flex items-center justify-center flex-col text-center px-6">
+                    <Lock className="w-8 h-8 text-slate-400 mb-2" />
+                    <p className="text-sm font-bold text-slate-600">Verify to view saved colleges</p>
+                  </div>
+                )}
+                <div className="flex items-center justify-between mb-6 border-b border-slate-100 pb-6">
+                  <div>
+                    <h3 className="text-xl font-black text-slate-900 tracking-tight flex items-center">
+                      <School className="w-6 h-6 mr-2 text-blue-600" /> Target Schools
+                    </h3>
+                    <p className="text-slate-500 font-medium text-sm mt-1">Colleges you are actively interested in.</p>
+                  </div>
+                  <div className="bg-slate-100 text-slate-600 font-bold px-3 py-1.5 rounded-lg text-xs">
+                    {savedColleges?.length || 0} Saved
+                  </div>
+                </div>
+                
+                {/* 🚨 PROPER RENDERING LOGIC FOR SAVED COLLEGES */}
+                {savedColleges && savedColleges.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {savedColleges.map((saved) => {
+                      const college = saved.universities; 
+                      if (!college) return null;
+                      return (
+                        <div key={saved.id} className="flex items-center gap-4 p-4 rounded-2xl border border-slate-200 bg-slate-50 hover:border-blue-300 hover:bg-blue-50 transition-colors group cursor-pointer relative">
+                          <Link href={`/college/${college.id}`} className="absolute inset-0 z-10" aria-label={`View ${college.name}`}></Link>
+                          <div className="w-12 h-12 bg-white rounded-full border border-slate-200 shadow-sm flex items-center justify-center shrink-0 overflow-hidden relative z-0">
+                            {college.logo_url ? (
+                              <img src={college.logo_url} alt={college.name} className="w-8 h-8 object-contain" />
+                            ) : (
+                              <School className="w-6 h-6 text-slate-400" />
+                            )}
+                          </div>
+                          <div className="flex-1 truncate relative z-0">
+                            <h4 className="font-bold text-slate-900 truncate group-hover:text-blue-600 transition-colors">{college.name}</h4>
+                            <p className="text-xs font-medium text-slate-500 flex items-center mt-0.5">
+                              {college.division || 'NCAA'} • {college.state || 'USA'}
+                            </p>
+                          </div>
+                          <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all relative z-0" />
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 bg-slate-50 rounded-2xl border border-slate-200 border-dashed">
+                    <Bookmark className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+                    <h4 className="text-lg font-bold text-slate-900 mb-1">No schools saved yet</h4>
+                    <p className="text-sm text-slate-500 font-medium mb-4 max-w-sm mx-auto">Build your recruiting board by saving colleges that match your athletic and academic goals.</p>
+                    <Link href="/search" className="inline-flex items-center justify-center bg-white border border-slate-200 hover:border-blue-400 hover:text-blue-600 text-slate-700 font-bold px-6 py-2.5 rounded-xl transition-all shadow-sm">
+                      Open College Finder
+                    </Link>
+                  </div>
+                )}
               </div>
 
               <div className="bg-white rounded-[2rem] p-8 md:p-12 border border-slate-200 shadow-sm relative overflow-hidden">
@@ -693,7 +854,6 @@ export default function DashboardPage() {
                     <p className="text-slate-500 font-medium">Your official meet results & national rank.</p>
                   </div>
                   
-                  {/* CLEAN RE-SYNC BUTTON */}
                   <button onClick={handleReSync} disabled={isSyncing || !canSync || isUnverified} className="flex items-center justify-center bg-slate-900 hover:bg-blue-600 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-colors disabled:opacity-50 disabled:hover:bg-slate-900">
                     {isSyncing ? (
                       <><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Finding...</>

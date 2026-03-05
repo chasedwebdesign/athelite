@@ -9,7 +9,7 @@ export async function POST(req: Request) {
     const { url, code } = await req.json();
     
     // 🔑 BROWSERLESS API KEY
-    const BROWSERLESS_API_KEY = "2U3iemcPMpEdfpy11274cfe779a7ad36dfc431b5f1324b3c2";
+    const BROWSERLESS_API_KEY = process.env.BROWSERLESS_API_KEY;
 
     if (!url || !code || !url.includes('athletic.net')) {
       return NextResponse.json({ error: 'Invalid URL or missing verification code.' }, { status: 400 });
