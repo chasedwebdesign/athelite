@@ -20,10 +20,9 @@ export default function DashboardPage() {
   const [coachProfile, setCoachProfile] = useState<CoachProfile | null>(null);
   const [loading, setLoading] = useState(true);
   
-  // VERIFICATION, SYNC, & QUEUE STATES
+  // VERIFICATION & SYNC STATES
   const [syncUrl, setSyncUrl] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
-  const [isQueued, setIsQueued] = useState(false); 
   const [verificationCode, setVerificationCode] = useState('');
   const [showVerificationStep, setShowVerificationStep] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
@@ -98,7 +97,6 @@ export default function DashboardPage() {
 
         if (aData.prs && aData.prs.length > 0) {
           
-          // 🚨 BUG FIX: Only pull VERIFIED athletes to establish the true global baseline!
           const { data: verifiedAthletes } = await supabase
             .from('athletes')
             .select('prs')
@@ -108,8 +106,6 @@ export default function DashboardPage() {
           if (verifiedAthletes) {
             let athletesPool = [...verifiedAthletes];
 
-            // 🚨 BUG FIX: If the current athlete is unverified, inject them into their OWN local pool 
-            // so they can see their hypothetical rank against the verified group without polluting the DB!
             if (aData.trust_level === 0) {
               athletesPool.push(aData);
             }
@@ -155,45 +151,10 @@ export default function DashboardPage() {
     loadDashboardData();
   }, [supabase, router]);
 
-  // 🚦 SMART RETRY QUEUE: Automatically handles 429 Browserless limits!
-  const fetchWithQueue = async (url: string) => {
-    let attempts = 0;
-    while (attempts < 12) { // Try for up to 60 seconds
-      const response = await fetch('/api/sync', { 
-        method: 'POST', 
-        headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify({ url }) 
-      });
-      
-      if (response.status === 429) {
-        setIsQueued(true);
-        await new Promise(res => setTimeout(res, 5000)); 
-        attempts++;
-        continue; 
-      }
-      
-      const result = await response.json();
-      if (!response.ok) {
-         if (result.error && result.error.includes('SCRAPER_BUSY')) {
-           setIsQueued(true);
-           await new Promise(res => setTimeout(res, 5000));
-           attempts++;
-           continue;
-         }
-         throw new Error(result.error);
-      }
-      
-      setIsQueued(false); // Success! Break the queue.
-      return result;
-    }
-    throw new Error("The servers are currently at maximum capacity. Please try again in a few minutes.");
-  };
-
   const validateAthleticUrl = (url: string) => {
     if (!url) return "Please enter a URL.";
     if (!url.includes('athletic.net')) return "Must be a valid Athletic.net link.";
     
-    // Cross Country Blocker
     if (url.toLowerCase().includes('cross-country') || url.toLowerCase().includes('crosscountry')) {
       return "Please provide your Track & Field link. We currently only support Track & Field profiles, not Cross Country.";
     }
@@ -215,7 +176,6 @@ export default function DashboardPage() {
     }
 
     setIsSyncing(true);
-    setIsQueued(false);
     
     try {
       const { data: existingUser } = await supabase
@@ -231,7 +191,18 @@ export default function DashboardPage() {
         return;
       }
 
-      const result = await fetchWithQueue(syncUrl);
+      // CLEAN DIRECT FETCH - NO MORE QUEUE
+      const response = await fetch('/api/sync', { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ url: syncUrl }) 
+      });
+      
+      const result = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to sync profile. Please try again.");
+      }
       
       const { error: updateError } = await supabase.from('athletes').update({ 
         first_name: result.data.firstName, 
@@ -251,8 +222,8 @@ export default function DashboardPage() {
       window.location.reload();
     } catch (err: any) { 
       setErrorMessage(err.message); 
+    } finally {
       setIsSyncing(false); 
-      setIsQueued(false);
     }
   };
 
@@ -294,9 +265,20 @@ export default function DashboardPage() {
   const handleReSync = async () => {
     if (!athleteProfile?.athletic_net_url) return;
     setIsSyncing(true);
-    setIsQueued(false);
+    setErrorMessage('');
+    
     try {
-      const result = await fetchWithQueue(athleteProfile.athletic_net_url);
+      const response = await fetch('/api/sync', { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ url: athleteProfile.athletic_net_url }) 
+      });
+      
+      const result = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to sync profile. Please try again.");
+      }
       
       await supabase.from('athletes').update({ 
         prs: result.data.prs,
@@ -313,7 +295,6 @@ export default function DashboardPage() {
       setErrorMessage(err.message); 
     } finally { 
       setIsSyncing(false); 
-      setIsQueued(false);
     }
   };
 
@@ -458,14 +439,8 @@ export default function DashboardPage() {
                 <span className="block mt-2 text-sm opacity-80 text-yellow-300">You don't have to be logged in to Athletic.net. Just go to Athletic.net in your browser, look up your name, go to your Track & Field Bio, then copy that link and you're set!</span>
               </p>
 
-              {/* QUEUE & ERROR MESSAGES */}
-              {isQueued && (
-                <div className="bg-yellow-500/20 border border-yellow-500/50 text-yellow-200 p-4 rounded-xl mb-8 text-sm font-bold flex items-center justify-center gap-3 animate-in fade-in slide-in-from-top-4 max-w-2xl mx-auto">
-                  <Timer className="w-5 h-5 shrink-0 text-yellow-400 animate-pulse" />
-                  <p>High traffic detected! You are in the queue. Please keep this page open...</p>
-                </div>
-              )}
-              {errorMessage && !isQueued && (
+              {/* ERROR MESSAGE BANNER */}
+              {errorMessage && (
                 <div className="bg-red-500/20 border border-red-500/50 text-red-200 p-4 rounded-xl mb-8 text-sm font-bold flex items-center justify-center gap-3 animate-in fade-in slide-in-from-top-4 max-w-2xl mx-auto">
                   <AlertCircle className="w-5 h-5 shrink-0 text-red-400" />
                   <p>{errorMessage}</p>
@@ -482,10 +457,8 @@ export default function DashboardPage() {
                   className="w-full flex-grow bg-white/10 border border-white/20 text-white rounded-2xl pl-6 pr-4 py-4 focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold placeholder:text-blue-300/30 text-lg shadow-inner" 
                 />
                 {/* DYNAMIC SUBMIT BUTTON */}
-                <button type="submit" disabled={isSyncing || isQueued} className="bg-blue-500 hover:bg-blue-400 text-white px-10 py-4 rounded-2xl font-black disabled:opacity-50 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg flex items-center justify-center text-lg">
-                  {isQueued ? (
-                    <><Timer className="w-5 h-5 mr-2 animate-pulse text-yellow-200" /> Queued...</>
-                  ) : isSyncing ? (
+                <button type="submit" disabled={isSyncing} className="bg-blue-500 hover:bg-blue-400 text-white px-10 py-4 rounded-2xl font-black disabled:opacity-50 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg flex items-center justify-center text-lg">
+                  {isSyncing ? (
                     <><RefreshCw className="w-5 h-5 mr-2 animate-spin" /> Finding...</>
                   ) : (
                     'Fetch Stats'
@@ -720,11 +693,9 @@ export default function DashboardPage() {
                     <p className="text-slate-500 font-medium">Your official meet results & national rank.</p>
                   </div>
                   
-                  {/* RE-SYNC QUEUE BUTTON */}
-                  <button onClick={handleReSync} disabled={isSyncing || isQueued || !canSync || isUnverified} className="flex items-center justify-center bg-slate-900 hover:bg-blue-600 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-colors disabled:opacity-50 disabled:hover:bg-slate-900">
-                    {isQueued ? (
-                      <><Timer className="w-4 h-4 mr-2 animate-pulse text-yellow-300" /> Queued...</>
-                    ) : isSyncing ? (
+                  {/* CLEAN RE-SYNC BUTTON */}
+                  <button onClick={handleReSync} disabled={isSyncing || !canSync || isUnverified} className="flex items-center justify-center bg-slate-900 hover:bg-blue-600 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-colors disabled:opacity-50 disabled:hover:bg-slate-900">
+                    {isSyncing ? (
                       <><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Finding...</>
                     ) : canSync ? (
                       <><RefreshCw className="w-4 h-4 mr-2" /> Sync Latest PRs</>

@@ -27,14 +27,14 @@ export async function POST(req: Request) {
 
     console.log("☁️ Connecting securely to Browserless.io...");
     
-    // 🚨 QUEUE CATCHER 1: Catch initial connection limits
+    // 🚨 CAPACITY CATCHER 1: Catch initial connection limits and instantly reject
     try {
         browser = await puppeteerCore.connect({
           browserWSEndpoint: `wss://chrome.browserless.io?token=${BROWSERLESS_API_KEY}&stealth=true`
         });
     } catch (connectionErr: any) {
-        console.log("Browserless Queue Full. Retrying...");
-        return NextResponse.json({ error: 'SCRAPER_BUSY' }, { status: 429 });
+        console.log("Browserless at capacity. Rejecting request.");
+        return NextResponse.json({ error: 'Our servers are experiencing high traffic. Please wait 60 seconds and try again.' }, { status: 503 });
     }
     
     const page = await browser.newPage();
@@ -339,17 +339,16 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error("Scraping Error:", error);
     
-    // 🚨 QUEUE CATCHER 2: Catch any mid-scrape limits or dropped websocket connections
+    // 🚨 CAPACITY CATCHER 2: Catch any mid-scrape limits or dropped websocket connections
     const msg = error.message || "";
     if (msg.includes('429') || msg.includes('Too Many Requests') || msg.includes('concurrency') || msg.includes('WebSocket')) {
-      return NextResponse.json({ error: 'SCRAPER_BUSY' }, { status: 429 });
+      return NextResponse.json({ error: 'Our servers are experiencing high traffic. Please wait 60 seconds and try again.' }, { status: 503 });
     }
 
     return NextResponse.json({ error: `Scraper Error: ${error.message}` }, { status: 500 });
   
   } finally {
     // 🚨 THE KILL SWITCH: This ALWAYS runs, even if the code crashes, errors, or you refresh the page.
-    // It guarantees the zombie headless browser is destroyed immediately to free up your connection.
     if (browser) {
       try {
         await browser.close();
