@@ -2,8 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { createClient } from '@/utils/supabase/client';
-// NEW: Imported RotateCcw for the reset icon
-import { MapPin, Trophy, Search, Activity, ChevronRight, BookOpen, Users, SearchIcon, TrendingUp, Landmark, SlidersHorizontal, ChevronDown, ChevronUp, DollarSign, Percent, Award, Gem, RotateCcw } from 'lucide-react';
+import { MapPin, Trophy, Search, Activity, ChevronRight, BookOpen, Users, SearchIcon, TrendingUp, Landmark, SlidersHorizontal, ChevronDown, ChevronUp, DollarSign, Percent, Award, Gem, RotateCcw, Bookmark, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 
 interface University {
@@ -92,6 +91,12 @@ export default function Home() {
   const [topSalarySchools, setTopSalarySchools] = useState<University[]>([]);
   const [topFundingPrograms, setTopFundingPrograms] = useState<any[]>([]);
 
+  // --- Auth & Target Schools States ---
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [isAthlete, setIsAthlete] = useState<boolean>(false);
+  const [savedCollegeIds, setSavedCollegeIds] = useState<Set<string>>(new Set());
+  const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
+
   // --- Basic Filters ---
   const [selectedSport, setSelectedSport] = useState('');
   const [selectedGender, setSelectedGender] = useState('');
@@ -106,7 +111,38 @@ export default function Home() {
   const [maxTuition, setMaxTuition] = useState('');
   const [sortBy, setSortBy] = useState('');
 
-  // --- Load Initial State & Featured Elite Schools ---
+  // --- 1. Load User & Check Role ---
+  useEffect(() => {
+    async function fetchUserAndSaves() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        setCurrentUserId(session.user.id);
+        
+        // Check if this user is an athlete
+        const { data: athleteData } = await supabase
+          .from('athletes')
+          .select('id')
+          .eq('id', session.user.id)
+          .maybeSingle();
+
+        if (athleteData) {
+          setIsAthlete(true);
+          // Only fetch saved colleges if they are an athlete
+          const { data } = await supabase
+            .from('saved_colleges')
+            .select('college_id')
+            .eq('athlete_id', session.user.id);
+          
+          if (data) {
+            setSavedCollegeIds(new Set(data.map(d => d.college_id)));
+          }
+        }
+      }
+    }
+    fetchUserAndSaves();
+  }, [supabase]);
+
+  // --- 2. Load Initial State & Featured Elite Schools ---
   useEffect(() => {
     async function loadInitialState() {
       const savedFilters = sessionStorage.getItem('chasedSportsFilters');
@@ -140,7 +176,6 @@ export default function Home() {
       } else {
         setLoading(true);
 
-        // 1. Fetch Top 4 by Salary
         const { data: salaryData } = await supabase
           .from('universities')
           .select('*')
@@ -148,7 +183,6 @@ export default function Home() {
           .order('median_earnings', { ascending: false })
           .limit(4);
 
-        // 2. Calculate Cumulative Funding per University
         const { data: allUniFunding } = await supabase
           .from('universities')
           .select('id, name, city, state, division, programs(operating_expense)');
@@ -196,9 +230,53 @@ export default function Home() {
     sessionStorage.setItem('chasedSportsResults', JSON.stringify(universities));
   }, [isInitialized, universities]);
 
-  // --- NEW: RESET FILTERS FUNCTION ---
+  // --- ACTION: SAVE COLLEGE ---
+  const toggleSaveCollege = async (e: React.MouseEvent, collegeId: string) => {
+    e.preventDefault(); 
+    if (!currentUserId) {
+      alert("Please log in or create an athlete account to save target schools to your dashboard!");
+      return;
+    }
+
+    setSavingIds(prev => new Set(prev).add(collegeId));
+    const isCurrentlySaved = savedCollegeIds.has(collegeId);
+
+    try {
+      if (isCurrentlySaved) {
+        await supabase
+          .from('saved_colleges')
+          .delete()
+          .eq('athlete_id', currentUserId)
+          .eq('college_id', collegeId);
+        
+        setSavedCollegeIds(prev => {
+          const next = new Set(prev);
+          next.delete(collegeId);
+          return next;
+        });
+      } else {
+        await supabase
+          .from('saved_colleges')
+          .insert({ athlete_id: currentUserId, college_id: collegeId });
+        
+        setSavedCollegeIds(prev => {
+          const next = new Set(prev);
+          next.add(collegeId);
+          return next;
+        });
+      }
+    } catch (err: any) {
+      console.error("Save Error:", err.message);
+    } finally {
+      setSavingIds(prev => {
+        const next = new Set(prev);
+        next.delete(collegeId);
+        return next;
+      });
+    }
+  };
+
   const handleReset = () => {
-    // 1. Clear all states
     setSchoolName('');
     setSelectedSport('');
     setSelectedGender('');
@@ -209,12 +287,8 @@ export default function Home() {
     setTuitionType('in_state');
     setMaxTuition('');
     setSortBy('');
-    
-    // 2. Reset the view back to the featured home page
     setHasSearched(false);
     setUniversities([]);
-    
-    // 3. Clear the saved session data so it doesn't auto-reload on refresh
     sessionStorage.removeItem('chasedSportsFilters');
     sessionStorage.removeItem('chasedSportsResults');
   };
@@ -259,6 +333,9 @@ export default function Home() {
 
   const mappedMajor = getUmbrellaMajor(selectedMajor);
   const showMajorHint = selectedMajor.length > 2 && mappedMajor.toLowerCase() !== selectedMajor.toLowerCase();
+  
+  // Is this user a coach? (Logged in, but not an athlete)
+  const isCoach = currentUserId && !isAthlete;
 
   const validUniversities = useMemo(() => {
     let filtered = universities.filter((uni) => {
@@ -367,6 +444,9 @@ export default function Home() {
             roiMultiplier = (uni.median_earnings / tuitionToUse).toFixed(1);
           }
 
+          const isSaved = savedCollegeIds.has(uni.id);
+          const isProcessing = savingIds.has(uni.id);
+
           return (
             <div key={uni.id} className="bg-white rounded-3xl p-6 shadow-xl shadow-slate-200/40 border border-slate-100 flex flex-col h-full hover:-translate-y-1 hover:shadow-2xl transition-all duration-300 group">
               <div className="flex-grow">
@@ -419,29 +499,49 @@ export default function Home() {
                 </div>
 
               </div>
-              <div className="mt-5 pt-5 border-t border-slate-100 flex justify-between items-center">
-                <div className="flex items-center text-xs font-bold text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
+              <div className="mt-5 pt-5 border-t border-slate-100 flex justify-between items-center gap-3">
+                <div className="flex items-center text-xs font-bold text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100 shrink-0">
                   <BookOpen className="w-3.5 h-3.5 mr-1.5 text-slate-400" />
                   {uni.majors_offered ? uni.majors_offered.length : 0} Majors
                 </div>
                 
-                <Link 
-                  href={`/college/${uni.id}?${new URLSearchParams({
-                    ...(selectedSport && { sport: selectedSport }),
-                    ...(selectedGender && { gender: selectedGender })
-                  }).toString()}`}
-                  className="text-sm font-black text-blue-600 flex items-center px-4 py-2 rounded-lg hover:bg-blue-50 transition-colors"
-                >
-                  View Profile 
-                  <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
-                </Link>
+                <div className="flex items-center gap-2">
+                  {!isCoach && (
+                    <button 
+                      onClick={(e) => toggleSaveCollege(e, uni.id)}
+                      disabled={isProcessing}
+                      className={`p-2 rounded-lg border transition-all shadow-sm ${
+                        isSaved 
+                          ? 'bg-blue-50 border-blue-200 text-blue-600' 
+                          : 'bg-white border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-200'
+                      }`}
+                      title={isSaved ? "Remove from Dashboard" : "Save to Target Schools"}
+                    >
+                      {isProcessing ? (
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Bookmark className={`w-4 h-4 ${isSaved ? 'fill-current' : ''}`} />
+                      )}
+                    </button>
+                  )}
+                  <Link 
+                    href={`/college/${uni.id}?${new URLSearchParams({
+                      ...(selectedSport && { sport: selectedSport }),
+                      ...(selectedGender && { gender: selectedGender })
+                    }).toString()}`}
+                    className="text-sm font-black text-blue-600 flex items-center px-4 py-2 rounded-lg hover:bg-blue-50 transition-colors"
+                  >
+                    View Profile 
+                    <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
+                  </Link>
+                </div>
               </div>
             </div>
           );
         })}
       </div>
     );
-  }, [validUniversities, loading, isInitialized, hasSearched, selectedSport, selectedGender]); 
+  }, [validUniversities, loading, isInitialized, hasSearched, selectedSport, selectedGender, savedCollegeIds, savingIds, isCoach]); 
 
   return (
     <main className="min-h-screen bg-[#F8FAFC] font-sans">
@@ -686,7 +786,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* --- NEW: BUTTON ACTION BAR --- */}
           <div className="mt-6 flex justify-end gap-4 pt-6 border-t border-slate-100">
             {/* RESET BUTTON */}
             <button 
@@ -725,38 +824,63 @@ export default function Home() {
                   Highest 10-Year Median Salary
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                  {topSalarySchools.map((uni) => (
-                    <div key={`salary-${uni.id}`} className="bg-gradient-to-br from-emerald-900 via-green-950 to-slate-950 border border-green-500/30 rounded-[2rem] p-6 shadow-xl shadow-green-900/20 flex flex-col h-full hover:-translate-y-2 hover:shadow-2xl hover:shadow-green-900/40 transition-all duration-300 group">
-                      <div className="flex-grow">
-                        <h3 className="text-xl font-black text-white leading-tight mb-4 group-hover:text-green-300 transition-colors">
-                          {uni.name}
-                        </h3>
-                        <div className="space-y-2 text-sm font-semibold text-slate-300 mb-6">
-                          <div className="flex items-center">
-                            <MapPin className="w-4 h-4 text-green-500 mr-2" />
-                            {uni.city ? `${uni.city}, ${uni.state}` : uni.state}
+                  {topSalarySchools.map((uni) => {
+                    const isSaved = savedCollegeIds.has(uni.id);
+                    const isProcessing = savingIds.has(uni.id);
+                    
+                    return (
+                      <div key={`salary-${uni.id}`} className="bg-gradient-to-br from-emerald-900 via-green-950 to-slate-950 border border-green-500/30 rounded-[2rem] p-6 shadow-xl shadow-green-900/20 flex flex-col h-full hover:-translate-y-2 hover:shadow-2xl hover:shadow-green-900/40 transition-all duration-300 group">
+                        <div className="flex-grow">
+                          <h3 className="text-xl font-black text-white leading-tight mb-4 group-hover:text-green-300 transition-colors">
+                            {uni.name}
+                          </h3>
+                          <div className="space-y-2 text-sm font-semibold text-slate-300 mb-6">
+                            <div className="flex items-center">
+                              <MapPin className="w-4 h-4 text-green-500 mr-2" />
+                              {uni.city ? `${uni.city}, ${uni.state}` : uni.state}
+                            </div>
+                            <div className="flex items-center">
+                              <Trophy className="w-4 h-4 text-yellow-500 mr-2" />
+                              {uni.division}
+                            </div>
                           </div>
-                          <div className="flex items-center">
-                            <Trophy className="w-4 h-4 text-yellow-500 mr-2" />
-                            {uni.division}
+                          
+                          <div className="bg-black/30 backdrop-blur-sm rounded-2xl p-4 border border-white/10 relative overflow-hidden">
+                            <div className="absolute top-0 right-0 w-24 h-24 bg-green-500/20 blur-2xl rounded-full pointer-events-none"></div>
+                            <span className="block text-[10px] font-bold text-green-400 uppercase tracking-widest mb-1 relative z-10">10-Yr Median Salary</span>
+                            <span className="text-3xl font-black text-white tracking-tighter relative z-10">{formatCurrency(uni.median_earnings)}</span>
                           </div>
                         </div>
                         
-                        <div className="bg-black/30 backdrop-blur-sm rounded-2xl p-4 border border-white/10 relative overflow-hidden">
-                          <div className="absolute top-0 right-0 w-24 h-24 bg-green-500/20 blur-2xl rounded-full pointer-events-none"></div>
-                          <span className="block text-[10px] font-bold text-green-400 uppercase tracking-widest mb-1 relative z-10">10-Yr Median Salary</span>
-                          <span className="text-3xl font-black text-white tracking-tighter relative z-10">{formatCurrency(uni.median_earnings)}</span>
+                        <div className="flex items-center gap-2 mt-6">
+                          {!isCoach && (
+                            <button 
+                              onClick={(e) => toggleSaveCollege(e, uni.id)}
+                              disabled={isProcessing}
+                              className={`p-3 rounded-xl border transition-all ${
+                                isSaved 
+                                  ? 'bg-blue-500 border-blue-400 text-white' 
+                                  : 'bg-white/10 border-white/20 text-white hover:bg-white/20'
+                              }`}
+                              title={isSaved ? "Remove from Dashboard" : "Save to Target Schools"}
+                            >
+                              {isProcessing ? (
+                                <RefreshCw className="w-4 h-4 animate-spin text-white" />
+                              ) : (
+                                <Bookmark className={`w-4 h-4 ${isSaved ? 'fill-current' : ''}`} />
+                              )}
+                            </button>
+                          )}
+                          <Link 
+                            href={`/college/${uni.id}`}
+                            className="flex-1 text-center text-sm font-black text-slate-900 bg-white hover:bg-green-400 px-4 py-3 rounded-xl transition-colors"
+                          >
+                            View Profile
+                          </Link>
                         </div>
                       </div>
-                      
-                      <Link 
-                        href={`/college/${uni.id}`}
-                        className="mt-6 w-full text-center text-sm font-black text-slate-900 bg-white hover:bg-green-400 px-4 py-3 rounded-xl transition-colors"
-                      >
-                        View Profile
-                      </Link>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             )}
@@ -769,43 +893,68 @@ export default function Home() {
                   Largest Total Athletic Budget
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                  {topFundingPrograms.map((uni) => (
-                    <div key={`funding-${uni.id}`} className="bg-gradient-to-br from-amber-900 via-yellow-950 to-slate-950 border border-yellow-500/30 rounded-[2rem] p-6 shadow-xl shadow-yellow-900/20 flex flex-col h-full hover:-translate-y-2 hover:shadow-2xl hover:shadow-yellow-900/40 transition-all duration-300 group">
-                      <div className="flex-grow">
-                        <div className="inline-flex items-center space-x-2 bg-black/40 px-3 py-1.5 rounded-lg border border-white/10 mb-4">
-                          <Activity className="w-3.5 h-3.5 text-yellow-500" />
-                          <span className="text-[10px] font-black text-yellow-400 uppercase tracking-widest">Entire Athletic Dept</span>
+                  {topFundingPrograms.map((uni) => {
+                    const isSaved = savedCollegeIds.has(uni.id);
+                    const isProcessing = savingIds.has(uni.id);
+
+                    return (
+                      <div key={`funding-${uni.id}`} className="bg-gradient-to-br from-amber-900 via-yellow-950 to-slate-950 border border-yellow-500/30 rounded-[2rem] p-6 shadow-xl shadow-yellow-900/20 flex flex-col h-full hover:-translate-y-2 hover:shadow-2xl hover:shadow-yellow-900/40 transition-all duration-300 group">
+                        <div className="flex-grow">
+                          <div className="inline-flex items-center space-x-2 bg-black/40 px-3 py-1.5 rounded-lg border border-white/10 mb-4">
+                            <Activity className="w-3.5 h-3.5 text-yellow-500" />
+                            <span className="text-[10px] font-black text-yellow-400 uppercase tracking-widest">Entire Athletic Dept</span>
+                          </div>
+                          
+                          <h3 className="text-xl font-black text-white leading-tight mb-4 group-hover:text-yellow-300 transition-colors">
+                            {uni.name}
+                          </h3>
+                          <div className="space-y-2 text-sm font-semibold text-slate-300 mb-6">
+                            <div className="flex items-center">
+                              <MapPin className="w-4 h-4 text-yellow-500 mr-2" />
+                              {uni.city ? `${uni.city}, ${uni.state}` : uni.state}
+                            </div>
+                            <div className="flex items-center">
+                              <Trophy className="w-4 h-4 text-yellow-500 mr-2" />
+                              {uni.division}
+                            </div>
+                          </div>
+                          
+                          <div className="bg-black/30 backdrop-blur-sm rounded-2xl p-4 border border-white/10 relative overflow-hidden">
+                            <div className="absolute top-0 right-0 w-24 h-24 bg-yellow-500/20 blur-2xl rounded-full pointer-events-none"></div>
+                            <span className="block text-[10px] font-bold text-yellow-400 uppercase tracking-widest mb-1 relative z-10">Total Operating Budget</span>
+                            <span className="text-3xl font-black text-white tracking-tighter relative z-10">{formatCurrency(uni.total_budget)}</span>
+                          </div>
                         </div>
                         
-                        <h3 className="text-xl font-black text-white leading-tight mb-4 group-hover:text-yellow-300 transition-colors">
-                          {uni.name}
-                        </h3>
-                        <div className="space-y-2 text-sm font-semibold text-slate-300 mb-6">
-                          <div className="flex items-center">
-                            <MapPin className="w-4 h-4 text-yellow-500 mr-2" />
-                            {uni.city ? `${uni.city}, ${uni.state}` : uni.state}
-                          </div>
-                          <div className="flex items-center">
-                            <Trophy className="w-4 h-4 text-yellow-500 mr-2" />
-                            {uni.division}
-                          </div>
-                        </div>
-                        
-                        <div className="bg-black/30 backdrop-blur-sm rounded-2xl p-4 border border-white/10 relative overflow-hidden">
-                          <div className="absolute top-0 right-0 w-24 h-24 bg-yellow-500/20 blur-2xl rounded-full pointer-events-none"></div>
-                          <span className="block text-[10px] font-bold text-yellow-400 uppercase tracking-widest mb-1 relative z-10">Total Operating Budget</span>
-                          <span className="text-3xl font-black text-white tracking-tighter relative z-10">{formatCurrency(uni.total_budget)}</span>
+                        <div className="flex items-center gap-2 mt-6">
+                          {!isCoach && (
+                            <button 
+                              onClick={(e) => toggleSaveCollege(e, uni.id)}
+                              disabled={isProcessing}
+                              className={`p-3 rounded-xl border transition-all ${
+                                isSaved 
+                                  ? 'bg-blue-500 border-blue-400 text-white' 
+                                  : 'bg-white/10 border-white/20 text-white hover:bg-white/20'
+                              }`}
+                              title={isSaved ? "Remove from Dashboard" : "Save to Target Schools"}
+                            >
+                              {isProcessing ? (
+                                <RefreshCw className="w-4 h-4 animate-spin text-white" />
+                              ) : (
+                                <Bookmark className={`w-4 h-4 ${isSaved ? 'fill-current' : ''}`} />
+                              )}
+                            </button>
+                          )}
+                          <Link 
+                            href={`/college/${uni.id}`}
+                            className="flex-1 text-center text-sm font-black text-slate-900 bg-white hover:bg-yellow-400 px-4 py-3 rounded-xl transition-colors"
+                          >
+                            View Profile
+                          </Link>
                         </div>
                       </div>
-                      
-                      <Link 
-                        href={`/college/${uni.id}`}
-                        className="mt-6 w-full text-center text-sm font-black text-slate-900 bg-white hover:bg-yellow-400 px-4 py-3 rounded-xl transition-colors"
-                      >
-                        View Profile
-                      </Link>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             )}
