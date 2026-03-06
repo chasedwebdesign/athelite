@@ -4,13 +4,13 @@ import { useEffect, useState, useMemo } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { MapPin, Trophy, Search, Activity, ChevronRight, BookOpen, Users, SearchIcon, TrendingUp, Landmark, SlidersHorizontal, ChevronDown, ChevronUp, DollarSign, Percent, Award, Gem, RotateCcw, Bookmark, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
-import dynamic from 'next/dynamic';
+// import dynamic from 'next/dynamic';
 
-// 🚨 DYNAMIC MAP IMPORT (Turns off SSR so Next.js doesn't crash trying to find the window)
-const CollegeMap = dynamic(() => import('@/components/Map/CollegeMap'), { 
-  ssr: false, 
-  loading: () => <div className="w-full h-[500px] bg-slate-200 animate-pulse rounded-[2rem] mb-8 flex items-center justify-center font-bold text-slate-400 border border-slate-300">Loading Interactive Map...</div>
-});
+// 🚨 DYNAMIC MAP IMPORT (Temporarily Disabled)
+// const CollegeMap = dynamic(() => import('@/components/Map/CollegeMap'), { 
+//   ssr: false, 
+//   loading: () => <div className="w-full h-[500px] bg-slate-200 animate-pulse rounded-[2rem] mb-8 flex items-center justify-center font-bold text-slate-400 border border-slate-300">Loading Interactive Map...</div>
+// });
 
 interface University {
   id: string;
@@ -120,7 +120,7 @@ export default function Home() {
   const [maxTuition, setMaxTuition] = useState('');
   const [sortBy, setSortBy] = useState('');
 
-  // --- Map States ---
+  // --- Map States (Kept for state integrity) ---
   const [selectedMapCollege, setSelectedMapCollege] = useState<University | null>(null);
 
   // --- 1. Load User & Check Role ---
@@ -446,8 +446,8 @@ export default function Home() {
       );
     }
 
-    // 🚨 Map filtering logic: Render only the selected map college if one is clicked!
-    const listToRender = selectedMapCollege ? [selectedMapCollege] : validUniversities;
+    // 🚨 Map filtering logic bypassed while map is hidden
+    const listToRender = validUniversities;
 
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -555,7 +555,7 @@ export default function Home() {
         })}
       </div>
     );
-  }, [validUniversities, loading, isInitialized, hasSearched, selectedSport, selectedGender, savedCollegeIds, savingIds, isCoach, selectedMapCollege]); 
+  }, [validUniversities, loading, isInitialized, hasSearched, selectedSport, selectedGender, savedCollegeIds, savingIds, isCoach]); 
 
   return (
     <main className="min-h-screen bg-[#F8FAFC] font-sans">
@@ -987,16 +987,16 @@ export default function Home() {
               )}
             </div>
 
-            {/* 🚨 THE INTERACTIVE MAP */}
-            {!loading && validUniversities.length > 0 && (
+            {/* 🚨 THE INTERACTIVE MAP (Temporarily Hidden) */}
+            {/* {!loading && validUniversities.length > 0 && (
               <CollegeMap 
                 universities={validUniversities} 
                 onCollegeSelect={(uni) => setSelectedMapCollege(uni)} 
               />
-            )}
+            )} */}
 
-            {/* SHOW EITHER THE SELECTED MAP COLLEGE OR THE FULL LIST */}
-            {selectedMapCollege && (
+            {/* SHOW EITHER THE SELECTED MAP COLLEGE OR THE FULL LIST (Temporarily Hidden) */}
+            {/* {selectedMapCollege && (
               <div className="flex justify-between items-center mb-6 bg-slate-100 p-4 rounded-2xl border border-slate-200">
                 <h3 className="text-lg font-bold text-slate-700">Selected from Map</h3>
                 <button 
@@ -1006,7 +1006,7 @@ export default function Home() {
                   <RotateCcw className="w-4 h-4 mr-2" /> Show All Results
                 </button>
               </div>
-            )}
+            )} */}
             
             {renderedCollegeCards}
           </div>

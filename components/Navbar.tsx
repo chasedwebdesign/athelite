@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter, usePathname } from 'next/navigation';
 import { Activity, Mail, Search, LogOut, LayoutDashboard, User, School, Trophy, Globe, Medal, Menu, X } from 'lucide-react'; 
 
@@ -131,8 +132,15 @@ export default function Navbar() {
           
           {/* LOGO */}
           <Link href="/" onClick={closeMobileMenu} className="flex items-center gap-2 group shrink-0">
-            <div className="bg-blue-600 p-1.5 rounded-lg shadow-md group-hover:scale-105 transition-transform">
-              <Activity className="w-5 h-5 text-white" />
+            <div className="relative w-8 h-8 sm:w-10 sm:h-10 overflow-hidden group-hover:scale-105 transition-transform">
+              <Image 
+                src="/logo.png" 
+                alt="ChasedSports Logo" 
+                fill
+                sizes="(max-width: 768px) 32px, 40px"
+                className="object-contain"
+                priority
+              />
             </div>
             <span className="text-xl font-black tracking-tight text-slate-900 hidden sm:block">
               Chased<span className="text-blue-600">Sports</span>
@@ -176,7 +184,6 @@ export default function Navbar() {
           <div className="hidden md:flex items-center space-x-6 shrink-0">
             <Link href="/feed" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors flex items-center"><Globe className="w-4 h-4 mr-1.5" /> Feed</Link>
             <Link href="/leaderboard" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors flex items-center"><Trophy className="w-4 h-4 mr-1.5" /> Leaderboards</Link>
-            {/* NEW: COLLEGE FINDER DESKTOP LINK */}
             <Link href="/search" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors flex items-center"><School className="w-4 h-4 mr-1.5" /> College Finder</Link>
 
             {session ? (
@@ -262,8 +269,6 @@ export default function Navbar() {
             <div className="flex flex-col gap-2">
               <Link href="/feed" onClick={closeMobileMenu} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-50 text-slate-700 font-bold text-lg transition-colors"><Globe className="w-6 h-6 text-blue-500" /> The Feed</Link>
               <Link href="/leaderboard" onClick={closeMobileMenu} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-50 text-slate-700 font-bold text-lg transition-colors"><Trophy className="w-6 h-6 text-blue-500" /> Leaderboards</Link>
-              
-              {/* NEW: COLLEGE FINDER MOBILE LINK */}
               <Link href="/search" onClick={closeMobileMenu} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-50 text-slate-700 font-bold text-lg transition-colors"><School className="w-6 h-6 text-blue-500" /> College Finder</Link>
               
               {session ? (

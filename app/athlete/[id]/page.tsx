@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
-import { Medal, CheckCircle2, MapPin, Mail, X, Send, MessageSquare, Lock, Trophy, Calendar, Share2, ArrowLeft, Activity, Globe, School, UserCircle2, Clock, Star } from 'lucide-react';
+import { Medal, CheckCircle2, MapPin, Mail, X, Send, MessageSquare, Lock, Trophy, Calendar, Share2, ArrowLeft, Activity, Globe, School, UserCircle2, Clock, Star, Instagram, Check } from 'lucide-react';
 import Link from 'next/link';
 
 interface AthleteProfile {
@@ -102,7 +102,6 @@ export default function PublicAthleteProfile() {
           setIsSelf(true);
         }
 
-        // 🚨 FIX: Removed 'trust_level' which was causing the query to fail for coaches!
         const { data: cData } = await supabase
           .from('coaches')
           .select('first_name, last_name, school_name, coach_type')
@@ -112,7 +111,6 @@ export default function PublicAthleteProfile() {
         if (cData) {
           setViewerRole('coach');
           
-          // A coach is verified to send messages once they fill out their basic profile
           const hasCompleteProfile = !!(cData.first_name && cData.last_name && cData.school_name);
           setIsVerifiedCoach(hasCompleteProfile);
           
@@ -121,7 +119,6 @@ export default function PublicAthleteProfile() {
           setSenderSchool(cData.school_name || 'Unknown University');
           setSenderEmail(session.user.email || '');
 
-          // Check if this athlete is already on the coach's watchlist
           const { data: savedData } = await supabase
             .from('saved_recruits')
             .select('id')
@@ -155,7 +152,6 @@ export default function PublicAthleteProfile() {
     }
   }, [athleteId, supabase]);
 
-  // TOGGLE WATCHLIST FUNCTION
   const handleToggleSave = async () => {
     if (!currentUserId || viewerRole !== 'coach') return;
     setIsSaving(true);
@@ -174,7 +170,6 @@ export default function PublicAthleteProfile() {
     }
   };
 
-  // SMART ROUTING BUTTON CLICK
   const handleContactClick = () => {
     if (viewerRole === 'guest' || !currentUserId) {
       alert("Please create an account or log in to contact athletes.");
@@ -201,7 +196,6 @@ export default function PublicAthleteProfile() {
     setIsSending(true);
     
     try {
-      // RATE LIMITER: 10 per day maximum
       const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       const checkEmail = currentUserEmail || senderEmail;
       
@@ -217,7 +211,6 @@ export default function PublicAthleteProfile() {
         return;
       }
 
-      // SEND THE MESSAGE
       const { error } = await supabase.from('messages').insert({
         athlete_id: athlete.id,
         sender_name: senderName, 
@@ -242,8 +235,24 @@ export default function PublicAthleteProfile() {
     }
   };
 
-  const handleCopyLink = () => {
+  const handleCopyLink = async () => {
     const url = window.location.href;
+    
+    // Attempt native share first for mobile users!
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `${athlete?.first_name} ${athlete?.last_name} | ChasedSports`,
+          text: `Check out my verified Track & Field stats and national rank on ChasedSports! 🏃💨`,
+          url: url,
+        });
+        return; // Exit if share was successful
+      } catch (err) {
+        console.log('Native share canceled or failed:', err);
+      }
+    } 
+    
+    // Fallback for desktop or failed shares
     navigator.clipboard.writeText(url);
     setCopySuccess(true);
     setTimeout(() => setCopySuccess(false), 2000);
@@ -300,7 +309,7 @@ export default function PublicAthleteProfile() {
         .card-elite { animation: pulse-elite 4s ease-in-out infinite; }
       `}} />
 
-      <div className="max-w-4xl mx-auto px-6 pt-10">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-10">
         
         <button 
           onClick={() => router.back()} 
@@ -310,24 +319,24 @@ export default function PublicAthleteProfile() {
         </button>
 
         {/* HERO CARD */}
-        <div className={`bg-white rounded-[2.5rem] p-8 md:p-12 border relative overflow-hidden mb-6 transition-all duration-300 ${getCardGlowClass(athlete.equipped_border)}`}>
+        <div className={`bg-white rounded-[2.5rem] p-6 sm:p-8 md:p-12 border relative overflow-hidden mb-6 transition-all duration-300 ${getCardGlowClass(athlete.equipped_border)}`}>
           <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 blur-[80px] rounded-full pointer-events-none"></div>
           
-          <div className="relative z-10 flex flex-col md:flex-row items-center md:items-start gap-8">
+          <div className="relative z-10 flex flex-col md:flex-row items-center md:items-start gap-6 md:gap-8">
             
             <div className={`${athlete.equipped_border && athlete.equipped_border !== 'none' ? athlete.equipped_border : 'border-4 border-white shadow-lg'} rounded-full shrink-0 flex items-center justify-center`}>
-              <div className="w-32 h-32 md:w-40 md:h-40 bg-slate-100 rounded-full flex items-center justify-center overflow-hidden">
+              <div className="w-28 h-28 sm:w-32 sm:h-32 md:w-40 md:h-40 bg-slate-100 rounded-full flex items-center justify-center overflow-hidden">
                 {athlete.avatar_url ? (
                   <img src={athlete.avatar_url} alt="Profile" className="w-full h-full object-cover" />
                 ) : (
-                  <Medal className="w-16 h-16 text-slate-300" />
+                  <Medal className="w-12 h-12 md:w-16 md:h-16 text-slate-300" />
                 )}
               </div>
             </div>
 
-            <div className="flex-1 text-center md:text-left">
-              <div className="flex flex-col md:flex-row md:items-center gap-3 mb-2 justify-center md:justify-start">
-                <h1 className="text-4xl md:text-5xl font-black text-slate-900 tracking-tight">
+            <div className="flex-1 text-center md:text-left w-full">
+              <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3 mb-2 justify-center md:justify-start">
+                <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-slate-900 tracking-tight">
                   {athlete.first_name} {athlete.last_name}
                 </h1>
                 {athlete.trust_level > 0 && (
@@ -338,23 +347,23 @@ export default function PublicAthleteProfile() {
                 )}
               </div>
               
-              <p className="text-lg font-bold text-slate-500 mb-6 flex flex-col md:flex-row items-center gap-2 md:gap-4 justify-center md:justify-start">
-                <span className="flex items-center"><MapPin className="w-5 h-5 mr-1" /> {athlete.high_school} {athlete.state ? `, ${athlete.state}` : ''}</span>
+              <p className="text-sm sm:text-base md:text-lg font-bold text-slate-500 mb-6 flex flex-col md:flex-row items-center gap-2 md:gap-4 justify-center md:justify-start text-balance">
+                <span className="flex items-center"><MapPin className="w-4 h-4 md:w-5 md:h-5 mr-1" /> {athlete.high_school} {athlete.state ? `, ${athlete.state}` : ''}</span>
                 <span className="hidden md:inline text-slate-300">•</span>
                 <span>Class of {athlete.grad_year || '202X'}</span>
                 <span className="hidden md:inline text-slate-300">•</span>
                 <span>{athlete.gender || 'Boys'} Division</span>
               </p>
 
-              <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+              <div className="flex flex-col sm:flex-row items-center gap-3 w-full">
                 {!isSelf && (
                   <>
                     {viewerRole === 'guest' ? (
-                      <Link href="/login" className="w-full sm:w-auto bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-3.5 px-8 rounded-xl transition-colors flex items-center justify-center gap-2 border border-slate-200">
+                      <Link href="/login" className="w-full sm:w-auto bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-3.5 px-6 rounded-xl transition-colors flex items-center justify-center gap-2 border border-slate-200">
                         <Lock className="w-5 h-5" /> Log in to Connect
                       </Link>
                     ) : (viewerRole === 'coach' && !isVerifiedCoach) ? (
-                      <div className="w-full sm:w-auto bg-slate-100 text-slate-400 font-bold py-3.5 px-8 rounded-xl flex items-center justify-center gap-2 border border-slate-200">
+                      <div className="w-full sm:w-auto bg-slate-100 text-slate-400 font-bold py-3.5 px-6 rounded-xl flex items-center justify-center gap-2 border border-slate-200">
                         <Lock className="w-5 h-5" /> Update Profile to Message
                       </div>
                     ) : (
@@ -363,7 +372,7 @@ export default function PublicAthleteProfile() {
                       </button>
                     )}
 
-                    {/* NEW: COACH WATCHLIST BUTTON */}
+                    {/* COACH WATCHLIST BUTTON */}
                     {viewerRole === 'coach' && (
                       <button 
                         onClick={handleToggleSave} 
@@ -381,7 +390,8 @@ export default function PublicAthleteProfile() {
                   </>
                 )}
                 
-                <button onClick={handleCopyLink} className="w-full sm:w-auto bg-white border border-slate-200 hover:border-slate-300 text-slate-700 font-bold py-3.5 px-6 rounded-xl transition-colors flex items-center justify-center gap-2 shadow-sm">
+                {/* ENHANCED SHARE BUTTON */}
+                <button onClick={handleCopyLink} className="w-full sm:w-auto bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 hover:border-blue-300 text-blue-700 font-black py-3.5 px-6 rounded-xl transition-colors flex items-center justify-center gap-2 shadow-sm">
                   {copySuccess ? <><CheckCircle2 className="w-5 h-5 text-green-500" /> Copied!</> : <><Share2 className="w-5 h-5" /> Share Profile</>}
                 </button>
               </div>
@@ -390,51 +400,53 @@ export default function PublicAthleteProfile() {
         </div>
 
         {/* TABS */}
-        <div className="flex border-b border-slate-200 mb-8">
+        <div className="flex border-b border-slate-200 mb-6 sm:mb-8 overflow-x-auto hide-scrollbar">
           <button 
             onClick={() => setActiveTab('accolades')}
-            className={`px-6 py-4 font-bold text-sm sm:text-base flex items-center gap-2 border-b-4 transition-colors ${activeTab === 'accolades' ? 'border-blue-600 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+            className={`px-4 sm:px-6 py-4 font-bold text-sm sm:text-base flex items-center gap-2 border-b-4 transition-colors whitespace-nowrap ${activeTab === 'accolades' ? 'border-blue-600 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
           >
             <Trophy className="w-5 h-5" /> Accolades
           </button>
           <button 
             onClick={() => setActiveTab('activity')}
-            className={`px-6 py-4 font-bold text-sm sm:text-base flex items-center gap-2 border-b-4 transition-colors ${activeTab === 'activity' ? 'border-blue-600 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+            className={`px-4 sm:px-6 py-4 font-bold text-sm sm:text-base flex items-center gap-2 border-b-4 transition-colors whitespace-nowrap ${activeTab === 'activity' ? 'border-blue-600 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
           >
             <Globe className="w-5 h-5" /> Activity
           </button>
         </div>
 
-        {/* ACCOLADES */}
+        {/* ACCOLADES (Responsive fix!) */}
         {activeTab === 'accolades' && (
           <div className="animate-in fade-in duration-300">
             {athlete.prs && athlete.prs.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {athlete.prs.map((pr, index) => (
-                  <div key={index} className="bg-white p-6 rounded-[1.5rem] border border-slate-200 shadow-sm flex items-center justify-between group hover:border-blue-300 transition-colors">
-                    <div>
-                      <span className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Event</span>
-                      <span className="font-black text-xl text-slate-900">{pr.event}</span>
+                  <div key={index} className="bg-white p-5 sm:p-6 rounded-[1.5rem] border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between group hover:border-blue-300 transition-colors gap-3 sm:gap-0">
+                    <div className="flex-1 pr-0 sm:pr-4 min-w-0">
+                      <span className="block text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Event</span>
+                      <span className="font-black text-lg sm:text-xl text-slate-900 truncate block">{pr.event}</span>
                       {(pr.date || pr.meet) && (
-                        <div className="flex items-center text-xs text-slate-500 font-medium mt-2">
-                          <Calendar className="w-3.5 h-3.5 mr-1 text-slate-400" /> {pr.date} 
-                          <span className="mx-2 text-slate-300">•</span> 
-                          <MapPin className="w-3.5 h-3.5 mr-1 text-slate-400" /> <span className="truncate max-w-[120px]">{pr.meet}</span>
+                        <div className="flex items-center text-[10px] sm:text-xs text-slate-500 font-medium mt-1 sm:mt-2">
+                          <Calendar className="w-3 h-3 sm:w-3.5 sm:h-3.5 mr-1 text-slate-400 shrink-0" /> 
+                          <span className="whitespace-nowrap">{pr.date}</span>
+                          <span className="mx-1.5 sm:mx-2 text-slate-300">•</span> 
+                          <MapPin className="w-3 h-3 sm:w-3.5 sm:h-3.5 mr-1 text-slate-400 shrink-0" /> 
+                          <span className="truncate">{pr.meet}</span>
                         </div>
                       )}
                     </div>
-                    <div className="text-right pl-4 border-l border-slate-100">
-                      <span className="block text-xs font-bold text-blue-400 uppercase tracking-widest mb-1">Mark</span>
-                      <span className="font-black text-3xl text-blue-600">{pr.mark}</span>
+                    <div className="sm:text-right pt-3 sm:pt-0 sm:pl-4 border-t sm:border-t-0 sm:border-l border-slate-100 shrink-0">
+                      <span className="block text-[10px] sm:text-xs font-bold text-blue-400 uppercase tracking-widest mb-0.5 sm:mb-1">Mark</span>
+                      <span className="font-black text-2xl sm:text-3xl text-blue-600 whitespace-nowrap">{pr.mark}</span>
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="bg-slate-50 p-10 rounded-[2rem] border border-slate-200 border-dashed text-center">
-                <Activity className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                <h3 className="text-lg font-black text-slate-900 mb-1">No times recorded yet</h3>
-                <p className="text-slate-500 font-medium">This athlete has not synced any official results.</p>
+              <div className="bg-slate-50 p-8 sm:p-10 rounded-[2rem] border border-slate-200 border-dashed text-center">
+                <Activity className="w-10 h-10 sm:w-12 sm:h-12 text-slate-300 mx-auto mb-3" />
+                <h3 className="text-base sm:text-lg font-black text-slate-900 mb-1">No times recorded yet</h3>
+                <p className="text-xs sm:text-sm text-slate-500 font-medium">This athlete has not synced any official results.</p>
               </div>
             )}
           </div>
@@ -445,7 +457,7 @@ export default function PublicAthleteProfile() {
           <div className="animate-in fade-in duration-300 space-y-4">
             {posts.length > 0 ? (
               posts.map((post) => (
-                <div key={post.id} className="bg-white p-6 rounded-[1.5rem] border border-slate-200 shadow-sm">
+                <div key={post.id} className="bg-white p-5 sm:p-6 rounded-[1.5rem] border border-slate-200 shadow-sm">
                   <div className="flex justify-between items-start mb-4">
                     <div className="flex items-center gap-3">
                       <div className={`${athlete.equipped_border && athlete.equipped_border !== 'none' ? athlete.equipped_border : 'border border-slate-200'} rounded-full shrink-0 flex items-center justify-center`}>
@@ -454,15 +466,15 @@ export default function PublicAthleteProfile() {
                         </div>
                       </div>
                       <div>
-                        <h4 className="font-black text-slate-900 leading-tight">{athlete.first_name} {athlete.last_name}</h4>
-                        <span className="text-xs font-bold text-slate-400">{formatDate(post.created_at)}</span>
+                        <h4 className="font-black text-sm sm:text-base text-slate-900 leading-tight">{athlete.first_name} {athlete.last_name}</h4>
+                        <span className="text-[10px] sm:text-xs font-bold text-slate-400">{formatDate(post.created_at)}</span>
                       </div>
                     </div>
                   </div>
-                  <p className="text-slate-700 font-medium text-[15px] mb-4 whitespace-pre-wrap">{post.content}</p>
+                  <p className="text-slate-700 font-medium text-sm sm:text-[15px] mb-4 whitespace-pre-wrap">{post.content}</p>
                   {post.linked_pr_event && (
-                    <div className="inline-flex items-center bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200/60 px-3 py-1.5 rounded-xl shadow-sm mt-2">
-                      <Trophy className="w-3.5 h-3.5 text-blue-500 mr-2" />
+                    <div className="inline-flex items-center bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200/60 px-3 py-1.5 rounded-xl shadow-sm mt-2 flex-wrap">
+                      <Trophy className="w-3.5 h-3.5 text-blue-500 mr-2 shrink-0" />
                       <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest mr-2">{post.linked_pr_event}</span>
                       <span className="text-xs font-black text-blue-600">{post.linked_pr_mark}</span>
                     </div>
@@ -470,10 +482,10 @@ export default function PublicAthleteProfile() {
                 </div>
               ))
             ) : (
-              <div className="bg-slate-50 p-10 rounded-[2rem] border border-slate-200 border-dashed text-center">
-                <Globe className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                <h3 className="text-lg font-black text-slate-900 mb-1">No Activity Yet</h3>
-                <p className="text-slate-500 font-medium">This athlete hasn't posted any updates to the global feed.</p>
+              <div className="bg-slate-50 p-8 sm:p-10 rounded-[2rem] border border-slate-200 border-dashed text-center">
+                <Globe className="w-10 h-10 sm:w-12 sm:h-12 text-slate-300 mx-auto mb-3" />
+                <h3 className="text-base sm:text-lg font-black text-slate-900 mb-1">No Activity Yet</h3>
+                <p className="text-xs sm:text-sm text-slate-500 font-medium">This athlete hasn't posted any updates to the global feed.</p>
               </div>
             )}
           </div>
@@ -488,44 +500,43 @@ export default function PublicAthleteProfile() {
             <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
               <div>
                 <h3 className="font-black text-lg text-slate-900">{modalMode === 'pitch' ? `Message ${athlete.first_name}` : `Connect with ${athlete.first_name}`}</h3>
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">{modalMode === 'pitch' ? 'College Coach Pitch' : 'Connection Request'}</p>
+                <p className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider">{modalMode === 'pitch' ? 'College Coach Pitch' : 'Connection Request'}</p>
               </div>
               <button onClick={() => setIsMessageModalOpen(false)} className="p-2 hover:bg-slate-200 rounded-full transition-colors"><X className="w-5 h-5 text-slate-500" /></button>
             </div>
             {sendSuccess ? (
               <div className="p-12 flex flex-col items-center justify-center text-center">
                 <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4"><CheckCircle2 className="w-8 h-8 text-green-600" /></div>
-                <h4 className="text-2xl font-black text-slate-900 mb-2">Sent!</h4>
-                <p className="text-slate-500 font-medium">Your message has been securely delivered to their dashboard.</p>
+                <h4 className="text-xl sm:text-2xl font-black text-slate-900 mb-2">Sent!</h4>
+                <p className="text-sm sm:text-base text-slate-500 font-medium">Your message has been securely delivered to their dashboard.</p>
               </div>
             ) : (
-              <form onSubmit={handleSendMessage} className="p-6 space-y-5 relative">
+              <form onSubmit={handleSendMessage} className="p-4 sm:p-6 space-y-4 sm:space-y-5 relative">
                 
                 <p className="text-[10px] font-black text-amber-500 bg-amber-50 rounded-lg px-3 py-2 text-center uppercase tracking-widest border border-amber-200 flex items-center justify-center gap-1.5 mb-2">
-                  <Clock className="w-3.5 h-3.5" /> Daily Limit: 10 Pitches/Requests
+                  <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" /> <span className="truncate">Daily Limit: 10 Pitches/Requests</span>
                 </p>
 
-                {/* VISUAL "SENDING AS" CARD */}
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex items-center justify-between shadow-sm">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-white border border-slate-200 rounded-full flex items-center justify-center shrink-0 shadow-sm">
-                      {viewerRole === 'coach' ? <School className="w-5 h-5 text-blue-600" /> : <UserCircle2 className="w-5 h-5 text-blue-600" />}
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 sm:p-4 flex items-center justify-between shadow-sm">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-8 h-8 sm:w-10 sm:h-10 bg-white border border-slate-200 rounded-full flex items-center justify-center shrink-0 shadow-sm">
+                      {viewerRole === 'coach' ? <School className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" /> : <UserCircle2 className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />}
                     </div>
-                    <div>
-                      <p className="text-sm font-black text-slate-900">{senderName}</p>
-                      <p className="text-xs font-bold text-slate-500 truncate max-w-[200px]">{senderSchool} • {senderEmail}</p>
+                    <div className="min-w-0">
+                      <p className="text-xs sm:text-sm font-black text-slate-900 truncate">{senderName}</p>
+                      <p className="text-[10px] sm:text-xs font-bold text-slate-500 truncate">{senderSchool} • {senderEmail}</p>
                     </div>
                   </div>
-                  <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0" />
+                  <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5 text-green-500 shrink-0 ml-2" />
                 </div>
 
                 <div className="space-y-1.5 mt-2">
-                  <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Message</label>
-                  <textarea required value={messageContent} onChange={(e) => setMessageContent(e.target.value)} rows={5} className="w-full border border-slate-200 rounded-xl px-4 py-3 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 font-medium resize-none" placeholder={modalMode === 'pitch' ? `Hi ${athlete.first_name}...` : `Hey ${athlete.first_name}...`}></textarea>
+                  <label className="text-[10px] sm:text-xs font-bold text-slate-600 uppercase tracking-wider">Message</label>
+                  <textarea required value={messageContent} onChange={(e) => setMessageContent(e.target.value)} rows={4} className="w-full text-sm sm:text-base border border-slate-200 rounded-xl px-4 py-3 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 font-medium resize-none" placeholder={modalMode === 'pitch' ? `Hi ${athlete.first_name}...` : `Hey ${athlete.first_name}...`}></textarea>
                 </div>
 
-                <button type="submit" disabled={isSending} className={`w-full text-white font-black py-4 rounded-xl shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 ${modalMode === 'pitch' ? 'bg-slate-900 hover:bg-slate-800' : 'bg-blue-600 hover:bg-blue-500'}`}>
-                  {isSending ? 'Sending...' : <><Send className="w-5 h-5" /> Send Message</>}
+                <button type="submit" disabled={isSending} className={`w-full text-white font-black py-3 sm:py-4 rounded-xl shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 text-sm sm:text-base ${modalMode === 'pitch' ? 'bg-slate-900 hover:bg-slate-800' : 'bg-blue-600 hover:bg-blue-500'}`}>
+                  {isSending ? 'Sending...' : <><Send className="w-4 h-4 sm:w-5 sm:h-5" /> Send Message</>}
                 </button>
               </form>
             )}
