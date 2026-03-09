@@ -5,7 +5,10 @@ import { createClient } from '@/utils/supabase/client';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter, usePathname } from 'next/navigation';
-import { Activity, Mail, Search, LogOut, LayoutDashboard, User, School, Trophy, Globe, Medal, Menu, X } from 'lucide-react'; 
+import { Activity, Mail, Search, LogOut, LayoutDashboard, User, School, Trophy, Globe, Medal, Menu, X, ShoppingCart, Target } from 'lucide-react'; 
+
+// 🚨 IMPORTED CHASEDCASH COMPONENT
+import { ChasedCash } from '@/components/ChasedCash';
 
 export default function Navbar() {
   const supabase = createClient();
@@ -15,6 +18,10 @@ export default function Navbar() {
   const [session, setSession] = useState<any>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
+  
+  // --- ECONOMY STATE ---
+  const [coins, setCoins] = useState(0);
+  const [isAthlete, setIsAthlete] = useState(false);
   
   // --- UI STATE ---
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false); 
@@ -72,15 +79,56 @@ export default function Navbar() {
     return () => clearTimeout(delayDebounceFn);
   }, [searchQuery, supabase]);
 
-  // Check auth and load avatar/messages
+  // Check auth and load avatar/messages/coins
   useEffect(() => {
+    let coinSubscription: any = null; // 🚨 Define subscription variable outside so we can clean it up
+
     async function loadNavData() {
       const { data: { session } } = await supabase.auth.getSession();
       setSession(session);
 
       if (session) {
-        const { data: profile } = await supabase.from('athletes').select('avatar_url').eq('id', session.user.id).single();
-        if (profile) setAvatarUrl(profile.avatar_url);
+        // Smart fetch to determine if user is athlete or coach
+        const { data: athleteProfile } = await supabase
+          .from('athletes')
+          .select('avatar_url, coins')
+          .eq('id', session.user.id)
+          .maybeSingle();
+
+        if (athleteProfile) {
+          setIsAthlete(true);
+          setAvatarUrl(athleteProfile.avatar_url);
+          setCoins(athleteProfile.coins || 0);
+
+          // 🚨 INSTANT REALTIME COIN UPDATES
+          // This listens to the specific athlete's row in the DB.
+          // If coins go up (bounty claim) or down (shop purchase), it updates instantly.
+          coinSubscription = supabase
+            .channel('public:athletes:coins')
+            .on('postgres_changes', { 
+                event: 'UPDATE', 
+                schema: 'public', 
+                table: 'athletes',
+                filter: `id=eq.${session.user.id}`
+            }, (payload) => {
+                if (payload.new && typeof payload.new.coins === 'number') {
+                    setCoins(payload.new.coins);
+                }
+            })
+            .subscribe();
+
+        } else {
+          // If not an athlete, check if they are a coach
+          const { data: coachProfile } = await supabase
+            .from('coaches')
+            .select('avatar_url')
+            .eq('id', session.user.id)
+            .maybeSingle();
+            
+          if (coachProfile) {
+            setAvatarUrl(coachProfile.avatar_url);
+          }
+        }
 
         // "Smart" Unread Counter
         const { data: messageData } = await supabase
@@ -107,7 +155,12 @@ export default function Navbar() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') loadNavData();
     });
-    return () => subscription.unsubscribe();
+
+    // 🚨 Cleanup function to prevent memory leaks when component unmounts
+    return () => {
+        subscription.unsubscribe();
+        if (coinSubscription) supabase.removeChannel(coinSubscription);
+    };
   }, [pathname, supabase]);
 
   const handleSignOut = async () => {
@@ -124,6 +177,13 @@ export default function Navbar() {
   };
 
   if (pathname === '/login') return null;
+
+  const CoinBadge = () => (
+    <div className="flex items-center gap-2 bg-emerald-50/80 border border-emerald-200/60 px-3 py-1.5 rounded-xl shadow-sm cursor-pointer hover:bg-emerald-100 transition-colors group" title={`${coins} ChasedCash`}>
+      <ChasedCash className="w-7 h-5 group-hover:scale-105 transition-transform" />
+      <span className="font-black text-emerald-800 text-sm tracking-tight">{coins}</span>
+    </div>
+  );
 
   return (
     <>
@@ -183,8 +243,12 @@ export default function Navbar() {
           {/* DESKTOP NAVIGATION (Hidden on mobile) */}
           <div className="hidden md:flex items-center space-x-6 shrink-0">
             <Link href="/feed" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors flex items-center"><Globe className="w-4 h-4 mr-1.5" /> Feed</Link>
-            <Link href="/leaderboard" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors flex items-center"><Trophy className="w-4 h-4 mr-1.5" /> Leaderboards</Link>
-            <Link href="/search" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors flex items-center"><School className="w-4 h-4 mr-1.5" /> College Finder</Link>
+            
+            {/* 🚨 NEW COMPETE LINK */}
+            <Link href="/compete" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors flex items-center"><Target className="w-4 h-4 mr-1.5" /> Compete</Link>
+            
+            <Link href="/leaderboard" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors flex items-center"><Trophy className="w-4 h-4 mr-1.5" /> Ranks</Link>
+            <Link href="/search" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors flex items-center"><School className="w-4 h-4 mr-1.5" /> Colleges</Link>
 
             {session ? (
               <>
@@ -193,6 +257,14 @@ export default function Navbar() {
                   <Mail className="w-4 h-4 mr-1.5" /> <span>Inbox</span>
                   {unreadCount > 0 && <span className="absolute -top-2.5 -right-3.5 bg-red-500 text-white text-[10px] leading-none font-black min-w-[18px] h-[18px] flex items-center justify-center rounded-full border-2 border-white shadow-sm px-1">{unreadCount}</span>}
                 </Link>
+                
+                {/* 🪙 COIN BADGE & NEW SHOP LINK (Athletes Only) */}
+                {isAthlete && (
+                  <Link href="/shop" className="flex items-center gap-1 hover:-translate-y-0.5 transition-transform">
+                    <ShoppingCart className="w-5 h-5 text-blue-600" />
+                    <CoinBadge />
+                  </Link>
+                )}
                 
                 {/* UPGRADED: ONE-CLICK LOGOUT AVATAR */}
                 <button 
@@ -213,6 +285,13 @@ export default function Navbar() {
 
           {/* MOBILE HAMBURGER BUTTON */}
           <div className="flex items-center gap-4 md:hidden">
+            {/* 🪙 MOBILE COIN BADGE & SHOP LINK */}
+            {session && isAthlete && (
+              <Link href="/shop" className="flex items-center">
+                <CoinBadge />
+              </Link>
+            )}
+
             {/* Quick Inbox icon for mobile if logged in */}
             {session && (
                <Link href="/dashboard/messages" className="relative p-2 text-slate-500 hover:text-blue-600 transition-colors" onClick={closeMobileMenu}>
@@ -268,6 +347,10 @@ export default function Navbar() {
             {/* MOBILE MENU LINKS */}
             <div className="flex flex-col gap-2">
               <Link href="/feed" onClick={closeMobileMenu} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-50 text-slate-700 font-bold text-lg transition-colors"><Globe className="w-6 h-6 text-blue-500" /> The Feed</Link>
+              
+              {/* 🚨 NEW COMPETE LINK MOBILE */}
+              <Link href="/compete" onClick={closeMobileMenu} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-50 text-slate-700 font-bold text-lg transition-colors"><Target className="w-6 h-6 text-blue-500" /> Compete</Link>
+
               <Link href="/leaderboard" onClick={closeMobileMenu} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-50 text-slate-700 font-bold text-lg transition-colors"><Trophy className="w-6 h-6 text-blue-500" /> Leaderboards</Link>
               <Link href="/search" onClick={closeMobileMenu} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-50 text-slate-700 font-bold text-lg transition-colors"><School className="w-6 h-6 text-blue-500" /> College Finder</Link>
               
@@ -275,6 +358,12 @@ export default function Navbar() {
                 <>
                   <div className="h-px bg-slate-100 my-2"></div>
                   <Link href="/dashboard" onClick={closeMobileMenu} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-50 text-slate-700 font-bold text-lg transition-colors"><LayoutDashboard className="w-6 h-6 text-purple-500" /> Dashboard</Link>
+                  {/* NEW MOBILE SHOP LINK */}
+                  {isAthlete && (
+                    <Link href="/shop" onClick={closeMobileMenu} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-50 text-slate-700 font-bold text-lg transition-colors">
+                      <ShoppingCart className="w-6 h-6 text-blue-600" /> The Shop
+                    </Link>
+                  )}
                   <Link href="/dashboard/messages" onClick={closeMobileMenu} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-50 text-slate-700 font-bold text-lg transition-colors"><Mail className="w-6 h-6 text-purple-500" /> Inbox {unreadCount > 0 && <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full ml-auto">{unreadCount} new</span>}</Link>
                   <button onClick={handleSignOut} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-red-50 text-red-600 font-bold text-lg transition-colors text-left w-full"><LogOut className="w-6 h-6" /> Log Out</button>
                 </>

@@ -3,14 +3,56 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
-import { Activity, ShieldCheck, Link as LinkIcon, Trophy, LogOut, Medal, Timer, TrendingUp, CheckCircle2, Search, AlertCircle, Zap, Calendar, MapPin, Camera, Mail, RefreshCw, School, Lock, AlertTriangle, ExternalLink, ChevronRight, Check, Clock, Edit2, MousePointer2, Flame, Bookmark, Share2, Instagram } from 'lucide-react';
+import { Activity, ShieldCheck, Link as LinkIcon, Trophy, LogOut, Medal, Timer, TrendingUp, CheckCircle2, Search, AlertCircle, Zap, Calendar, MapPin, Camera, Mail, RefreshCw, School, Lock, AlertTriangle, ExternalLink, ChevronRight, Check, Clock, Edit2, MousePointer2, Flame, Bookmark, Share2, Instagram, X, Users, Gift, Paintbrush } from 'lucide-react';
 import Link from 'next/link';
 import imageCompression from 'browser-image-compression';
 
-interface AthleteProfile { id: string; first_name: string | null; last_name: string | null; grad_year: number | null; high_school: string | null; state: string | null; school_size: string | null; conference: string | null; primary_sport: string; athletic_net_url: string | null; trust_level: number; gender: string | null; prs: { event: string; mark: string; date?: string; meet?: string; tier?: { name: string; classes: string }; globalRank?: number }[] | null; avatar_url: string | null; equipped_border: string | null; }
+// 🚨 IMPORTED REUSABLE BORDER COMPONENT
+import { AvatarWithBorder } from '@/components/AnimatedBorders'; 
+
+interface AthleteProfile { 
+  id: string; 
+  first_name: string | null; 
+  last_name: string | null; 
+  grad_year: number | null; 
+  high_school: string | null; 
+  state: string | null; 
+  school_size: string | null; 
+  conference: string | null; 
+  primary_sport: string; 
+  athletic_net_url: string | null; 
+  trust_level: number; 
+  gender: string | null; 
+  prs: { event: string; mark: string; date?: string; meet?: string; tier?: { name: string; classes: string }; globalRank?: number }[] | null; 
+  avatar_url: string | null; 
+  equipped_border: string | null; 
+  equipped_title: string | null; 
+  current_login_streak: number; 
+  last_login_date: string | null; 
+  meet_history: string[] | null; 
+  current_pr_streak: number; 
+  highest_pr_streak: number; 
+  base_prs: any[] | null; 
+  referred_by: string | null; 
+  verified_referrals: number; 
+  created_at: string | null; 
+  unlocked_borders: string[] | null;
+}
+
 interface CoachProfile { id: string; first_name: string | null; last_name: string | null; school_name: string | null; coach_type: string; avatar_url: string | null; }
 
 const FIELD_EVENTS = ['Shot Put', 'Discus', 'Javelin', 'Hammer', 'High Jump', 'Pole Vault', 'Long Jump', 'Triple Jump'];
+
+// --- EARNED TITLES INVENTORY ---
+const EARNED_TITLES = [
+  { id: 'legend', name: 'Legend', reqPercentile: 0.01, badgeClass: 'legend-badge', unlockText: 'Reach Top 1%' },
+  { id: 'champion', name: 'Champion', reqPercentile: 0.05, badgeClass: 'champion-badge', unlockText: 'Reach Top 5%' },
+  { id: 'elite', name: 'Elite', reqPercentile: 0.15, badgeClass: 'elite-badge', unlockText: 'Reach Top 15%' },
+  { id: 'master', name: 'Master', reqPercentile: 0.30, badgeClass: 'bg-blue-100 text-blue-800 border border-blue-300', unlockText: 'Reach Top 30%' },
+  { id: 'contender', name: 'Contender', reqPercentile: 0.50, badgeClass: 'bg-emerald-100 text-emerald-800 border border-emerald-300', unlockText: 'Reach Top 50%' },
+  { id: 'challenger', name: 'Challenger', reqPercentile: 0.75, badgeClass: 'bg-orange-100 text-orange-800 border border-orange-300', unlockText: 'Reach Top 75%' },
+  { id: 'prospect', name: 'Prospect', reqPercentile: 1.0, badgeClass: 'bg-slate-100 text-slate-600 border border-slate-300', unlockText: 'Standard Rank' },
+];
 
 export default function DashboardPage() {
   const supabase = createClient();
@@ -31,8 +73,12 @@ export default function DashboardPage() {
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false); 
   const [unreadCount, setUnreadCount] = useState(0);
   const [highestPercentile, setHighestPercentile] = useState<number>(1.0);
+  
+  // EQUIP STATES
+  const [equippedTitle, setEquippedTitle] = useState<string>('prospect');
   const [equippedBorder, setEquippedBorder] = useState<string>('none');
   const [isEquipping, setIsEquipping] = useState(false);
+  
   const [canSync, setCanSync] = useState(true);
   const [syncTimeLeft, setSyncTimeLeft] = useState('');
   
@@ -42,8 +88,18 @@ export default function DashboardPage() {
   // 🎯 SAVED COLLEGES STATE
   const [savedColleges, setSavedColleges] = useState<any[]>([]);
 
-  // 📱 SHARE STATE
+  // 📱 REFERRAL STATES
   const [isCopied, setIsCopied] = useState(false);
+  const [inviteCodeInput, setInviteCodeInput] = useState('');
+  const [isSubmittingCode, setIsSubmittingCode] = useState(false);
+  const [daysSinceJoin, setDaysSinceJoin] = useState(0);
+
+  const [toast, setToast] = useState<{ message: string; type: 'error' | 'success' } | null>(null);
+
+  const showToast = (message: string, type: 'error' | 'success' = 'error') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  };
 
   const parseMarkForSorting = (mark: string, event: string): number => {
     const cleanMark = mark.replace(/[a-zA-Z]/g, '').trim();
@@ -95,7 +151,6 @@ export default function DashboardPage() {
         setUnreadCount(realUnreadCount);
       }
 
-      // 🚨 CRITICAL FIX: We use universities(*) to guarantee it never crashes on missing columns!
       try {
         const { data: savedCollegesData, error: scError } = await supabase
           .from('saved_colleges')
@@ -119,45 +174,48 @@ export default function DashboardPage() {
       
       if (aData) {
         setUserRole('athlete');
+        setEquippedTitle(aData.equipped_title || 'prospect');
         setEquippedBorder(aData.equipped_border || 'none');
         
-        const today = new Date().toLocaleDateString('en-CA');
-        const storageKey = `cs_streak_${aData.id}`;
-        const storedStreak = localStorage.getItem(storageKey);
+        // 🚨 CALCULATE DAYS SINCE JOIN FOR REFERRAL WINDOW
+        if (aData.created_at) {
+          const joinDate = new Date(aData.created_at);
+          const today = new Date();
+          const diffTime = Math.abs(today.getTime() - joinDate.getTime());
+          setDaysSinceJoin(Math.floor(diffTime / (1000 * 60 * 60 * 24)));
+        }
+        
+        const todayStr = new Date().toLocaleDateString('en-CA');
+        let currentStreak = aData.current_login_streak || 0;
+        const lastLoginStr = aData.last_login_date;
 
-        if (storedStreak) {
-          try {
-            const parsed = JSON.parse(storedStreak);
-            if (parsed.lastDate === today) {
-              setStreak(parsed.count);
-            } else {
-              const lastDate = new Date(parsed.lastDate);
-              const currentDate = new Date(today);
-              const diffTime = Math.abs(currentDate.getTime() - lastDate.getTime());
-              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-              if (diffDays === 1) {
-                const newStreak = parsed.count + 1;
-                setStreak(newStreak);
-                localStorage.setItem(storageKey, JSON.stringify({ count: newStreak, lastDate: today }));
-              } else {
-                setStreak(1);
-                localStorage.setItem(storageKey, JSON.stringify({ count: 1, lastDate: today }));
-              }
-            }
-          } catch (e) {
-            setStreak(1);
-            localStorage.setItem(storageKey, JSON.stringify({ count: 1, lastDate: today }));
-          }
+        if (lastLoginStr === todayStr) {
+          setStreak(currentStreak);
         } else {
-          setStreak(1);
-          localStorage.setItem(storageKey, JSON.stringify({ count: 1, lastDate: today }));
+          let newStreak = 1; 
+          if (lastLoginStr) {
+            const lastDate = new Date(lastLoginStr);
+            const currentDate = new Date(todayStr);
+            const diffTime = Math.abs(currentDate.getTime() - lastDate.getTime());
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+            if (diffDays === 1) {
+              newStreak = currentStreak + 1;
+            }
+          }
+
+          setStreak(newStreak);
+          await supabase.from('athletes').update({ 
+            current_login_streak: newStreak, 
+            last_login_date: todayStr 
+          }).eq('id', aData.id);
+          
+          giveDailyReward(aData.id, aData.coins || 0);
         }
 
         let bestPercentileFound = 1.0;
 
         if (aData.prs && aData.prs.length > 0) {
-          
           const { data: verifiedAthletes } = await supabase
             .from('athletes')
             .select('prs')
@@ -166,7 +224,6 @@ export default function DashboardPage() {
           
           if (verifiedAthletes) {
             let athletesPool = [...verifiedAthletes];
-
             if (aData.trust_level === 0) {
               athletesPool.push(aData);
             }
@@ -174,7 +231,6 @@ export default function DashboardPage() {
             aData.prs = aData.prs.map((myPr: any) => {
               const event = myPr.event;
               const allMarks = athletesPool.map(a => a.prs?.find((p: any) => p.event === event)?.mark).filter(Boolean);
-              
               allMarks.sort((a, b) => parseMarkForSorting(a, event) - parseMarkForSorting(b, event));
               
               const myVal = parseMarkForSorting(myPr.mark, event);
@@ -211,6 +267,16 @@ export default function DashboardPage() {
     }
     loadDashboardData();
   }, [supabase, router]);
+
+  const giveDailyReward = async (userId: string, currentCoins: number) => {
+    try {
+      const newBalance = currentCoins + 10;
+      await supabase.from('athletes').update({ coins: newBalance }).eq('id', userId);
+      showToast("You earned 10 Coins for your daily login streak!", "success");
+    } catch (e) {
+      console.log("Reward error", e);
+    }
+  };
 
   const validateAthleticUrl = (url: string) => {
     if (!url) return "Please enter a URL.";
@@ -261,6 +327,7 @@ export default function DashboardPage() {
         high_school: result.data.schoolName, 
         athletic_net_url: result.data.url, 
         prs: result.data.prs, 
+        base_prs: result.data.prs, 
         gender: result.data.gender, 
         state: result.data.state,                
         school_size: result.data.schoolSize,     
@@ -302,6 +369,31 @@ export default function DashboardPage() {
         throw new Error(verifyData.error || "Code not found on profile. Did you save it to your username?");
       }
 
+      // 🚨 REFERRAL PAYOUT LOGIC (DURING VERIFICATION) 🚨
+      if (athleteProfile.referred_by && athleteProfile.trust_level === 0) {
+        const { data: referrer } = await supabase
+          .from('athletes')
+          .select('coins, verified_referrals, unlocked_borders')
+          .eq('id', athleteProfile.referred_by)
+          .maybeSingle();
+
+        if (referrer) {
+          const newCoins = (referrer.coins || 0) + 300; 
+          const newReferralCount = (referrer.verified_referrals || 0) + 1; 
+          let newUnlocked = referrer.unlocked_borders || ['none'];
+
+          if (newReferralCount >= 5 && !newUnlocked.includes('plasma-surge')) {
+            newUnlocked = [...newUnlocked, 'plasma-surge'];
+          }
+
+          await supabase.from('athletes').update({
+            coins: newCoins,
+            verified_referrals: newReferralCount,
+            unlocked_borders: newUnlocked
+          }).eq('id', athleteProfile.referred_by);
+        }
+      }
+
       await supabase.from('athletes').update({ trust_level: 1 }).eq('id', athleteProfile.id);
       localStorage.setItem('last_sync_time', new Date().getTime().toString());
       window.location.reload();
@@ -310,6 +402,52 @@ export default function DashboardPage() {
       setErrorMessage(err.message); 
     } finally {
       setIsVerifying(false);
+    }
+  };
+
+  // 🚨 REDEEM REFERRAL CODE LOGIC 🚨
+  const handleSubmitInviteCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!athleteProfile || !inviteCodeInput.trim()) return;
+    
+    setIsSubmittingCode(true);
+    try {
+        const { data: referrer } = await supabase
+            .from('athletes')
+            .select('id, coins, verified_referrals, unlocked_borders')
+            .ilike('athletic_net_url', `%athlete/${inviteCodeInput.trim()}/%`)
+            .maybeSingle();
+
+        if (!referrer || referrer.id === athleteProfile.id) {
+            throw new Error("Invalid invite code. Make sure you typed it correctly.");
+        }
+
+        await supabase.from('athletes').update({ referred_by: referrer.id }).eq('id', athleteProfile.id);
+
+        if (athleteProfile.trust_level > 0) {
+            const newCoins = (referrer.coins || 0) + 300; 
+            const newReferralCount = (referrer.verified_referrals || 0) + 1; 
+            let newUnlocked = referrer.unlocked_borders || ['none'];
+
+            if (newReferralCount >= 5 && !newUnlocked.includes('plasma-surge')) {
+                newUnlocked = [...newUnlocked, 'plasma-surge'];
+            }
+
+            await supabase.from('athletes').update({
+                coins: newCoins,
+                verified_referrals: newReferralCount,
+                unlocked_borders: newUnlocked
+            }).eq('id', referrer.id);
+        }
+
+        setAthleteProfile({ ...athleteProfile, referred_by: referrer.id });
+        showToast("Invite code applied successfully!", "success");
+        setInviteCodeInput('');
+
+    } catch (err: any) {
+        showToast(err.message, "error");
+    } finally {
+        setIsSubmittingCode(false);
     }
   };
 
@@ -368,18 +506,23 @@ export default function DashboardPage() {
         await supabase.from('coaches').update({ avatar_url: urlWithTime }).eq('id', userId);
         setCoachProfile((prev) => prev ? { ...prev, avatar_url: urlWithTime } : null);
       }
-    } catch (error: any) { alert(`Error uploading image: ${error.message}`); } finally { setIsUploadingAvatar(false); }
+    } catch (error: any) { 
+      showToast(`Error uploading image: ${error.message}`); 
+    } finally { 
+      setIsUploadingAvatar(false); 
+    }
   };
 
-  const handleEquipBorder = async (borderId: string) => {
+  const handleEquipTitle = async (titleId: string) => {
     if (!athleteProfile) return;
     setIsEquipping(true);
     try {
-      const { error } = await supabase.from('athletes').update({ equipped_border: borderId }).eq('id', athleteProfile.id);
+      const { error } = await supabase.from('athletes').update({ equipped_title: titleId }).eq('id', athleteProfile.id);
       if (error) throw error;
-      setEquippedBorder(borderId);
+      setEquippedTitle(titleId);
+      showToast(`Successfully equipped ${titleId} title!`, 'success');
     } catch (err: any) {
-      alert(`Failed to equip border: ${err.message}`);
+      showToast(`Failed to equip title: ${err.message}`);
     } finally {
       setIsEquipping(false);
     }
@@ -406,8 +549,23 @@ export default function DashboardPage() {
         setIsCopied(true);
         setTimeout(() => setIsCopied(false), 3000);
       } catch (err) {
-        alert("Failed to copy link. Please manually copy the URL.");
+        showToast("Failed to copy link. Please manually copy the URL.");
       }
+    }
+  };
+
+  const handleShareCode = async (code: string) => {
+    const shareText = `Join me on ChasedSports! Use my invite code: ${code}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'ChasedSports Invite',
+          text: shareText,
+        });
+      } catch (err) {}
+    } else {
+      await navigator.clipboard.writeText(shareText);
+      showToast("Invite code copied to clipboard!", "success");
     }
   };
 
@@ -474,6 +632,10 @@ export default function DashboardPage() {
   const isUnverified = athleteProfile?.trust_level === 0 && !!athleteProfile?.athletic_net_url;
   const noProfileLinked = !athleteProfile?.athletic_net_url;
   const streakTheme = getStreakStyle();
+  
+  // 🚨 EXTRACT REFERRAL CODE
+  const myReferralCode = athleteProfile?.athletic_net_url?.match(/athlete\/(\d+)/i)?.[1] || null;
+  const showCodeEntry = daysSinceJoin <= 7 && !athleteProfile?.referred_by;
 
   const getTrustBadge = (level: number) => {
     switch(level) {
@@ -487,24 +649,29 @@ export default function DashboardPage() {
   const badge = getTrustBadge(athleteProfile?.trust_level || 0);
   const hasPRs = athleteProfile?.prs && athleteProfile.prs.length > 0;
 
-  const CUSTOM_BORDERS = [
-    { id: 'none', name: 'Standard Profile', reqPercentile: 1.0, badgeClass: 'bg-slate-200 border-2 border-slate-300' },
-    { id: 'border-elite', name: 'Elite Card', reqPercentile: 0.15, badgeClass: 'elite-badge', unlockText: 'Reach Top 15%' },
-    { id: 'border-champion', name: 'Champion Card', reqPercentile: 0.05, badgeClass: 'champion-badge', unlockText: 'Reach Top 5%' },
-    { id: 'border-legend', name: 'Legend Card', reqPercentile: 0.01, badgeClass: 'legend-badge', unlockText: 'Reach Top 1%' },
-  ];
+  const activeTitle = EARNED_TITLES.find(t => t.id === equippedTitle) || EARNED_TITLES[6];
 
   return (
     <main className="min-h-screen bg-[#F8FAFC] font-sans pb-32">
+      
+      {/* 🚨 TOAST NOTIFICATIONS 🚨 */}
+      {toast && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[200] animate-in slide-in-from-top-5 fade-in duration-300 w-[90%] max-w-md">
+          <div className={`rounded-2xl p-4 shadow-2xl border flex items-start gap-3 ${toast.type === 'error' ? 'bg-red-50 border-red-200 text-red-800' : 'bg-green-50 border-green-200 text-green-800'}`}>
+            {toast.type === 'error' ? <AlertCircle className="w-5 h-5 shrink-0 mt-0.5 text-red-500" /> : <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5 text-green-500" />}
+            <p className="text-sm font-bold leading-tight">{toast.message}</p>
+            <button onClick={() => setToast(null)} className="ml-auto shrink-0 opacity-50 hover:opacity-100 transition-opacity"><X className="w-4 h-4" /></button>
+          </div>
+        </div>
+      )}
+
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes liquidPan { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
         @keyframes shimmerSlow { 0% { background-position: -200% center; } 100% { background-position: 200% center; } }
+        
         .legend-badge { background: linear-gradient(90deg, #6b21a8 0%, #d946ef 20%, #6b21a8 40%, #d946ef 60%, #6b21a8 80%); background-size: 200% auto; animation: shimmerSlow 4s linear infinite; color: white; border: 1px solid #e879f9; box-shadow: 0 0 15px rgba(217, 70, 239, 0.5); font-weight: 900; }
-        .border-legend { background: linear-gradient(135deg, #7e22ce, #d946ef, #a21caf, #7e22ce); background-size: 300% 300%; animation: liquidPan 8s ease-in-out infinite; padding: 4px; border-radius: 50%; box-shadow: 0 0 20px rgba(217, 70, 239, 0.5); }
         .champion-badge { background: linear-gradient(90deg, #991b1b 0%, #ef4444 20%, #991b1b 40%, #ef4444 60%, #991b1b 80%); background-size: 200% auto; animation: shimmerSlow 4s linear infinite; color: white; border: 1px solid #f87171; box-shadow: 0 0 15px rgba(239, 68, 68, 0.5); font-weight: 900; }
-        .border-champion { background: linear-gradient(135deg, #b91c1c, #ef4444, #dc2626, #b91c1c); background-size: 300% 300%; animation: liquidPan 8s ease-in-out infinite; padding: 4px; border-radius: 50%; box-shadow: 0 0 20px rgba(239, 68, 68, 0.5); }
         .elite-badge { background: linear-gradient(90deg, #0f172a 0%, #475569 20%, #0f172a 40%, #475569 60%, #0f172a 80%); background-size: 200% auto; animation: shimmerSlow 4s linear infinite; color: white; border: 1px solid #94a3b8; box-shadow: 0 0 15px rgba(148, 163, 184, 0.3); font-weight: 900; }
-        .border-elite { background: linear-gradient(135deg, #1e293b, #64748b, #475569, #1e293b); background-size: 300% 300%; animation: liquidPan 8s ease-in-out infinite; padding: 4px; border-radius: 50%; box-shadow: 0 0 20px rgba(148, 163, 184, 0.4); }
       `}} />
 
       <div className="max-w-7xl mx-auto px-6 pt-10">
@@ -634,17 +801,19 @@ export default function DashboardPage() {
         {athleteProfile && (
           <div className={`grid grid-cols-1 lg:grid-cols-3 gap-8 ${isUnverified ? 'opacity-80 grayscale-[20%]' : ''}`}>
             
+            {/* LEFT COLUMN: PROFILE CARD */}
             <div className="lg:col-span-1 space-y-6">
               <div className="bg-white rounded-[2rem] p-8 border border-slate-200 shadow-sm relative">
                 
                 <div className="relative w-28 h-28 mb-6 group mx-auto md:mx-0">
-                  <div className={`${equippedBorder !== 'none' ? equippedBorder : 'border-4 border-slate-200'} w-full h-full rounded-full transition-all duration-300`}>
-                    <div className={`w-full h-full rounded-full overflow-hidden bg-slate-100 flex items-center justify-center shadow-inner ${isUploadingAvatar ? 'animate-pulse' : ''}`}>
-                      {athleteProfile.avatar_url ? <img src={athleteProfile.avatar_url} alt="Profile" className="w-full h-full object-cover" /> : <Medal className="w-10 h-10 text-slate-400" />}
-                    </div>
-                  </div>
+                  <AvatarWithBorder 
+                      avatarUrl={athleteProfile.avatar_url} 
+                      borderId={equippedBorder} 
+                      sizeClasses="w-28 h-28"
+                  />
+
                   {!isUnverified && (
-                    <label className="absolute inset-0 bg-black/40 rounded-full flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                    <label className="absolute inset-0 bg-black/40 rounded-full flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer z-30">
                       <Camera className="w-6 h-6 text-white mb-1" />
                       <span className="text-[10px] text-white font-bold uppercase tracking-wider">Upload</span>
                       <input type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} disabled={isUploadingAvatar} />
@@ -657,9 +826,15 @@ export default function DashboardPage() {
                   {streak > 0 && (
                     <div className={`flex items-center px-2.5 py-1 rounded-lg border text-[10px] font-black tracking-widest uppercase ${streakTheme.bg}`}>
                       <Flame className={`w-3.5 h-3.5 mr-1 ${streakTheme.icon}`} />
-                      <span className={streakTheme.text}>{streak} Day Streak</span>
+                      <span className={streakTheme.text}>{streak} Day Login Streak</span>
                     </div>
                   )}
+                </div>
+
+                <div className="mb-4">
+                  <span className={`inline-block px-3 py-1 rounded-lg text-[10px] font-black tracking-widest uppercase text-white ${activeTitle.badgeClass}`}>
+                    {activeTitle.name} Rank
+                  </span>
                 </div>
                 
                 <p className="text-slate-500 font-medium leading-relaxed mb-6">
@@ -685,48 +860,34 @@ export default function DashboardPage() {
                     <span className="text-sm font-bold text-slate-700">{athleteProfile.gender || 'Boys'}</span>
                   </div>
                 </div>
-
-                <div className="border-t border-slate-100 pt-6 mt-6">
-                  <button 
-                    onClick={handleShareProfile}
-                    disabled={isUnverified}
-                    className="w-full bg-gradient-to-r from-[#f9ce34] via-[#ee2a7b] to-[#6228d7] hover:opacity-90 text-white font-black py-3.5 rounded-xl flex items-center justify-center transition-opacity shadow-md disabled:opacity-50 disabled:grayscale"
-                  >
-                    {isCopied ? (
-                      <><Check className="w-5 h-5 mr-2" /> Link Copied!</>
-                    ) : (
-                      <><Instagram className="w-5 h-5 mr-2" /> Share Profile</>
-                    )}
-                  </button>
-                </div>
-
               </div>
               
+              {/* 🚨 TITLE EQUIP AREA */}
               <div className="bg-white rounded-[2rem] p-8 border border-slate-200 shadow-sm relative">
                 {isUnverified && (
                   <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px] z-20 rounded-[2rem] flex items-center justify-center flex-col text-center px-6">
                     <Lock className="w-8 h-8 text-slate-400 mb-2" />
-                    <p className="text-sm font-bold text-slate-600">Verify to unlock Locker Room</p>
+                    <p className="text-sm font-bold text-slate-600">Verify to unlock Title Management</p>
                   </div>
                 )}
                 <div className="flex items-center justify-between mb-6">
                   <div>
-                    <h3 className="text-xl font-black text-slate-900 tracking-tight">Locker Room</h3>
-                    <p className="text-xs text-slate-500 font-medium mt-1">Equip your unlocked badges.</p>
+                    <h3 className="text-xl font-black text-slate-900 tracking-tight">Rank Titles</h3>
+                    <p className="text-xs text-slate-500 font-medium mt-1">Equip your highest earned rank.</p>
                   </div>
                   <Trophy className="w-6 h-6 text-slate-300" />
                 </div>
 
-                <div className="space-y-3">
-                  {CUSTOM_BORDERS.map((border) => {
-                    const isUnlocked = highestPercentile <= border.reqPercentile;
-                    const isEquipped = equippedBorder === border.id;
+                <div className="space-y-3 mb-6">
+                  {EARNED_TITLES.map((title) => {
+                    const isUnlocked = highestPercentile <= title.reqPercentile;
+                    const isEquipped = equippedTitle === title.id;
 
                     return (
                       <button 
-                        key={border.id}
+                        key={title.id}
                         disabled={!isUnlocked || isEquipping || isUnverified}
-                        onClick={() => handleEquipBorder(border.id)}
+                        onClick={() => handleEquipTitle(title.id)}
                         className={`w-full flex items-center justify-between p-3.5 rounded-2xl border transition-all text-left ${
                           isEquipped 
                             ? 'bg-blue-50 border-blue-300 shadow-sm' 
@@ -736,19 +897,13 @@ export default function DashboardPage() {
                         }`}
                       >
                         <div className="flex items-center gap-4">
-                          <div className={`w-10 h-12 rounded-t-md rounded-b-xl flex items-center justify-center shrink-0 overflow-hidden relative shadow-md ${isUnlocked && border.id !== 'none' ? border.badgeClass : 'bg-slate-200 border-2 border-slate-300'}`}>
-                            {isUnlocked && border.id !== 'none' && (
-                              <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-white/30 mix-blend-overlay"></div>
-                            )}
-                            {border.id === 'border-legend' && isUnlocked && <Trophy className="w-4 h-4 text-white drop-shadow-md relative z-10" />}
-                            {border.id === 'border-champion' && isUnlocked && <Medal className="w-4 h-4 text-white drop-shadow-md relative z-10" />}
-                            {border.id === 'border-elite' && isUnlocked && <Activity className="w-4 h-4 text-white drop-shadow-md relative z-10" />}
+                          <div className={`px-3 py-1.5 rounded-lg text-[10px] font-black tracking-widest uppercase text-white ${isUnlocked ? title.badgeClass : 'bg-slate-200 text-slate-400 border border-slate-300'}`}>
+                            {title.name}
                           </div>
 
                           <div>
-                            <span className={`block font-bold ${isEquipped ? 'text-blue-900' : 'text-slate-700'}`}>{border.name}</span>
-                            {!isUnlocked && <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5"><Lock className="w-3 h-3 inline mr-1 -mt-0.5" />{border.unlockText}</span>}
-                            {isUnlocked && !isEquipped && <span className="block text-[10px] font-bold text-emerald-500 uppercase tracking-wider mt-0.5">Unlocked</span>}
+                            {!isUnlocked && <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider"><Lock className="w-3 h-3 inline mr-1 -mt-0.5" />{title.unlockText}</span>}
+                            {isUnlocked && !isEquipped && <span className="block text-[10px] font-bold text-emerald-500 uppercase tracking-wider">Unlocked</span>}
                           </div>
                         </div>
                         {isEquipped && <CheckCircle2 className="w-5 h-5 text-blue-500" />}
@@ -756,10 +911,17 @@ export default function DashboardPage() {
                     )
                   })}
                 </div>
+
+                {/* 🚨 CUSTOMIZE PROFILE BUTTON */}
+                <Link href="/dashboard/customize" className={`w-full flex items-center justify-center py-4 rounded-xl font-black transition-all ${isUnverified ? 'bg-slate-100 text-slate-400 pointer-events-none' : 'bg-slate-900 text-white hover:bg-slate-800 hover:-translate-y-0.5 shadow-md'}`}>
+                  <Paintbrush className="w-5 h-5 mr-2" /> Customize Profile
+                </Link>
               </div>
             </div>
 
+            {/* RIGHT COLUMN */}
             <div className="lg:col-span-2 space-y-6">
+              
               <div className="bg-gradient-to-r from-purple-900 to-indigo-900 rounded-[2rem] p-8 border border-purple-700 shadow-xl relative overflow-hidden flex flex-col sm:flex-row items-center justify-between gap-6">
                 {isUnverified && (
                   <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-[2px] z-20 flex items-center justify-center flex-col text-center px-6">
@@ -808,7 +970,6 @@ export default function DashboardPage() {
                   </div>
                 </div>
                 
-                {/* 🚨 PROPER RENDERING LOGIC FOR SAVED COLLEGES */}
                 {savedColleges && savedColleges.length > 0 ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {savedColleges.map((saved) => {
@@ -896,7 +1057,7 @@ export default function DashboardPage() {
                               {pr.tier ? (
                                 <div className="flex items-center gap-2 mt-0.5">
                                   <span className="text-sm font-black text-slate-400 group-hover:text-blue-500 transition-colors">#{pr.globalRank}</span>
-                                  <span className={`px-3 py-1 rounded-lg text-[10px] font-black tracking-widest uppercase ${pr.tier.classes}`}>
+                                  <span className={`px-3 py-1 rounded-lg text-[10px] font-black tracking-widest uppercase text-white ${pr.tier.classes}`}>
                                     {pr.tier.name}
                                   </span>
                                 </div>
@@ -922,6 +1083,96 @@ export default function DashboardPage() {
                 )}
               </div>
             </div>
+            
+            {/* 🚀 REFERRAL PROGRAM (ANCHORED TO FULL BOTTOM ROW) */}
+            <div className="lg:col-span-3 mt-4">
+              <div className="bg-slate-900 rounded-[2rem] p-8 md:p-12 border border-slate-800 shadow-xl relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 blur-[80px] rounded-full pointer-events-none"></div>
+                
+                <div className="flex flex-col md:flex-row items-start justify-between gap-12 relative z-10">
+                  <div className="flex-1 w-full">
+                    <h3 className="text-3xl font-black text-white tracking-tight mb-3 flex items-center gap-3">
+                      <Users className="w-8 h-8 text-emerald-400" /> Invite & Earn
+                    </h3>
+                    <p className="text-slate-300 font-medium text-lg mb-6 leading-relaxed max-w-xl">
+                      Get <strong className="text-emerald-400">300 ChasedCash</strong> for every teammate that uses your unique code. If you invite 5 verified athletes, you unlock an exclusive border!
+                    </p>
+                    
+                    {/* The Code Display */}
+                    {!myReferralCode ? (
+                      <div className="bg-slate-800 border border-slate-700 text-slate-400 p-4 rounded-xl text-sm font-bold inline-block">
+                        Sync your Athletic.net profile above to generate your unique invite code!
+                      </div>
+                    ) : (
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                        <div className="bg-slate-950 px-6 py-3 rounded-xl border border-emerald-500/30 flex items-center gap-4 shadow-inner">
+                          <span className="text-[10px] text-slate-500 uppercase tracking-widest font-black">Your Code:</span>
+                          <span className="text-2xl font-mono font-black tracking-widest text-emerald-400">{myReferralCode}</span>
+                        </div>
+                        <button 
+                          onClick={() => handleShareCode(myReferralCode)}
+                          className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-6 py-3.5 rounded-xl font-black transition-colors flex items-center gap-2"
+                        >
+                          <Share2 className="w-5 h-5" /> Share Code
+                        </button>
+                      </div>
+                    )}
+
+                    {/* REDEEM ENTRY (Only visible for first 7 days if they haven't used one yet) */}
+                    {showCodeEntry && (
+                      <div className="mt-8 bg-slate-800/50 p-6 rounded-2xl border border-slate-700 max-w-md">
+                        <h4 className="text-white font-bold mb-2 flex items-center gap-2">
+                          <Gift className="w-5 h-5 text-fuchsia-400" /> Were you invited?
+                        </h4>
+                        <p className="text-xs text-slate-400 mb-4">Enter your teammate's code below to give them credit for inviting you!</p>
+                        <form onSubmit={handleSubmitInviteCode} className="flex gap-2">
+                          <input 
+                            type="text" 
+                            required
+                            placeholder="Enter Code (e.g. 123456)" 
+                            value={inviteCodeInput}
+                            onChange={(e) => setInviteCodeInput(e.target.value)}
+                            className="flex-1 bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-2 focus:outline-none focus:border-fuchsia-500 font-mono text-sm"
+                          />
+                          <button 
+                            type="submit" 
+                            disabled={isSubmittingCode}
+                            className="bg-fuchsia-600 hover:bg-fuchsia-500 text-white px-4 py-2 rounded-xl font-bold text-sm disabled:opacity-50"
+                          >
+                            {isSubmittingCode ? '...' : 'Submit'}
+                          </button>
+                        </form>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Progress to Plasma Surge Border */}
+                  <div className="w-full md:w-72 bg-slate-950/80 p-6 rounded-[2rem] border border-slate-800 text-center shrink-0 shadow-2xl">
+                    <div className="w-24 h-24 mx-auto mb-4 relative group">
+                      <AvatarWithBorder avatarUrl={null} borderId="plasma-surge" sizeClasses="w-24 h-24" />
+                      {athleteProfile?.verified_referrals! >= 5 && (
+                        <div className="absolute -bottom-2 -right-2 bg-emerald-500 text-emerald-950 p-1.5 rounded-full border-2 border-slate-900 shadow-lg">
+                          <CheckCircle2 className="w-5 h-5" />
+                        </div>
+                      )}
+                    </div>
+                    <h4 className="text-sm font-black text-white mb-1">Plasma Surge</h4>
+                    <p className="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-4">Exclusive Border</p>
+                    
+                    <div className="w-full bg-slate-800 rounded-full h-3 overflow-hidden shadow-inner mb-3 border border-slate-700">
+                      <div 
+                        className="bg-gradient-to-r from-emerald-500 to-cyan-400 h-full rounded-full transition-all"
+                        style={{ width: `${Math.min(100, ((athleteProfile?.verified_referrals || 0) / 5) * 100)}%` }}
+                      ></div>
+                    </div>
+                    <p className="text-sm font-bold text-slate-400">
+                      <span className="text-white">{athleteProfile?.verified_referrals || 0}</span> / 5 Verified Invites
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
           </div>
         )}
       </div>

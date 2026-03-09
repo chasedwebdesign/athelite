@@ -6,6 +6,9 @@ import { createClient } from '@/utils/supabase/client';
 import { Medal, CheckCircle2, MapPin, Mail, X, Send, MessageSquare, Lock, Trophy, Calendar, Share2, ArrowLeft, Activity, Globe, School, UserCircle2, Clock, Star, Instagram, Check } from 'lucide-react';
 import Link from 'next/link';
 
+// 🚨 IMPORTED REUSABLE BORDER COMPONENT
+import { AvatarWithBorder } from '@/components/AnimatedBorders'; 
+
 interface AthleteProfile {
   id: string;
   first_name: string;
@@ -18,6 +21,7 @@ interface AthleteProfile {
   prs: { event: string; mark: string; date?: string; meet?: string }[];
   avatar_url?: string;
   equipped_border?: string | null;
+  equipped_title?: string | null; // Added to fetch their equipped rank
 }
 
 interface AthletePost {
@@ -27,6 +31,17 @@ interface AthletePost {
   linked_pr_event?: string | null;
   linked_pr_mark?: string | null;
 }
+
+// --- EARNED TITLES INVENTORY ---
+const EARNED_TITLES = [
+  { id: 'legend', name: 'Legend', reqPercentile: 0.01, badgeClass: 'legend-badge', unlockText: 'Reach Top 1%' },
+  { id: 'champion', name: 'Champion', reqPercentile: 0.05, badgeClass: 'champion-badge', unlockText: 'Reach Top 5%' },
+  { id: 'elite', name: 'Elite', reqPercentile: 0.15, badgeClass: 'elite-badge', unlockText: 'Reach Top 15%' },
+  { id: 'master', name: 'Master', reqPercentile: 0.30, badgeClass: 'bg-blue-100 text-blue-800 border border-blue-300', unlockText: 'Reach Top 30%' },
+  { id: 'contender', name: 'Contender', reqPercentile: 0.50, badgeClass: 'bg-emerald-100 text-emerald-800 border border-emerald-300', unlockText: 'Reach Top 50%' },
+  { id: 'challenger', name: 'Challenger', reqPercentile: 0.75, badgeClass: 'bg-orange-100 text-orange-800 border border-orange-300', unlockText: 'Reach Top 75%' },
+  { id: 'prospect', name: 'Prospect', reqPercentile: 1.0, badgeClass: 'bg-slate-100 text-slate-600 border border-slate-300', unlockText: 'Standard Rank' },
+];
 
 export default function PublicAthleteProfile() {
   const params = useParams();
@@ -263,13 +278,6 @@ export default function PublicAthleteProfile() {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
-  const getCardGlowClass = (border?: string | null) => {
-    if (border === 'border-legend') return 'card-legend';
-    if (border === 'border-champion') return 'card-champion';
-    if (border === 'border-elite') return 'card-elite';
-    return 'border-slate-200 shadow-xl'; 
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen bg-[#F8FAFC] flex flex-col items-center justify-center">
@@ -289,24 +297,18 @@ export default function PublicAthleteProfile() {
     );
   }
 
+  // Find the equipped title for styling
+  const activeTitle = EARNED_TITLES.find(t => t.id === athlete.equipped_title) || EARNED_TITLES[6];
+
   return (
     <main className="min-h-screen bg-[#F8FAFC] font-sans pb-32">
       
-      {/* GLOBAL ANIMATION CLASSES */}
+      {/* GLOBAL BADGE ANIMATION CLASSES */}
       <style dangerouslySetInnerHTML={{__html: `
-        @keyframes liquidPan { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
-        
-        .border-legend { background: linear-gradient(135deg, #7e22ce, #d946ef, #a21caf, #7e22ce); background-size: 300% 300%; animation: liquidPan 8s ease-in-out infinite; padding: 4px; border-radius: 50%; box-shadow: 0 0 15px rgba(217, 70, 239, 0.4); }
-        @keyframes pulse-legend { 0%, 100% { box-shadow: 0 0 25px rgba(217, 70, 239, 0.2); border-color: rgba(217, 70, 239, 0.4); } 50% { box-shadow: 0 0 45px rgba(217, 70, 239, 0.4); border-color: rgba(217, 70, 239, 0.7); } }
-        .card-legend { animation: pulse-legend 4s ease-in-out infinite; }
-
-        .border-champion { background: linear-gradient(135deg, #b91c1c, #ef4444, #dc2626, #b91c1c); background-size: 300% 300%; animation: liquidPan 8s ease-in-out infinite; padding: 4px; border-radius: 50%; box-shadow: 0 0 15px rgba(239, 68, 68, 0.4); }
-        @keyframes pulse-champion { 0%, 100% { box-shadow: 0 0 25px rgba(239, 68, 68, 0.2); border-color: rgba(239, 68, 68, 0.4); } 50% { box-shadow: 0 0 45px rgba(239, 68, 68, 0.4); border-color: rgba(239, 68, 68, 0.7); } }
-        .card-champion { animation: pulse-champion 4s ease-in-out infinite; }
-
-        .border-elite { background: linear-gradient(135deg, #1e293b, #64748b, #475569, #1e293b); background-size: 300% 300%; animation: liquidPan 8s ease-in-out infinite; padding: 4px; border-radius: 50%; box-shadow: 0 0 15px rgba(148, 163, 184, 0.3); }
-        @keyframes pulse-elite { 0%, 100% { box-shadow: 0 0 25px rgba(148, 163, 184, 0.2); border-color: rgba(148, 163, 184, 0.4); } 50% { box-shadow: 0 0 45px rgba(148, 163, 184, 0.4); border-color: rgba(148, 163, 184, 0.7); } }
-        .card-elite { animation: pulse-elite 4s ease-in-out infinite; }
+        @keyframes shimmerSlow { 0% { background-position: -200% center; } 100% { background-position: 200% center; } }
+        .legend-badge { background: linear-gradient(90deg, #6b21a8 0%, #d946ef 20%, #6b21a8 40%, #d946ef 60%, #6b21a8 80%); background-size: 200% auto; animation: shimmerSlow 4s linear infinite; color: white; border: 1px solid #e879f9; box-shadow: 0 0 15px rgba(217, 70, 239, 0.5); font-weight: 900; }
+        .champion-badge { background: linear-gradient(90deg, #991b1b 0%, #ef4444 20%, #991b1b 40%, #ef4444 60%, #991b1b 80%); background-size: 200% auto; animation: shimmerSlow 4s linear infinite; color: white; border: 1px solid #f87171; box-shadow: 0 0 15px rgba(239, 68, 68, 0.5); font-weight: 900; }
+        .elite-badge { background: linear-gradient(90deg, #0f172a 0%, #475569 20%, #0f172a 40%, #475569 60%, #0f172a 80%); background-size: 200% auto; animation: shimmerSlow 4s linear infinite; color: white; border: 1px solid #94a3b8; box-shadow: 0 0 15px rgba(148, 163, 184, 0.3); font-weight: 900; }
       `}} />
 
       <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-10">
@@ -319,20 +321,17 @@ export default function PublicAthleteProfile() {
         </button>
 
         {/* HERO CARD */}
-        <div className={`bg-white rounded-[2.5rem] p-6 sm:p-8 md:p-12 border relative overflow-hidden mb-6 transition-all duration-300 ${getCardGlowClass(athlete.equipped_border)}`}>
+        <div className="bg-white rounded-[2.5rem] p-6 sm:p-8 md:p-12 border border-slate-200 shadow-xl relative overflow-hidden mb-6 transition-all duration-300">
           <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 blur-[80px] rounded-full pointer-events-none"></div>
           
           <div className="relative z-10 flex flex-col md:flex-row items-center md:items-start gap-6 md:gap-8">
             
-            <div className={`${athlete.equipped_border && athlete.equipped_border !== 'none' ? athlete.equipped_border : 'border-4 border-white shadow-lg'} rounded-full shrink-0 flex items-center justify-center`}>
-              <div className="w-28 h-28 sm:w-32 sm:h-32 md:w-40 md:h-40 bg-slate-100 rounded-full flex items-center justify-center overflow-hidden">
-                {athlete.avatar_url ? (
-                  <img src={athlete.avatar_url} alt="Profile" className="w-full h-full object-cover" />
-                ) : (
-                  <Medal className="w-12 h-12 md:w-16 md:h-16 text-slate-300" />
-                )}
-              </div>
-            </div>
+            {/* 🚨 REPLACED WITH AVATAR WITH BORDER COMPONENT */}
+            <AvatarWithBorder 
+                avatarUrl={athlete.avatar_url || null} 
+                borderId={athlete.equipped_border} 
+                sizeClasses="w-28 h-28 sm:w-32 sm:h-32 md:w-40 md:h-40"
+            />
 
             <div className="flex-1 text-center md:text-left w-full">
               <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3 mb-2 justify-center md:justify-start">
@@ -345,6 +344,13 @@ export default function PublicAthleteProfile() {
                     <span className="text-xs font-bold text-green-700 uppercase tracking-widest">Verified</span>
                   </div>
                 )}
+              </div>
+
+              {/* 🚨 DISPLAY EQUIPPED TITLE */}
+              <div className="mb-4">
+                  <span className={`inline-block px-3 py-1 rounded-lg text-[10px] font-black tracking-widest uppercase text-white ${activeTitle.badgeClass}`}>
+                    {activeTitle.name} Rank
+                  </span>
               </div>
               
               <p className="text-sm sm:text-base md:text-lg font-bold text-slate-500 mb-6 flex flex-col md:flex-row items-center gap-2 md:gap-4 justify-center md:justify-start text-balance">
@@ -415,7 +421,7 @@ export default function PublicAthleteProfile() {
           </button>
         </div>
 
-        {/* ACCOLADES (Responsive fix!) */}
+        {/* ACCOLADES */}
         {activeTab === 'accolades' && (
           <div className="animate-in fade-in duration-300">
             {athlete.prs && athlete.prs.length > 0 ? (
@@ -460,11 +466,14 @@ export default function PublicAthleteProfile() {
                 <div key={post.id} className="bg-white p-5 sm:p-6 rounded-[1.5rem] border border-slate-200 shadow-sm">
                   <div className="flex justify-between items-start mb-4">
                     <div className="flex items-center gap-3">
-                      <div className={`${athlete.equipped_border && athlete.equipped_border !== 'none' ? athlete.equipped_border : 'border border-slate-200'} rounded-full shrink-0 flex items-center justify-center`}>
-                        <div className="w-10 h-10 bg-slate-100 rounded-full overflow-hidden flex items-center justify-center">
-                          {athlete.avatar_url ? <img src={athlete.avatar_url} alt="Profile" className="w-full h-full object-cover" /> : <Medal className="w-5 h-5 text-slate-400" />}
-                        </div>
-                      </div>
+                      
+                      {/* 🚨 REPLACED FEED POST AVATAR */}
+                      <AvatarWithBorder 
+                        avatarUrl={athlete.avatar_url || null} 
+                        borderId={athlete.equipped_border} 
+                        sizeClasses="w-12 h-12"
+                      />
+                      
                       <div>
                         <h4 className="font-black text-sm sm:text-base text-slate-900 leading-tight">{athlete.first_name} {athlete.last_name}</h4>
                         <span className="text-[10px] sm:text-xs font-bold text-slate-400">{formatDate(post.created_at)}</span>

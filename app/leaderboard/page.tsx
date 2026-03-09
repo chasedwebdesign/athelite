@@ -29,7 +29,7 @@ interface Athlete {
 const FILTER_EVENTS = [
   '100 Meters', '200 Meters', '400 Meters', '800 Meters', '1500 Meters', '1600 Meters', 
   '1 Mile', '3000 Meters', '3200 Meters', '5000 Meters', '100m Hurdles', '110m Hurdles', '300m Hurdles', 
-  '400m Hurdles', 'Shot Put', 'Discus', 'Javelin', 'High Jump', 'Pole Vault', 'Long Jump', 'Triple Jump'
+  '400m Hurdles', 'Shot Put', 'Discus', 'Javelin', 'Hammer', 'High Jump', 'Pole Vault', 'Long Jump', 'Triple Jump'
 ];
 
 const FIELD_EVENTS = ['Shot Put', 'Discus', 'Javelin', 'Hammer', 'High Jump', 'Pole Vault', 'Long Jump', 'Triple Jump'];
@@ -90,10 +90,20 @@ function LeaderboardContent() {
   };
 
   const getRankedAthletes = () => {
+    // 🚨 DYNAMIC GRADUATION FILTER: Calculates if the athlete is still in high school
+    const currentYear = new Date().getFullYear();
+    const currentMonth = new Date().getMonth(); // 0 is January, 6 is July
+    // If it is past July, the current graduating class moves up a year.
+    const activeGradYearCutoff = currentMonth > 5 ? currentYear + 1 : currentYear;
+
     let globalPool = athletes.filter(a => {
       const hasEvent = a.prs?.some(pr => pr.event === selectedEvent);
       const matchesGender = (a.gender || 'Boys') === selectedGender; 
-      return hasEvent && matchesGender;
+      
+      // Keep them if they haven't graduated yet (or if their grad year is blank just in case)
+      const isActive = !a.grad_year || a.grad_year >= activeGradYearCutoff;
+
+      return hasEvent && matchesGender && isActive;
     });
 
     globalPool.forEach(a => {
@@ -120,7 +130,6 @@ function LeaderboardContent() {
       }
     });
 
-    // UPDATED: Added Card Classes to inject pulsing glows into the Leaderboard Cards!
     const globalTotal = globalPool.length;
     globalPool.forEach((athlete, index) => {
       const percentile = index / globalTotal;
@@ -186,22 +195,18 @@ function LeaderboardContent() {
   return (
     <main className="min-h-screen bg-[#0f172a] font-sans pb-32 selection:bg-blue-500/30">
       
-      {/* NEW: MESMERIZING LIQUID ANIMATIONS & CARD GLOWS */}
       <style dangerouslySetInnerHTML={{__html: `
-        /* The liquid drift animation */
         @keyframes liquidPan {
           0% { background-position: 0% 50%; }
           50% { background-position: 100% 50%; }
           100% { background-position: 0% 50%; }
         }
         
-        /* Shimmer used for badges */
         @keyframes shimmerSlow {
           0% { background-position: -200% center; }
           100% { background-position: 200% center; }
         }
 
-        /* --- LEGEND (Top 1%) --- */
         .legend-badge {
           background: linear-gradient(90deg, #6b21a8 0%, #d946ef 20%, #6b21a8 40%, #d946ef 60%, #6b21a8 80%);
           background-size: 200% auto;
@@ -227,7 +232,6 @@ function LeaderboardContent() {
           50% { box-shadow: 0 0 50px rgba(217, 70, 239, 0.3), inset 0 0 30px rgba(217, 70, 239, 0.1); border-color: rgba(217, 70, 239, 0.6); }
         }
 
-        /* --- CHAMPION (Top 5%) --- */
         .champion-badge {
           background: linear-gradient(90deg, #991b1b 0%, #ef4444 20%, #991b1b 40%, #ef4444 60%, #991b1b 80%);
           background-size: 200% auto;
@@ -253,7 +257,6 @@ function LeaderboardContent() {
           50% { box-shadow: 0 0 50px rgba(239, 68, 68, 0.3), inset 0 0 30px rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.6); }
         }
 
-        /* --- ELITE (Top 15%) --- */
         .elite-badge {
           background: linear-gradient(90deg, #0f172a 0%, #475569 20%, #0f172a 40%, #475569 60%, #0f172a 80%);
           background-size: 200% auto;
@@ -433,7 +436,6 @@ function LeaderboardContent() {
                 const podiumHeight = isFirst ? 'h-[380px]' : idx === 1 ? 'h-[320px]' : 'h-[280px]';
                 const medalColor = isFirst ? 'text-yellow-400' : idx === 1 ? 'text-slate-300' : 'text-amber-600';
                 
-                // If they don't have a special card class (like Legend/Champion), default to the generic slate border
                 const cardGlowClass = athlete.tier?.cardClass || 'border-slate-700 shadow-2xl';
 
                 return (
