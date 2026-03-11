@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
-import { Activity, ShieldCheck, Link as LinkIcon, Trophy, LogOut, Medal, Timer, TrendingUp, CheckCircle2, Search, AlertCircle, Zap, Calendar, MapPin, Camera, Mail, RefreshCw, School, Lock, AlertTriangle, ExternalLink, ChevronRight, Check, Clock, Edit2, MousePointer2, Flame, Bookmark, Share2, Instagram, X, Users, Gift, Paintbrush } from 'lucide-react';
+import { Activity, ShieldCheck, Link as LinkIcon, Trophy, LogOut, Medal, Timer, TrendingUp, CheckCircle2, Search, AlertCircle, Zap, Calendar, MapPin, Camera, Mail, RefreshCw, School, Lock, AlertTriangle, ExternalLink, ChevronRight, Check, Clock, Edit2, MousePointer2, Flame, Bookmark, Share2, Instagram, X, Users, Gift, Paintbrush, ArrowDown, HelpCircle, Globe, UserCircle2 } from 'lucide-react';
 import Link from 'next/link';
 import imageCompression from 'browser-image-compression';
 
@@ -177,7 +177,6 @@ export default function DashboardPage() {
         setEquippedTitle(aData.equipped_title || 'prospect');
         setEquippedBorder(aData.equipped_border || 'none');
         
-        // 🚨 CALCULATE DAYS SINCE JOIN FOR REFERRAL WINDOW
         if (aData.created_at) {
           const joinDate = new Date(aData.created_at);
           const today = new Date();
@@ -369,7 +368,6 @@ export default function DashboardPage() {
         throw new Error(verifyData.error || "Code not found on profile. Did you save it to your username?");
       }
 
-      // 🚨 REFERRAL PAYOUT LOGIC (DURING VERIFICATION) 🚨
       if (athleteProfile.referred_by && athleteProfile.trust_level === 0) {
         const { data: referrer } = await supabase
           .from('athletes')
@@ -405,7 +403,6 @@ export default function DashboardPage() {
     }
   };
 
-  // 🚨 REDEEM REFERRAL CODE LOGIC 🚨
   const handleSubmitInviteCode = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!athleteProfile || !inviteCodeInput.trim()) return;
@@ -676,18 +673,58 @@ export default function DashboardPage() {
 
       <div className="max-w-7xl mx-auto px-6 pt-10">
         
+        {/* 🚨 REDESIGNED SETUP GUIDE 🚨 */}
         {noProfileLinked && (
-          <div className="bg-gradient-to-br from-blue-900 via-indigo-950 to-slate-900 rounded-[2.5rem] p-8 md:p-16 border border-blue-800 shadow-2xl relative overflow-hidden mb-10 max-w-4xl mx-auto">
+          <div className="bg-gradient-to-br from-blue-900 via-indigo-950 to-slate-900 rounded-[2.5rem] p-8 md:p-12 border border-blue-800 shadow-2xl relative overflow-hidden mb-10 max-w-5xl mx-auto">
             <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/20 blur-[100px] rounded-full pointer-events-none"></div>
-            <div className="relative z-10 text-center">
-              <div className="w-20 h-20 bg-blue-500/20 border border-blue-400/30 rounded-2xl flex items-center justify-center mx-auto mb-6">
-                <Search className="w-10 h-10 text-blue-300" />
+            
+            <div className="relative z-10">
+              <div className="text-center mb-12">
+                <div className="w-16 h-16 bg-blue-500/20 border border-blue-400/30 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                  <Search className="w-8 h-8 text-blue-300" />
+                </div>
+                <h2 className="text-3xl md:text-5xl font-black text-white tracking-tight mb-3">Claim Your Profile</h2>
+                <p className="text-blue-200/80 font-medium text-lg max-w-2xl mx-auto">
+                  Import your stats directly from Athletic.net. No login required for this step.
+                </p>
               </div>
-              <h2 className="text-3xl md:text-5xl font-black text-white tracking-tight mb-4">Find Your Profile</h2>
-              <p className="text-blue-200/80 font-medium text-lg mb-10 max-w-xl mx-auto">
-                Paste the link to your Athletic.net Track & Field profile to import your PRs. 
-                <span className="block mt-2 text-sm opacity-80 text-yellow-300">You don't have to be logged in to Athletic.net. Just go to Athletic.net in your browser, look up your name, go to your Track & Field Bio, then copy that link and you're set!</span>
-              </p>
+
+              {/* Visual 3-Step Guide */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+                
+                {/* Step 1 */}
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-6 relative">
+                  <div className="absolute -top-4 -left-4 w-8 h-8 bg-blue-500 text-white font-black rounded-full flex items-center justify-center border-4 border-slate-900">1</div>
+                  <Globe className="w-6 h-6 text-blue-400 mb-3" />
+                  <h4 className="text-white font-bold text-lg mb-1">Search Your Name</h4>
+                  <p className="text-blue-200/70 text-sm">Open a new tab and search for your name on Athletic.net.</p>
+                </div>
+
+                {/* Step 2 */}
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-6 relative">
+                  <div className="absolute -top-4 -left-4 w-8 h-8 bg-blue-500 text-white font-black rounded-full flex items-center justify-center border-4 border-slate-900">2</div>
+                  <UserCircle2 className="w-6 h-6 text-blue-400 mb-3" />
+                  <h4 className="text-white font-bold text-lg mb-1">Click Track & Field Bio</h4>
+                  <p className="text-blue-200/70 text-sm">Ensure you click on your Track bio, not your cross country or team page.</p>
+                </div>
+
+                {/* Step 3 */}
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-6 relative">
+                  <div className="absolute -top-4 -left-4 w-8 h-8 bg-blue-500 text-white font-black rounded-full flex items-center justify-center border-4 border-slate-900">3</div>
+                  <LinkIcon className="w-6 h-6 text-blue-400 mb-3" />
+                  <h4 className="text-white font-bold text-lg mb-1">Copy The URL</h4>
+                  <p className="text-blue-200/70 text-sm">Copy the link at the top of your browser and paste it below!</p>
+                  
+                  {/* Visual animation of copying URL */}
+                  <div className="mt-4 bg-black/50 border border-white/10 rounded overflow-hidden flex items-center text-[10px] text-slate-400 p-1.5 shadow-inner">
+                    <Lock className="w-3 h-3 mr-1 text-green-400" />
+                    <span className="truncate">athletic.net/athlete/</span>
+                    <span className="text-blue-400 font-bold bg-blue-500/20 px-1 rounded animate-pulse">1234567</span>
+                    <span className="truncate">/track-and-field</span>
+                  </div>
+                </div>
+
+              </div>
 
               {errorMessage && (
                 <div className="bg-red-500/20 border border-red-500/50 text-red-200 p-4 rounded-xl mb-8 text-sm font-bold flex items-center justify-center gap-3 animate-in fade-in slide-in-from-top-4 max-w-2xl mx-auto">
@@ -696,16 +733,16 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              <form onSubmit={handleInitialScrape} className="flex flex-col sm:flex-row gap-3 max-w-2xl mx-auto">
+              <form onSubmit={handleInitialScrape} className="flex flex-col sm:flex-row gap-3 max-w-3xl mx-auto bg-white/5 p-2 rounded-[1.5rem] border border-white/10 shadow-xl">
                 <input 
                   type="url" 
                   required 
-                  placeholder="https://www.athletic.net/athlete/..." 
+                  placeholder="Paste your link here..." 
                   value={syncUrl} 
                   onChange={(e) => setSyncUrl(e.target.value)} 
-                  className="w-full flex-grow bg-white/10 border border-white/20 text-white rounded-2xl pl-6 pr-4 py-4 focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold placeholder:text-blue-300/30 text-lg shadow-inner" 
+                  className="w-full flex-grow bg-transparent text-white rounded-xl pl-6 pr-4 py-4 focus:outline-none focus:bg-white/5 font-semibold placeholder:text-blue-300/30 text-lg transition-colors" 
                 />
-                <button type="submit" disabled={isSyncing} className="bg-blue-500 hover:bg-blue-400 text-white px-10 py-4 rounded-2xl font-black disabled:opacity-50 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg flex items-center justify-center text-lg">
+                <button type="submit" disabled={isSyncing} className="bg-blue-500 hover:bg-blue-400 text-white px-10 py-4 rounded-xl font-black disabled:opacity-50 transition-transform hover:scale-[1.02] active:scale-[0.98] shadow-lg flex items-center justify-center text-lg shrink-0">
                   {isSyncing ? (
                     <><RefreshCw className="w-5 h-5 mr-2 animate-spin" /> Finding...</>
                   ) : (
@@ -717,6 +754,7 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {/* 🚨 REDESIGNED VERIFICATION WARNING 🚨 */}
         {isUnverified && (
           <div className="bg-gradient-to-r from-amber-500 to-orange-600 rounded-[2rem] p-8 md:p-10 border border-orange-400 shadow-2xl relative overflow-hidden mb-8 text-white">
             <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
@@ -725,72 +763,95 @@ export default function DashboardPage() {
                 <>
                   <div>
                     <h2 className="text-3xl font-black tracking-tight mb-2 flex items-center">
-                      <AlertTriangle className="w-8 h-8 mr-3 text-orange-200" /> Action Required: Verify Ownership
+                      <AlertTriangle className="w-8 h-8 mr-3 text-orange-200" /> Verify Ownership
                     </h2>
-                    <p className="text-orange-100 font-medium text-lg mb-2">We found your profile! However, your times will not appear on the Leaderboard and you cannot access the Feed until you verify you own this account.</p>
-                    <p className="text-sm opacity-90 text-orange-200 font-bold bg-black/10 px-3 py-1.5 rounded-lg inline-block">You must have an active Athletic.net account to complete this step.</p>
+                    <p className="text-orange-100 font-medium text-lg mb-2">We found your profile! To protect athlete data, you must prove you own this profile before you can appear on leaderboards or message coaches.</p>
                   </div>
-                  <button onClick={beginVerification} className="w-full md:w-auto bg-slate-900 hover:bg-black text-white px-8 py-4 rounded-xl font-black transition-transform hover:scale-105 shadow-xl shrink-0 text-lg">
-                    Verify Profile Now
+                  <button onClick={beginVerification} className="w-full md:w-auto bg-slate-900 hover:bg-black text-white px-8 py-4 rounded-xl font-black transition-transform hover:scale-105 shadow-xl shrink-0 text-lg flex items-center justify-center">
+                    Verify Profile <ArrowDown className="w-5 h-5 ml-2 animate-bounce" />
                   </button>
                 </>
               ) : (
                 <div className="w-full">
-                  <h3 className="text-2xl font-black mb-4 flex items-center">
-                    <ShieldCheck className="w-6 h-6 mr-2" /> Add Your Secret Code
-                  </h3>
+                  <div className="flex justify-between items-start mb-6">
+                    <div>
+                      <h3 className="text-2xl font-black flex items-center">
+                        <ShieldCheck className="w-6 h-6 mr-2" /> Paste Your Secret Code
+                      </h3>
+                      <p className="text-orange-100 font-medium text-sm mt-1 flex items-center gap-1.5 bg-black/10 px-3 py-1.5 rounded-lg inline-block">
+                        <Lock className="w-3.5 h-3.5 inline" /> You must be logged into Athletic.net on a web browser.
+                      </p>
+                    </div>
+                    <button onClick={() => { setShowVerificationStep(false); setErrorMessage(''); }} className="p-2 hover:bg-white/10 rounded-full transition-colors"><X className="w-6 h-6" /></button>
+                  </div>
                   
                   {errorMessage && (
-                    <div className="bg-red-900/50 border border-red-400/50 text-white p-3 rounded-lg mb-4 text-sm font-bold flex items-center gap-2 animate-pulse">
-                      <AlertCircle className="w-4 h-4 shrink-0" /> {errorMessage}
+                    <div className="bg-red-900/50 border border-red-400/50 text-white p-4 rounded-xl mb-6 text-sm font-bold flex items-center gap-3 animate-pulse shadow-inner">
+                      <AlertCircle className="w-5 h-5 shrink-0 text-red-400" /> {errorMessage}
                     </div>
                   )}
 
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
-                    <div className="space-y-4 text-orange-50 font-medium">
-                      <p>1. Log into your Athletic.net account.</p>
-                      <p>2. Click the <strong className="text-white bg-black/20 px-2 py-1 rounded">Pencil Icon</strong> underneath your name to edit your profile.</p>
-                      <p>3. Paste this exact code into your <strong className="text-white underline decoration-wavy">Username</strong> (you can delete it right after verification!).</p>
+                  <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 items-stretch">
+                    
+                    {/* Instructions */}
+                    <div className="lg:col-span-3 space-y-4 text-orange-50 font-medium bg-black/20 p-6 rounded-2xl border border-white/10 shadow-inner">
+                      <div className="flex gap-3">
+                        <span className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center font-black text-sm shrink-0">1</span>
+                        <p>Sign into Athletic.net on your computer or phone browser.</p>
+                      </div>
+                      <div className="flex gap-3">
+                        <span className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center font-black text-sm shrink-0">2</span>
+                        <p>Go to your profile and click the <strong className="text-white">Pencil Icon</strong> next to your name.</p>
+                      </div>
+                      <div className="flex gap-3">
+                        <span className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center font-black text-sm shrink-0">3</span>
+                        <p>Paste the code below exactly into your <strong className="text-white underline decoration-wavy">Username</strong> or First Name field and click Save.</p>
+                      </div>
                       
-                      <div className="bg-slate-900/80 py-4 rounded-xl mt-4 border border-white/20 flex flex-col items-center justify-center shadow-inner">
-                        <span className="text-[10px] text-orange-400 uppercase tracking-widest font-bold mb-1">Your Code</span>
-                        <span className="text-4xl font-mono font-black tracking-widest text-emerald-400">{verificationCode}</span>
+                      <div className="bg-slate-900/90 py-5 rounded-xl mt-6 border border-white/20 flex flex-col items-center justify-center shadow-2xl relative overflow-hidden">
+                        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10 pointer-events-none"></div>
+                        <span className="text-[10px] text-orange-400 uppercase tracking-widest font-bold mb-1 relative z-10">Your Code</span>
+                        <span className="text-5xl font-mono font-black tracking-widest text-emerald-400 relative z-10">{verificationCode}</span>
                       </div>
                     </div>
 
-                    <div className="bg-white p-6 rounded-2xl shadow-xl border border-slate-200 text-slate-800 relative hidden sm:block transform rotate-1 hover:rotate-0 transition-transform">
-                      <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-4 border-b pb-2">Example Athletic.net Header</div>
+                    {/* Visual Helper */}
+                    <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-xl border border-slate-200 text-slate-800 relative transform rotate-1 hover:rotate-0 transition-transform flex flex-col justify-center">
+                      <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-4 border-b pb-2 flex items-center gap-1.5"><HelpCircle className="w-3.5 h-3.5" /> What to look for</div>
                       <div className="flex items-center gap-4">
-                        <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-black text-2xl shadow-inner border border-blue-200">
-                          LS
-                        </div>
+                        <div className="w-14 h-14 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-black text-xl shadow-inner border border-blue-200 shrink-0">LS</div>
                         <div>
-                          <h4 className="text-2xl font-bold text-slate-900 tracking-tight">Luke Skywalker</h4>
+                          <h4 className="text-xl font-bold text-slate-900 tracking-tight">Luke Skywalker</h4>
                           <div className="flex items-center gap-2 mt-1">
-                            <span className="text-slate-500 font-medium text-sm border-r pr-2">South Albany HS</span>
+                            <span className="text-slate-500 font-medium text-xs border-r pr-2">South Albany HS</span>
                             <div className="relative">
-                              <div className="p-1.5 bg-slate-100 border border-slate-200 rounded hover:bg-slate-200 flex items-center justify-center relative z-10 shadow-sm">
-                                <Edit2 className="w-3.5 h-3.5 text-slate-600" />
+                              <div className="p-1.5 bg-slate-100 border border-slate-200 rounded hover:bg-slate-200 flex items-center justify-center relative z-10 shadow-sm cursor-pointer">
+                                <Edit2 className="w-3 h-3 text-slate-600" />
                               </div>
                               <span className="absolute inset-0 rounded bg-orange-400 animate-ping opacity-75"></span>
-                              <div className="absolute -right-10 -top-8 animate-bounce text-orange-500 flex flex-col items-center">
-                                <span className="bg-orange-500 text-white text-[10px] font-black px-2 py-0.5 rounded shadow-md mb-1 whitespace-nowrap">Click This!</span>
-                                <MousePointer2 className="w-5 h-5 fill-current" />
+                              <div className="absolute -right-8 -top-8 animate-bounce text-orange-500 flex flex-col items-center pointer-events-none">
+                                <span className="bg-orange-500 text-white text-[9px] font-black px-2 py-0.5 rounded shadow-md mb-1 whitespace-nowrap">Click This!</span>
+                                <MousePointer2 className="w-4 h-4 fill-current" />
                               </div>
                             </div>
                           </div>
                         </div>
                       </div>
+                      
+                      <div className="mt-4 pt-4 border-t border-slate-100 border-dashed">
+                         <div className="bg-slate-50 border border-slate-200 p-2 rounded text-xs font-mono text-slate-400 flex items-center">
+                            <span className="w-16">Username:</span>
+                            <span className="text-emerald-600 font-bold ml-2 bg-emerald-50 px-1 rounded">{verificationCode}</span>
+                         </div>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="flex flex-col sm:flex-row gap-3 mt-8 border-t border-white/20 pt-6">
-                    <button onClick={() => { setShowVerificationStep(false); setErrorMessage(''); }} className="px-6 py-3 rounded-xl font-bold border border-white/30 hover:bg-white/10 transition-colors">
-                      Cancel
+                  <div className="mt-8 text-center">
+                    <button onClick={confirmVerification} disabled={isVerifying} className="w-full sm:w-auto bg-slate-900 hover:bg-black text-white px-10 py-4 rounded-xl font-black disabled:opacity-50 transition-transform hover:scale-[1.02] active:scale-[0.98] shadow-2xl flex justify-center items-center text-lg mx-auto">
+                      {isVerifying ? <><RefreshCw className="w-5 h-5 mr-2 animate-spin text-emerald-400" /> Checking Athletic.net...</> : 'I Saved It - Check My Profile!'}
                     </button>
-                    <button onClick={confirmVerification} disabled={isVerifying} className="flex-1 bg-slate-900 hover:bg-black text-white px-6 py-3 rounded-xl font-black disabled:opacity-50 transition-transform hover:scale-[1.02] active:scale-[0.98] shadow-lg flex justify-center items-center text-lg">
-                      {isVerifying ? <><RefreshCw className="w-5 h-5 mr-2 animate-spin text-emerald-400" /> Checking Athletic.net...</> : 'I Added It - Check My Profile!'}
-                    </button>
+                    <p className="text-xs text-orange-200 font-medium mt-3 opacity-80">You can safely delete the code from your Athletic.net profile right after we verify you.</p>
                   </div>
                 </div>
               )}

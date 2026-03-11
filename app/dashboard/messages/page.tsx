@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
-import { Search, Mail, MailOpen, School, Send, Clock, ChevronLeft, UserCircle2, CheckCircle2, AlertCircle, Ban, Bell, MessageSquare, Archive, SendHorizontal } from 'lucide-react';
+import { Search, Mail, MailOpen, School, Send, Clock, ChevronLeft, UserCircle2, CheckCircle2, AlertCircle, Ban, Bell, MessageSquare, Archive, SendHorizontal, GraduationCap, Users } from 'lucide-react';
 import Link from 'next/link';
 
 interface ChatMessage {
@@ -39,8 +39,12 @@ export default function InboxPage() {
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [viewerRole, setViewerRole] = useState<'athlete' | 'coach'>('athlete');
   const [replyText, setReplyText] = useState('');
   const [isSending, setIsSending] = useState(false);
+
+  // 🚨 NEW INBOX FOLDER STATE
+  const [activeFolder, setActiveFolder] = useState<'inbox' | 'recruiting' | 'chats' | 'archived'>('inbox');
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -62,6 +66,10 @@ export default function InboxPage() {
       }
       
       setCurrentUserId(session.user.id);
+
+      // Determine Role
+      const { data: cData } = await supabase.from('coaches').select('id').eq('id', session.user.id).maybeSingle();
+      if (cData) setViewerRole('coach');
 
       const { data, error } = await supabase
         .from('messages')
@@ -99,6 +107,13 @@ export default function InboxPage() {
     } else {
       return msg.athletes ? `${msg.athletes.first_name} ${msg.athletes.last_name}` : 'Athlete';
     }
+  };
+
+  // 🚨 DETECT IF IT IS A RECRUITING PITCH
+  const isRecruitingMessage = (msg: Message) => {
+    if (viewerRole === 'coach') return true; 
+    // If the sender has a school listed or "Coach" in their name, it's a college pitch
+    return !!msg.sender_school || msg.sender_name.toLowerCase().includes('coach');
   };
 
   const handleOpenMessage = async (message: Message) => {
@@ -181,42 +196,57 @@ export default function InboxPage() {
     );
   }
 
-  // --- CATEGORIZE MESSAGES ---
-  const chatRequests = messages.filter(m => m.status === 'pending' && !isExpired(m) && m.athlete_id === currentUserId);
-  const activeChats = messages.filter(m => m.status === 'active');
-  const sentRequests = messages.filter(m => m.status === 'pending' && !isExpired(m) && m.athlete_id !== currentUserId);
-  const archivedChats = messages.filter(m => m.status === 'ended' || isExpired(m));
+  // --- FILTER MESSAGES BY FOLDER ---
+  const activeMessages = messages.filter(m => m.status !== 'ended' && !isExpired(m));
+  
+  // 🚨 FIX: Explicitly type displayedMessages as Message[]
+  let displayedMessages: Message[] = [];
+  
+  if (activeFolder === 'inbox') {
+    displayedMessages = activeMessages;
+  } else if (activeFolder === 'recruiting') {
+    displayedMessages = activeMessages.filter(m => isRecruitingMessage(m));
+  } else if (activeFolder === 'chats') {
+    displayedMessages = activeMessages.filter(m => !isRecruitingMessage(m));
+  } else if (activeFolder === 'archived') {
+    displayedMessages = messages.filter(m => m.status === 'ended' || isExpired(m));
+  }
 
   const unreadCount = messages.filter(m => isUnreadForMe(m)).length;
+  const unreadRecruiting = activeMessages.filter(m => isUnreadForMe(m) && isRecruitingMessage(m)).length;
 
   // --- REUSABLE SIDEBAR CARD COMPONENT ---
   const renderSidebarItem = (message: Message) => {
     const unread = isUnreadForMe(message);
-    const expired = isExpired(message);
     const isSelected = selectedMessage?.id === message.id;
+    const isRecruit = isRecruitingMessage(message);
     
     return (
       <button
         key={message.id}
         onClick={() => handleOpenMessage(message)}
-        className={`w-full text-left p-4 transition-all border-l-4 flex flex-col gap-1.5 ${
+        className={`w-full text-left p-4 transition-all border-b border-slate-100 flex flex-col gap-1.5 ${
           isSelected 
-            ? 'border-blue-500 bg-blue-50/50' 
-            : 'border-transparent hover:bg-slate-100/50'
+            ? 'bg-blue-50/50 border-l-4 border-l-blue-500' 
+            : 'border-l-4 border-l-transparent hover:bg-slate-50'
         }`}
       >
         <div className="flex justify-between items-start w-full">
-          <span className={`font-bold text-sm truncate pr-2 ${unread ? 'text-slate-900' : 'text-slate-700'}`}>
-            {getConversationTitle(message)}
-          </span>
+          <div className="flex items-center gap-2 overflow-hidden pr-2">
+            {isRecruit && <GraduationCap className="w-3.5 h-3.5 text-blue-500 shrink-0" />}
+            <span className={`font-bold text-sm truncate ${unread ? 'text-slate-900' : 'text-slate-700'}`}>
+              {getConversationTitle(message)}
+            </span>
+          </div>
           <span className="text-[10px] font-bold text-slate-400 whitespace-nowrap mt-0.5 shrink-0">
             {new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(message.created_at))}
           </span>
         </div>
         
-        <div className="flex items-center gap-2 w-full">
+        <div className="flex items-center gap-2 w-full pl-0.5">
           {unread && <div className="w-2 h-2 bg-blue-600 rounded-full shrink-0 shadow-sm shadow-blue-500/50"></div>}
           <div className={`text-xs truncate ${unread ? 'font-bold text-slate-800' : 'font-medium text-slate-500'}`}>
+            {message.status === 'pending' && message.athlete_id === currentUserId && <span className="text-amber-500 font-bold mr-1">Action Needed:</span>}
             {message.chat_history && message.chat_history.length > 0 
               ? message.chat_history[message.chat_history.length - 1].content 
               : message.content}
@@ -237,7 +267,7 @@ export default function InboxPage() {
             <Link href="/dashboard" className="inline-flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 mb-2 transition-colors">
               <ChevronLeft className="w-4 h-4 mr-1" /> Back to Dashboard
             </Link>
-            <h1 className="text-3xl font-black text-slate-900 tracking-tight">Inbox</h1>
+            <h1 className="text-3xl font-black text-slate-900 tracking-tight">Message Center</h1>
           </div>
           <div className="bg-white border border-slate-200 px-4 py-2.5 rounded-2xl flex items-center gap-3 shadow-sm">
             <Mail className="w-5 h-5 text-blue-600" />
@@ -252,66 +282,37 @@ export default function InboxPage() {
         <div className="bg-white rounded-[2rem] border border-slate-200 shadow-xl overflow-hidden flex flex-col lg:flex-row flex-1 min-h-[500px]">
           
           {/* ========================================== */}
-          {/* COLUMN 1: SIDEBAR (CATEGORIZED)            */}
+          {/* COLUMN 1: SIDEBAR (FOLDERS & LIST)           */}
           {/* ========================================== */}
-          <div className={`w-full lg:w-[320px] xl:w-[380px] bg-slate-50/50 border-r border-slate-200 flex flex-col h-full ${selectedMessage ? 'hidden lg:flex' : 'flex'}`}>
+          <div className={`w-full lg:w-[340px] xl:w-[400px] bg-white border-r border-slate-200 flex flex-col h-full ${selectedMessage ? 'hidden lg:flex' : 'flex'}`}>
             
-            <div className="p-4 border-b border-slate-200 bg-white shrink-0">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input type="text" placeholder="Search messages..." className="w-full bg-slate-100 text-sm font-medium rounded-xl pl-9 pr-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow" />
+            {/* Folder Tabs */}
+            <div className="p-4 border-b border-slate-200 bg-slate-50 shrink-0">
+              <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
+                <button onClick={() => setActiveFolder('inbox')} className={`px-4 py-2 rounded-xl text-xs font-black transition-colors whitespace-nowrap ${activeFolder === 'inbox' ? 'bg-slate-900 text-white' : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-100'}`}>
+                  All
+                </button>
+                <button onClick={() => setActiveFolder('recruiting')} className={`px-4 py-2 rounded-xl text-xs font-black transition-colors whitespace-nowrap flex items-center gap-1.5 ${activeFolder === 'recruiting' ? 'bg-blue-600 text-white' : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-100'}`}>
+                  <GraduationCap className="w-3.5 h-3.5" /> Recruiting {unreadRecruiting > 0 && <span className="bg-red-500 text-white px-1.5 py-0.5 rounded-md text-[9px]">{unreadRecruiting}</span>}
+                </button>
+                <button onClick={() => setActiveFolder('chats')} className={`px-4 py-2 rounded-xl text-xs font-black transition-colors whitespace-nowrap flex items-center gap-1.5 ${activeFolder === 'chats' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-100'}`}>
+                  <Users className="w-3.5 h-3.5" /> Chats
+                </button>
+                <button onClick={() => setActiveFolder('archived')} className={`px-4 py-2 rounded-xl text-xs font-black transition-colors whitespace-nowrap flex items-center gap-1.5 ${activeFolder === 'archived' ? 'bg-slate-300 text-slate-800' : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-100'}`}>
+                  <Archive className="w-3.5 h-3.5" />
+                </button>
               </div>
             </div>
             
             <div className="overflow-y-auto flex-1 pb-4">
-              {messages.length === 0 ? (
+              {displayedMessages.length === 0 ? (
                 <div className="text-center py-12 px-6">
                   <MailOpen className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-                  <p className="text-sm font-bold text-slate-500">Your inbox is pristine.</p>
+                  <p className="text-sm font-bold text-slate-500">No messages in this folder.</p>
                 </div>
               ) : (
                 <div className="flex flex-col">
-                  
-                  {/* CATEGORY: CHAT REQUESTS */}
-                  {chatRequests.length > 0 && (
-                    <div className="mt-4">
-                      <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 flex items-center px-5">
-                        <Bell className="w-3 h-3 mr-1.5 text-amber-500" /> Action Needed
-                      </h4>
-                      {chatRequests.map(renderSidebarItem)}
-                    </div>
-                  )}
-
-                  {/* CATEGORY: ACTIVE CHATS */}
-                  {activeChats.length > 0 && (
-                    <div className="mt-4">
-                      <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 flex items-center px-5">
-                        <MessageSquare className="w-3 h-3 mr-1.5 text-blue-500" /> Active Chats
-                      </h4>
-                      {activeChats.map(renderSidebarItem)}
-                    </div>
-                  )}
-
-                  {/* CATEGORY: SENT REQUESTS (Temporary) */}
-                  {sentRequests.length > 0 && (
-                    <div className="mt-4">
-                      <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 flex items-center px-5">
-                        <SendHorizontal className="w-3 h-3 mr-1.5 text-slate-400" /> Sent Requests
-                      </h4>
-                      {sentRequests.map(renderSidebarItem)}
-                    </div>
-                  )}
-
-                  {/* CATEGORY: ARCHIVED */}
-                  {archivedChats.length > 0 && (
-                    <div className="mt-4">
-                      <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 flex items-center px-5">
-                        <Archive className="w-3 h-3 mr-1.5 text-slate-400" /> Archived
-                      </h4>
-                      {archivedChats.map(renderSidebarItem)}
-                    </div>
-                  )}
-
+                  {displayedMessages.map(renderSidebarItem)}
                 </div>
               )}
             </div>
@@ -320,22 +321,23 @@ export default function InboxPage() {
           {/* ========================================== */}
           {/* COLUMN 2: ACTIVE CHAT THREAD                 */}
           {/* ========================================== */}
-          <div className={`flex-1 bg-white flex flex-col h-full relative ${!selectedMessage ? 'hidden lg:flex' : 'flex'}`}>
+          <div className={`flex-1 bg-slate-50 flex flex-col h-full relative ${!selectedMessage ? 'hidden lg:flex' : 'flex'}`}>
             {selectedMessage ? (
               <>
                 {/* Chat Header */}
-                <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shadow-sm z-10 shrink-0 bg-white/80 backdrop-blur-md">
+                <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between shadow-sm z-10 shrink-0 bg-white">
                   <div className="flex items-center gap-4">
                     <button onClick={() => setSelectedMessage(null)} className="lg:hidden p-2 -ml-2 bg-slate-50 rounded-full hover:bg-slate-100 transition-colors">
                       <ChevronLeft className="w-5 h-5 text-slate-600" />
                     </button>
-                    <div className="w-10 h-10 bg-slate-50 border border-slate-200 rounded-full flex items-center justify-center shrink-0">
-                      {selectedMessage.athlete_id === currentUserId ? <School className="w-5 h-5 text-slate-400" /> : <UserCircle2 className="w-5 h-5 text-slate-400" />}
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 border ${isRecruitingMessage(selectedMessage) ? 'bg-blue-50 border-blue-200' : 'bg-slate-50 border-slate-200'}`}>
+                      {isRecruitingMessage(selectedMessage) ? <School className="w-5 h-5 text-blue-500" /> : <UserCircle2 className="w-5 h-5 text-slate-400" />}
                     </div>
                     <div>
                       <h2 className="text-base font-black text-slate-900 leading-tight">{getConversationTitle(selectedMessage)}</h2>
-                      <p className="text-[11px] font-bold text-slate-400 mt-0.5 uppercase tracking-wider">
-                        {selectedMessage.status === 'pending' ? 'Pending Request' : selectedMessage.status === 'ended' ? 'Archived' : 'Active Connection'}
+                      <p className="text-[11px] font-bold text-slate-400 mt-0.5 uppercase tracking-wider flex items-center gap-1">
+                        {selectedMessage.status === 'pending' ? <span className="text-amber-500">Pending Request</span> : selectedMessage.status === 'ended' ? 'Archived' : 'Active Connection'}
+                        {isRecruitingMessage(selectedMessage) && <span className="bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-[4px] ml-1">RECRUITING</span>}
                       </p>
                     </div>
                   </div>
@@ -349,13 +351,18 @@ export default function InboxPage() {
                 </div>
 
                 {/* Chat Bubbles Area */}
-                <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 bg-slate-50/30">
+                <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 bg-slate-50">
                   
-                  {/* Initial Pitch Bubble */}
-                  <div className={`flex flex-col max-w-[80%] ${selectedMessage.athlete_id === currentUserId ? 'items-start self-start' : 'items-end self-end'}`}>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 mx-1">Initial Pitch • {formatDate(selectedMessage.created_at)}</span>
-                    <div className={`px-5 py-3.5 text-[15px] font-medium leading-relaxed whitespace-pre-wrap ${selectedMessage.athlete_id === currentUserId ? 'bg-slate-100 text-slate-800 rounded-2xl rounded-tl-sm' : 'bg-blue-600 text-white rounded-2xl rounded-tr-sm shadow-md shadow-blue-500/20'}`}>
-                      {selectedMessage.content}
+                  {/* 🚨 Initial Pitch Card 🚨 */}
+                  <div className="flex flex-col w-full items-center mb-4">
+                    <div className="w-full max-w-lg bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+                      <div className="flex items-center gap-2 mb-3 pb-3 border-b border-slate-100">
+                        <Mail className="w-4 h-4 text-slate-400" />
+                        <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Initial Outreach • {formatDate(selectedMessage.created_at)}</span>
+                      </div>
+                      <p className="text-[15px] font-medium text-slate-800 leading-relaxed whitespace-pre-wrap">
+                        {selectedMessage.content}
+                      </p>
                     </div>
                   </div>
 
@@ -365,7 +372,7 @@ export default function InboxPage() {
                     return (
                       <div key={idx} className={`flex flex-col max-w-[80%] ${isMyMessage ? 'items-end self-end' : 'items-start self-start'}`}>
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 mx-1">{formatDate(reply.created_at)}</span>
-                        <div className={`px-5 py-3.5 text-[15px] font-medium leading-relaxed whitespace-pre-wrap ${isMyMessage ? 'bg-blue-600 text-white rounded-2xl rounded-tr-sm shadow-md shadow-blue-500/20' : 'bg-slate-100 text-slate-800 rounded-2xl rounded-tl-sm'}`}>
+                        <div className={`px-5 py-3.5 text-[15px] font-medium leading-relaxed whitespace-pre-wrap ${isMyMessage ? 'bg-blue-600 text-white rounded-2xl rounded-tr-sm shadow-md shadow-blue-500/20' : 'bg-white border border-slate-200 text-slate-800 rounded-2xl rounded-tl-sm shadow-sm'}`}>
                           {reply.content}
                         </div>
                       </div>
@@ -375,7 +382,7 @@ export default function InboxPage() {
                 </div>
 
                 {/* DYNAMIC FOOTER CONTROLS */}
-                <div className="shrink-0 bg-white border-t border-slate-100">
+                <div className="shrink-0 bg-white border-t border-slate-200">
                   {isExpired(selectedMessage) ? (
                     <div className="p-5 flex items-center justify-center text-slate-400 font-bold gap-2 text-sm">
                       <AlertCircle className="w-4 h-4" /> This request expired after 7 days of inactivity.
@@ -390,7 +397,9 @@ export default function InboxPage() {
                       <div className="p-6 flex flex-col items-center justify-center gap-3">
                         <h4 className="font-black text-slate-900 text-base">Accept this connection request?</h4>
                         <div className="flex gap-3 w-full max-w-sm">
-                          <button onClick={() => handleUpdateStatus('active')} className="flex-1 bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-xl font-bold transition-all shadow-md">Accept</button>
+                          <button onClick={() => handleUpdateStatus('active')} className="flex-1 bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-xl font-bold transition-all shadow-md flex items-center justify-center gap-2">
+                            <CheckCircle2 className="w-4 h-4" /> Accept
+                          </button>
                           <button onClick={() => handleUpdateStatus('ended')} className="flex-1 bg-slate-100 hover:bg-red-50 hover:text-red-600 text-slate-600 py-3 rounded-xl font-bold transition-all">Decline</button>
                         </div>
                       </div>
@@ -402,7 +411,7 @@ export default function InboxPage() {
                         </div>
                         <h4 className="font-black text-slate-900 text-base">Request Pending</h4>
                         <p className="text-sm font-medium text-slate-500 text-center max-w-sm">
-                          Waiting for the athlete to accept your pitch. This request will automatically expire in 7 days.
+                          Waiting for them to accept your pitch. This request will automatically expire in 7 days.
                         </p>
                       </div>
                     )
@@ -437,13 +446,13 @@ export default function InboxPage() {
               </>
             ) : (
               /* NO MESSAGE SELECTED EMPTY STATE */
-              <div className="flex-1 flex flex-col items-center justify-center text-center p-10 bg-slate-50/30">
-                <div className="w-24 h-24 bg-white border border-slate-100 shadow-sm rounded-full flex items-center justify-center mb-6">
-                  <Mail className="w-10 h-10 text-slate-300" />
+              <div className="flex-1 flex flex-col items-center justify-center text-center p-10 bg-slate-50">
+                <div className="w-24 h-24 bg-white border border-slate-200 shadow-sm rounded-full flex items-center justify-center mb-6">
+                  <MailOpen className="w-10 h-10 text-slate-300" />
                 </div>
-                <h3 className="text-xl font-black text-slate-900 mb-2">Your Messages</h3>
+                <h3 className="text-2xl font-black text-slate-900 mb-2">The Control Center</h3>
                 <p className="text-slate-500 font-medium max-w-xs">
-                  Select a conversation from the sidebar to view the thread and send a reply.
+                  Select a folder on the left, then click a conversation to view the thread.
                 </p>
               </div>
             )}
