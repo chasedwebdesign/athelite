@@ -123,7 +123,10 @@ export default function FeedPage() {
   const postInputRef = useRef<HTMLTextAreaElement>(null); 
   const [isPosting, setIsPosting] = useState(false);
   const [timeUntilNextPost, setTimeUntilNextPost] = useState<string | null>(null);
+  
+  // Boost State
   const [isBoosting, setIsBoosting] = useState(false);
+  const [postToBoost, setPostToBoost] = useState<string | null>(null);
 
   // Comments State
   const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({});
@@ -134,7 +137,7 @@ export default function FeedPage() {
   const [isMessageModalOpen, setIsMessageModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'pitch' | 'chat'>('pitch');
   const [selectedPostForMessage, setSelectedPostForMessage] = useState<Post | null>(null);
-  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null); 
   
   const [senderName, setSenderName] = useState('');
   const [senderSchool, setSenderSchool] = useState('');
@@ -228,11 +231,33 @@ export default function FeedPage() {
       .select(`
         id, content, created_at, athlete_id, linked_pr_event, linked_pr_mark, linked_prs, channel, image_url, likes, is_bounty, bounty_amount, comments, pro_badge, is_boosted, hide_rank, attached_resume,
         athletes (first_name, last_name, high_school, avatar_url, trust_level, prs, equipped_border, equipped_title, majors, grad_year, is_premium)
-      `)
-      .order('is_boosted', { ascending: false })
-      .order('created_at', { ascending: false });
+      `);
     
-    setPosts((feedData || []) as unknown as Post[]);
+    // 🚨 24 HOUR EXPIRATION LOGIC 🚨
+    const now = new Date().getTime();
+    const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+
+    const processedPosts = (feedData || []).map((post: any) => {
+      let activeBoost = post.is_boosted;
+      
+      if (activeBoost) {
+        const postAge = now - new Date(post.created_at).getTime();
+        // If the post is older than 24 hours, strip the boost on the frontend
+        if (postAge > TWENTY_FOUR_HOURS) {
+          activeBoost = false;
+        }
+      }
+      return { ...post, is_boosted: activeBoost };
+    });
+
+    // 🚨 MANUALLY RE-SORT POSTS AFTER EXPIRATIONS 🚨
+    processedPosts.sort((a, b) => {
+      if (a.is_boosted && !b.is_boosted) return -1;
+      if (!a.is_boosted && b.is_boosted) return 1;
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+
+    setPosts(processedPosts as Post[]);
     setLoading(false);
   }
 
@@ -240,6 +265,25 @@ export default function FeedPage() {
     setSelectedPRs(prev => 
       prev.includes(index) ? prev.filter(i => i !== index) : [...prev, index]
     );
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      showToast("Only images are supported at this time.", "error");
+      e.target.value = ''; 
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      showToast("Images must be under 5MB. Please compress your image.", "error");
+      e.target.value = ''; 
+      return;
+    }
+
+    setMediaFile(file);
   };
 
   const handleCreatePost = async (e: React.FormEvent) => {
@@ -275,9 +319,9 @@ export default function FeedPage() {
         await supabase.from('athletes').update(updates).eq('id', currentUserId);
       }
 
-      let uploadedImageUrl = null;
+      let uploadedMediaUrl = null;
       if (mediaFile) {
-        uploadedImageUrl = URL.createObjectURL(mediaFile); 
+        uploadedMediaUrl = URL.createObjectURL(mediaFile); 
       }
 
       const finalLinkedPRs = isPremium 
@@ -293,7 +337,7 @@ export default function FeedPage() {
         content: contentToSubmit,
         linked_prs: finalLinkedPRs,
         channel: feedTab,
-        image_url: uploadedImageUrl,
+        image_url: uploadedMediaUrl,
         pro_badge: finalBadge,
         hide_rank: finalHideRank,
         attached_resume: finalAttachedResume
@@ -322,34 +366,42 @@ export default function FeedPage() {
     }
   };
 
-  // 🚨 BOOST POST LOGIC 🚨
-  const handleBoostPost = async (postId: string) => {
-    if (!currentUserProfile || !currentUserId) return;
-    
+  const handleBoostClick = (postId: string) => {
+    if (!currentUserProfile) return;
     const availableBoosts = currentUserProfile.boosts_available || 0;
 
     if (availableBoosts <= 0) {
       showToast("You are out of Boosts! Upgrade or visit the Vault to get more.", "error");
       return;
     }
+    setPostToBoost(postId);
+  };
 
-    if (!confirm(`Are you sure you want to Boost this post? You have ${availableBoosts} boosts remaining.`)) {
-      return;
-    }
-
+  const confirmBoost = async () => {
+    if (!postToBoost || !currentUserProfile || !currentUserId) return;
     setIsBoosting(true);
+    
+    const availableBoosts = currentUserProfile.boosts_available || 0;
+
     try {
       const { error } = await supabase.rpc('apply_post_boost', { 
-        p_post_id: postId, 
+        p_post_id: postToBoost, 
         p_athlete_id: currentUserId 
       });
 
       if (error) throw error;
 
-      // Optimistically update UI
-      setPosts(currentPosts => currentPosts.map(post => 
-        post.id === postId ? { ...post, is_boosted: true } : post
-      ));
+      // 🚨 DYNAMICALLY RE-SORT THE ARRAY AFTER BOOSTING 🚨
+      setPosts(currentPosts => {
+        const updated = currentPosts.map(post => 
+          post.id === postToBoost ? { ...post, is_boosted: true } : post
+        );
+        return updated.sort((a, b) => {
+          if (a.is_boosted && !b.is_boosted) return -1;
+          if (!a.is_boosted && b.is_boosted) return 1;
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        });
+      });
       
       setCurrentUserProfile({
         ...currentUserProfile,
@@ -362,6 +414,7 @@ export default function FeedPage() {
       showToast("Failed to boost: " + err.message);
     } finally {
       setIsBoosting(false);
+      setPostToBoost(null); 
     }
   };
 
@@ -382,7 +435,7 @@ export default function FeedPage() {
       const newComment: CommentData = {
         id: Math.random().toString(), 
         athlete_id: currentUserId,
-        name: senderName,
+        name: currentUserProfile ? `${currentUserProfile.first_name} ${currentUserProfile.last_name}` : 'Coach',
         avatar_url: myAvatar || '', 
         border: myBorder || 'none',
         text: text.trim(),
@@ -452,8 +505,8 @@ export default function FeedPage() {
       showToast("Please sync your Athletic.net profile to message other athletes.");
       return;
     }
-    const mode = (viewerRole === 'coach' && coachType === 'college') ? 'pitch' : 'chat';
-    openMessageModal(post, mode);
+    
+    openMessageModal(post, 'pitch');
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -483,7 +536,7 @@ export default function FeedPage() {
         sender_name: senderName, 
         sender_school: senderSchool, 
         sender_email: senderEmail, 
-        content: messageContent,
+        content: `[In response to your Recruiting Pitch]:\n\n${messageContent}`,
         status: 'pending' 
       });
       
@@ -515,7 +568,6 @@ export default function FeedPage() {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
   };
 
-  // 🚨 MASSIVE GLOW UP FOR BOOSTED POSTS 🚨
   const getListGlowClass = (border?: string | null, isBoosted?: boolean, isPremium?: boolean) => {
     if (isBoosted) return 'ring-[3px] ring-amber-400 shadow-[0_0_40px_rgba(245,158,11,0.3)] bg-slate-900 z-20 border-transparent';
     if (isPremium) return 'bg-slate-900 border-slate-800 text-slate-200 hover:z-10 shadow-xl';
@@ -812,7 +864,7 @@ export default function FeedPage() {
                   {(feedTab !== 'recruiting' || currentUserProfile?.is_premium) ? (
                     <label className="cursor-pointer flex items-center justify-center p-2.5 bg-slate-100 hover:bg-blue-50 text-slate-500 hover:text-blue-600 rounded-full transition-colors">
                       <ImageIcon className="w-5 h-5" />
-                      <input type="file" accept="image/*,video/mp4" className="hidden" onChange={(e) => { if (e.target.files && e.target.files[0]) setMediaFile(e.target.files[0]); }} />
+                      <input type="file" accept="image/*" className="hidden" onChange={handleFileSelect} />
                     </label>
                   ) : (
                     <div className="p-2.5 flex items-center justify-center text-slate-300 cursor-not-allowed" title="Media uploads are a Pro feature in the Recruiting Zone">
@@ -1012,9 +1064,14 @@ export default function FeedPage() {
                     </p>
 
                     {/* FIXED EMPTY IMAGE BUG */}
-                    {post.image_url && post.image_url.length > 5 && post.image_url !== 'null' && (
+                    {post.image_url && post.image_url.trim() !== '' && post.image_url !== 'null' && (
                       <div className="ml-0 sm:ml-16 mb-6">
-                        <img src={post.image_url} onError={(e) => e.currentTarget.style.display = 'none'} alt="Attached media" className={`rounded-2xl max-h-96 w-full object-cover border ${isPremiumPost ? 'border-slate-700' : 'border-slate-200'}`} />
+                        <img 
+                          src={post.image_url} 
+                          onError={(e) => { e.currentTarget.parentElement!.style.display = 'none'; }} 
+                          alt="" 
+                          className={`rounded-2xl max-h-96 w-full object-cover border shadow-sm ${isPremiumPost ? 'border-slate-700' : 'border-slate-200'}`} 
+                        />
                       </div>
                     )}
 
@@ -1064,23 +1121,32 @@ export default function FeedPage() {
                           <Flame className={`w-4 h-4 ${iLikedThis ? 'fill-current' : ''}`} /> {likesCount > 0 ? likesCount : 'Hype'}
                         </button>
                         
-                        <button onClick={() => toggleComments(post.id)} className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-black transition-colors shadow-sm ${isCommentsOpen ? (isPremiumPost ? 'bg-blue-500 text-white border border-blue-500' : 'bg-blue-600 text-white border border-blue-600') : (isPremiumPost ? 'bg-slate-800 text-slate-400 hover:bg-slate-700 border border-slate-700' : 'bg-slate-50 text-slate-500 hover:bg-slate-100 border border-slate-200')}`}>
+                        <button 
+                          onClick={() => {
+                            if (isRecruiting) {
+                              handleContactClick(post);
+                            } else {
+                              toggleComments(post.id);
+                            }
+                          }} 
+                          className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-black transition-colors shadow-sm ${isCommentsOpen && !isRecruiting ? (isPremiumPost ? 'bg-blue-500 text-white border border-blue-500' : 'bg-blue-600 text-white border border-blue-600') : (isPremiumPost ? 'bg-slate-800 text-slate-400 hover:bg-slate-700 border border-slate-700' : 'bg-slate-50 text-slate-500 hover:bg-slate-100 border border-slate-200')}`}
+                        >
                           <MessageSquare className="w-4 h-4" /> 
-                          {isRecruiting ? (uniqueRespondersCount > 0 ? `${uniqueRespondersCount} Responses` : 'Respond') : (commentsCount > 0 ? commentsCount : 'Comment')}
+                          {isRecruiting ? 'Respond' : (commentsCount > 0 ? commentsCount : 'Comment')}
                         </button>
 
-                        {/* 🚨 VIEW RESUME BUTTON */}
+                        {/* VIEW RESUME BUTTON */}
                         {post.attached_resume && (
                           <button onClick={() => setViewingResumePost(post)} className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-black transition-colors shadow-sm ${isPremiumPost ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'}`}>
                             <FileText className="w-4 h-4" /> View Resume
                           </button>
                         )}
 
-                        {/* 🚨 BOOST BUTTON UI */}
+                        {/* BOOST BUTTON UI */}
                         {isMyPost && isRecruiting && !post.is_boosted && (
                           <button 
                             disabled={isBoosting}
-                            onClick={() => handleBoostPost(post.id)} 
+                            onClick={() => handleBoostClick(post.id)} 
                             className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-black transition-colors bg-gradient-to-r from-amber-400 to-amber-500 text-amber-950 hover:shadow-[0_0_15px_rgba(245,158,11,0.4)] ml-auto border border-amber-300 disabled:opacity-50"
                           >
                             <Rocket className="w-4 h-4" /> {isBoosting ? 'Boosting...' : 'Boost'}
@@ -1089,16 +1155,9 @@ export default function FeedPage() {
                       </div>
 
                       {/* 🚨 COMMENTS / RESPONSES SECTION 🚨 */}
-                      {isCommentsOpen && (
+                      {isCommentsOpen && !isRecruiting && (
                         <div className={`mt-2 pt-5 border-t relative z-10 animate-in fade-in slide-in-from-top-2 duration-200 ${isPremiumPost ? 'border-slate-800' : 'border-slate-100'}`}>
                           
-                          {isRecruiting && !isMyPost && (
-                            <div className={`mb-4 text-xs font-bold p-4 rounded-2xl flex items-center gap-3 border ${isPremiumPost ? 'bg-blue-500/10 text-blue-300 border-blue-500/20' : 'bg-blue-50 text-blue-800 border-blue-100'}`}>
-                              <Lock className="w-5 h-5 shrink-0 text-blue-500" />
-                              Responses on recruiting pitches are private. Only you and the athlete can see this thread.
-                            </div>
-                          )}
-
                           <div className="space-y-5 mb-4 max-h-64 overflow-y-auto px-4 py-2 hide-scrollbar">
                             {visibleComments.map(comment => (
                               <div key={comment.id} className="flex items-start gap-3">
@@ -1137,13 +1196,13 @@ export default function FeedPage() {
                             )}
                           </div>
                           
-                          {allowCommentInput ? (
+                          {allowCommentInput && (
                             <div className="flex gap-2">
                               <input 
                                 type="text" 
                                 value={commentInputs[post.id] || ''} 
                                 onChange={(e) => setCommentInputs({...commentInputs, [post.id]: e.target.value})} 
-                                placeholder={isRecruiting ? "Send a private response..." : "Add a comment..."} 
+                                placeholder="Add a comment..." 
                                 className={`flex-1 rounded-full px-5 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 border shadow-inner ${isPremiumPost ? 'bg-slate-900 border-slate-700 text-white placeholder:text-slate-500 focus:bg-slate-950' : 'bg-slate-50 border-slate-200 text-slate-900 focus:bg-white'}`} 
                               />
                               <button 
@@ -1154,12 +1213,6 @@ export default function FeedPage() {
                                 <Send className="w-4 h-4 ml-0.5" />
                               </button>
                             </div>
-                          ) : (
-                            isRecruiting && hasResponded && !isMyPost ? (
-                              <div className={`text-sm font-bold p-4 rounded-2xl text-center flex items-center justify-center gap-2 border ${isPremiumPost ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}`}>
-                                <CheckCircle2 className="w-5 h-5" /> You have responded to this pitch.
-                              </div>
-                            ) : null
                           )}
                         </div>
                       )}
@@ -1194,6 +1247,42 @@ export default function FeedPage() {
             <div className="p-8 overflow-y-auto bg-white flex-1">
               <div className="prose prose-slate max-w-none font-medium whitespace-pre-wrap text-slate-700 leading-relaxed">
                 {viewingResumePost.attached_resume}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🚨 BOOST CONFIRMATION MODAL 🚨 */}
+      {postToBoost && (
+        <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-[2rem] w-full max-w-md overflow-hidden shadow-2xl relative">
+            <div className="absolute top-0 inset-x-0 h-2 bg-gradient-to-r from-amber-400 to-amber-600"></div>
+            <div className="p-8 text-center">
+              <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4 border border-amber-200 shadow-inner">
+                <Rocket className="w-8 h-8 text-amber-500" />
+              </div>
+              <h3 className="text-2xl font-black text-slate-900 mb-2">Boost this Pitch?</h3>
+              <p className="text-slate-500 font-medium mb-6">
+                Boosting will pin this post to the top of the Recruiting feed for 24 hours with a premium highlight.
+                <br/><br/>
+                <span className="font-bold text-slate-700">You have {currentUserProfile?.boosts_available || 0} boosts remaining.</span>
+              </p>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setPostToBoost(null)}
+                  className="flex-1 px-4 py-3 rounded-xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
+                  disabled={isBoosting}
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={confirmBoost}
+                  disabled={isBoosting}
+                  className="flex-1 px-4 py-3 rounded-xl font-black text-amber-950 bg-gradient-to-r from-amber-400 to-amber-500 hover:shadow-[0_0_20px_rgba(245,158,11,0.4)] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isBoosting ? 'Boosting...' : 'Yes, Boost It'}
+                </button>
               </div>
             </div>
           </div>

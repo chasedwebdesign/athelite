@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
-import { Target, TrendingUp, Lock, Activity, Zap, Medal, Swords, ScrollText, X, ChevronRight, Flame, Trophy, CheckCircle2, RefreshCw, AlertCircle } from 'lucide-react';
+import { Target, TrendingUp, Crosshair, Crown, Lock, Activity, Zap, Medal, Swords, ScrollText, X, ChevronRight, Flame, Trophy, CheckCircle2, RefreshCw, AlertCircle, Search, MapPin, Skull, Gift, Share2, ShieldCheck, School } from 'lucide-react';
 import Link from 'next/link';
 
 // 🚨 IMPORT REUSABLE COMPONENTS
@@ -13,8 +13,9 @@ import { AvatarWithBorder } from '@/components/AnimatedBorders';
 const FIELD_EVENTS = ['Shot Put', 'Discus', 'Javelin', 'Hammer', 'High Jump', 'Pole Vault', 'Long Jump', 'Triple Jump'];
 const DISTANCE_EVENTS = ['800', '1500', '1600', 'Mile', '3000', '3200', '5000', '10,000', '5K', '3 Mile'];
 
-// --- MATH HELPERS FOR BOUNTIES ---
+// --- MATH HELPERS ---
 const parseMarkToNumber = (mark: string, event: string): number => {
+  if (!mark) return 0;
   const cleanMark = mark.replace(/[a-zA-Z*]/g, '').trim();
   if (cleanMark.includes("'")) {
     const parts = cleanMark.split("'");
@@ -29,6 +30,18 @@ const parseMarkToNumber = (mark: string, event: string): number => {
     return (minutes * 60) + seconds; 
   }
   return parseFloat(cleanMark) || 0;
+};
+
+const formatDelta = (delta: number, isField: boolean): string => {
+  if (isField) {
+    const absDelta = Math.abs(delta);
+    const feet = Math.floor(absDelta / 12);
+    const inches = absDelta % 12;
+    if (feet > 0) return `${feet}' ${inches.toFixed(1).replace(/\.0$/, '')}"`;
+    return `${inches.toFixed(1).replace(/\.0$/, '')}"`;
+  } else {
+    return `${Math.abs(delta).toFixed(2)}s`;
+  }
 };
 
 const calculateTargetMark = (baseMark: string, event: string, percentImprovement: number) => {
@@ -58,7 +71,6 @@ const calculateTargetMark = (baseMark: string, event: string, percentImprovement
   }
 };
 
-// Exponential Rewards Array
 const BOUNTY_TIERS = [
   { percent: 1, reward: 100, color: 'text-green-400', bg: 'bg-green-500/10', border: 'border-green-500/30' },
   { percent: 2, reward: 225, color: 'text-cyan-400', bg: 'bg-cyan-500/10', border: 'border-cyan-500/30' },
@@ -67,10 +79,87 @@ const BOUNTY_TIERS = [
   { percent: 5, reward: 1000, color: 'text-fuchsia-400', bg: 'bg-fuchsia-500/10', border: 'border-fuchsia-500/30', isMax: true },
 ];
 
+const RECRUITING_STANDARDS: Record<string, Record<string, { t1: number, t2: number, t3: number, t4: number, t5: number, isField?: boolean }>> = {
+  'Boys': {
+    '100 Meters': { t1: 10.5, t2: 10.8, t3: 11.0, t4: 11.3, t5: 11.6 },
+    '200 Meters': { t1: 21.2, t2: 21.8, t3: 22.2, t4: 22.8, t5: 23.5 },
+    '400 Meters': { t1: 47.5, t2: 49.0, t3: 50.0, t4: 51.5, t5: 53.0 },
+    '800 Meters': { t1: 112, t2: 115, t3: 117, t4: 120, t5: 125 }, 
+    '1500 Meters': { t1: 231, t2: 239, t3: 244, t4: 250, t5: 264 },
+    '1600 Meters': { t1: 250, t2: 258, t3: 264, t4: 270, t5: 285 }, 
+    '3000 Meters': { t1: 500, t2: 518, t3: 532, t4: 546, t5: 574 },
+    '3200 Meters': { t1: 540, t2: 560, t3: 575, t4: 590, t5: 620 }, 
+    'Long Jump': { t1: 288, t2: 270, t3: 260, t4: 252, t5: 240, isField: true }, 
+    'Shot Put': { t1: 720, t2: 660, t3: 600, t4: 540, t5: 480, isField: true }, 
+    'High Jump': { t1: 82, t2: 78, t3: 76, t4: 74, t5: 70, isField: true }, 
+  },
+  'Girls': {
+    '100 Meters': { t1: 11.7, t2: 12.1, t3: 12.4, t4: 12.8, t5: 13.2 },
+    '200 Meters': { t1: 24.2, t2: 24.8, t3: 25.5, t4: 26.2, t5: 27.0 },
+    '400 Meters': { t1: 54.5, t2: 57.0, t3: 58.5, t4: 60.5, t5: 63.0 },
+    '800 Meters': { t1: 130, t2: 135, t3: 140, t4: 145, t5: 152 }, 
+    '1500 Meters': { t1: 268, t2: 282, t3: 291, t4: 300, t5: 314 },
+    '1600 Meters': { t1: 290, t2: 305, t3: 315, t4: 325, t5: 340 }, 
+    '3000 Meters': { t1: 583, t2: 611, t3: 638, t4: 666, t5: 694 },
+    '3200 Meters': { t1: 630, t2: 660, t3: 690, t4: 720, t5: 750 }, 
+    'Long Jump': { t1: 234, t2: 222, t3: 210, t4: 198, t5: 186, isField: true }, 
+    'Shot Put': { t1: 540, t2: 480, t3: 432, t4: 396, t5: 360, isField: true }, 
+    'High Jump': { t1: 68, t2: 64, t3: 62, t4: 60, t5: 58, isField: true }, 
+  }
+};
+
+const getEventScore = (markStr: string, event: string, gender: string): number => {
+  const standards = RECRUITING_STANDARDS[gender];
+  if (!standards || !standards[event]) return 40;
+  const eventStds = standards[event];
+  const val = parseMarkToNumber(markStr, event);
+  
+  let score = 40;
+  if (eventStds.isField) {
+    if (val >= eventStds.t1) score = 95 + Math.min(4, ((val - eventStds.t1) / (eventStds.t1 * 0.05)) * 4);
+    else if (val >= eventStds.t2) score = 85 + ((val - eventStds.t2) / (eventStds.t1 - eventStds.t2)) * 10;
+    else if (val >= eventStds.t3) score = 75 + ((val - eventStds.t3) / (eventStds.t2 - eventStds.t3)) * 10;
+    else if (val >= eventStds.t4) score = 65 + ((val - eventStds.t4) / (eventStds.t3 - eventStds.t4)) * 10;
+    else if (val >= eventStds.t5) score = 55 + ((val - eventStds.t5) / (eventStds.t4 - eventStds.t5)) * 10;
+    else {
+      const t6 = eventStds.t5 - (eventStds.t4 - eventStds.t5);
+      if (val >= t6) score = 40 + ((val - t6) / (eventStds.t5 - t6)) * 15;
+    }
+  } else {
+    if (val <= eventStds.t1) score = 95 + Math.min(4, ((eventStds.t1 - val) / (eventStds.t1 * 0.05)) * 4);
+    else if (val <= eventStds.t2) score = 85 + ((eventStds.t2 - val) / (eventStds.t2 - eventStds.t1)) * 10;
+    else if (val <= eventStds.t3) score = 75 + ((eventStds.t3 - val) / (eventStds.t3 - eventStds.t2)) * 10;
+    else if (val <= eventStds.t4) score = 65 + ((eventStds.t4 - val) / (eventStds.t4 - eventStds.t3)) * 10;
+    else if (val <= eventStds.t5) score = 55 + ((eventStds.t5 - val) / (eventStds.t5 - eventStds.t4)) * 10;
+    else {
+      const t6 = eventStds.t5 + (eventStds.t5 - eventStds.t4);
+      if (val <= t6) score = 40 + ((t6 - val) / (t6 - eventStds.t5)) * 15;
+    }
+  }
+  return Math.min(99, Math.max(40, Math.round(score)));
+};
+
 interface LeaderboardEntry {
-  id: string; name: string; eventDisplay: string; oldMark: string; newMark: string;
+  id: string; name: string; high_school: string; eventDisplay: string; oldMark: string; newMark: string;
   improvementValue: number; improvementText: string; border: string | null; avatar: string | null;
   isMe: boolean; prCount: number; rank: number;
+}
+
+interface TeamEntry {
+  name: string;
+  score: number;
+  athletes: number;
+  rank: number;
+}
+
+interface PR { event: string; mark: string; }
+
+interface AthleteProfile {
+  id: string; first_name: string; last_name: string; high_school: string; state: string;
+  avatar_url: string | null; equipped_border: string | null; prs: PR[] | null; rival_ids: string[] | null;
+  trust_level: number; coins: number; athletic_net_url: string | null; created_at: string;
+  referred_by: string | null; verified_referrals: number; unlocked_borders: string[] | null;
+  gender: string | null;
 }
 
 export default function CompetePage() {
@@ -81,14 +170,25 @@ export default function CompetePage() {
   const [athleteId, setAthleteId] = useState<string | null>(null);
   const [userCoins, setUserCoins] = useState(0);
   const [isVerified, setIsVerified] = useState(false);
-  const [activeTab, setActiveTab] = useState<'bounties' | 'leaderboard'>('bounties');
+  const [activeTab, setActiveTab] = useState<'bounties' | 'leaderboard' | 'rivals' | 'teams'>('bounties');
   
-  // Athlete specific data
+  const [currentUser, setCurrentUser] = useState<AthleteProfile | null>(null);
   const [athletePrs, setAthletePrs] = useState<any[]>([]);
-  const [bountyTargets, setBountyTargets] = useState<any[]>([]); // Independent Bounty Baseline
+  const [bountyTargets, setBountyTargets] = useState<any[]>([]);
   const [leaderboardData, setLeaderboardData] = useState<LeaderboardEntry[]>([]);
+  const [teamLeaderboard, setTeamLeaderboard] = useState<TeamEntry[]>([]);
+  
+  const [activeRivals, setActiveRivals] = useState<AthleteProfile[]>([]);
+  const [recommendedRivals, setRecommendedRivals] = useState<AthleteProfile[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<AthleteProfile[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
 
-  // Action States
+  const [myReferralCode, setMyReferralCode] = useState<string | null>(null);
+  const [showCodeEntry, setShowCodeEntry] = useState(false);
+  const [inviteCodeInput, setInviteCodeInput] = useState('');
+  const [isSubmittingCode, setIsSubmittingCode] = useState(false);
+
   const [selectedBounty, setSelectedBounty] = useState<any | null>(null);
   const [isClaiming, setIsClaiming] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'error' | 'success' } | null>(null);
@@ -103,30 +203,75 @@ export default function CompetePage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { router.push('/login'); return; }
 
-      const { data: aData } = await supabase
-        .from('athletes')
-        .select('id, trust_level, coins, prs, base_prs, bounty_targets')
-        .eq('id', session.user.id)
-        .maybeSingle();
+      try {
+        const { data: aData, error } = await supabase
+          .from('athletes')
+          .select('id, first_name, last_name, high_school, state, gender, avatar_url, equipped_border, trust_level, coins, prs, base_prs, bounty_targets, rival_ids, athletic_net_url, created_at, referred_by, verified_referrals, unlocked_borders')
+          .eq('id', session.user.id)
+          .maybeSingle();
 
-      if (aData) {
-        setIsVerified(aData.trust_level > 0);
-        setUserCoins(aData.coins || 0);
-        setAthleteId(aData.id);
-        setAthletePrs(aData.prs || []);
-        
-        // Fetch active bounty targets, or generate them from current PRs if empty
-        let activeBounties = aData.bounty_targets;
-        if (!activeBounties || activeBounties.length === 0) {
-            activeBounties = aData.base_prs || aData.prs || [];
+        if (error) throw error;
+
+        if (aData) {
+          setIsVerified(aData.trust_level > 0);
+          setUserCoins(aData.coins || 0);
+          setAthleteId(aData.id);
+          setAthletePrs(aData.prs || []);
+          setCurrentUser(aData as AthleteProfile);
+          
+          const refCode = aData.athletic_net_url?.match(/athlete\/(\d+)/i)?.[1] || null;
+          setMyReferralCode(refCode);
+          
+          if (aData.created_at) {
+            const diffTime = Math.abs(new Date().getTime() - new Date(aData.created_at).getTime());
+            const days = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+            setShowCodeEntry(days <= 7 && !aData.referred_by);
+          }
+          
+          let activeBounties = aData.bounty_targets || [];
+          setBountyTargets(activeBounties);
+
+          if (aData.rival_ids && aData.rival_ids.length > 0) {
+            const { data: rData } = await supabase
+              .from('athletes')
+              .select('id, first_name, last_name, high_school, state, gender, avatar_url, equipped_border, prs')
+              .in('id', aData.rival_ids);
+            if (rData) setActiveRivals(rData as AthleteProfile[]);
+          }
+
+          if (aData.state && aData.prs && aData.prs.length > 0) {
+            const topEvent = aData.prs[0];
+            const myVal = parseMarkToNumber(topEvent.mark, topEvent.event);
+            const isField = FIELD_EVENTS.includes(topEvent.event);
+
+            const { data: recs } = await supabase
+              .from('athletes')
+              .select('id, first_name, last_name, high_school, state, gender, avatar_url, equipped_border, prs')
+              .eq('state', aData.state)
+              .eq('gender', aData.gender)
+              .neq('id', aData.id)
+              .limit(15);
+            
+            if (recs) {
+               const validRecs = recs.filter(r => {
+                 if (aData.rival_ids?.includes(r.id)) return false;
+                 const matchPr = r.prs?.find((p: any) => p.event === topEvent.event);
+                 if (!matchPr) return false;
+                 const rVal = parseMarkToNumber(matchPr.mark, topEvent.event);
+                 return isField ? rVal > myVal : rVal < myVal && rVal > 0;
+               });
+               setRecommendedRivals(validRecs.slice(0, 3) as AthleteProfile[]);
+            }
+          }
         }
-        setBountyTargets(activeBounties);
+      } catch (err: any) {
+        console.error("Error loading user data:", err.message);
       }
 
-      // Leaderboard Math
+      // Leaderboard & Team Battle Math
       const { data: allAthletes } = await supabase
         .from('athletes')
-        .select('id, first_name, last_name, avatar_url, equipped_border, prs, base_prs, trust_level')
+        .select('id, first_name, last_name, high_school, avatar_url, equipped_border, prs, base_prs, trust_level')
         .not('base_prs', 'is', null)
         .gt('trust_level', 0);
 
@@ -163,7 +308,7 @@ export default function CompetePage() {
             const bestEventData = topImprovements[0];
 
             processedBoard.push({
-              id: ath.id, name: `${ath.first_name} ${ath.last_name}`,
+              id: ath.id, name: `${ath.first_name} ${ath.last_name}`, high_school: ath.high_school || 'Unknown School',
               eventDisplay: prCount > 1 ? `${bestEventData.event} (+${prCount - 1} more)` : bestEventData.event,
               oldMark: bestEventData.oldMark, newMark: bestEventData.newMark,
               improvementValue: totalStackedPct, improvementText: `+${totalStackedPct.toFixed(2)}%`,
@@ -178,26 +323,35 @@ export default function CompetePage() {
           .map((p, idx) => ({ ...p, rank: idx + 1 }));
 
         setLeaderboardData(rankedBoard);
+
+        // 🚨 PROCESS TEAM STANDINGS 🚨
+        const teamsMap: Record<string, { name: string; score: number; athletes: number }> = {};
+        
+        rankedBoard.forEach(ath => {
+          const hs = ath.high_school;
+          if (!teamsMap[hs]) teamsMap[hs] = { name: hs, score: 0, athletes: 0 };
+          teamsMap[hs].score += ath.improvementValue;
+          teamsMap[hs].athletes += 1;
+        });
+
+        const rankedTeams = Object.values(teamsMap)
+          .sort((a, b) => b.score - a.score)
+          .map((t, idx) => ({ ...t, rank: idx + 1 }));
+          
+        setTeamLeaderboard(rankedTeams);
       }
       setLoading(false);
     }
     loadCompeteData();
   }, [supabase, router]);
 
-  // ==========================================
-  // 🚨 THE BOUNTY CLAIM FUNCTION
-  // ==========================================
   const handleClaimBounty = async (event: string, reward: number, newPRMark: string) => {
     if (!athleteId) return;
     setIsClaiming(event);
     
     try {
         const newCoins = userCoins + reward;
-        
-        // Overwrite the specific event's target with the new PR
-        const newBountyTargets = bountyTargets.map(bt => 
-            bt.event === event ? { ...bt, mark: newPRMark } : bt
-        );
+        const newBountyTargets = bountyTargets.map(bt => bt.event === event ? { ...bt, mark: newPRMark } : bt);
 
         const { error } = await supabase.from('athletes').update({
             coins: newCoins,
@@ -205,7 +359,6 @@ export default function CompetePage() {
         }).eq('id', athleteId);
 
         if (error) throw error;
-
         setUserCoins(newCoins);
         setBountyTargets(newBountyTargets);
         showToast(`Bounty Claimed! +${reward} ChasedCash. New targets generated!`, 'success');
@@ -213,6 +366,161 @@ export default function CompetePage() {
         showToast(err.message, 'error');
     } finally {
         setIsClaiming(null);
+    }
+  };
+
+  const handleClaimOvertake = async (event: string, reward: number, rivalId: string) => {
+    if (!athleteId) return;
+    setIsClaiming(event + '_overtake');
+    
+    try {
+        const newCoins = userCoins + reward;
+        
+        const updatedBounties = bountyTargets.map(bt => {
+           if (bt.type === 'rival_hunt' && bt.rivalId === rivalId && bt.event === event) {
+               return { ...bt, status: 'claimed' };
+           }
+           return bt;
+        });
+
+        const { error } = await supabase.from('athletes').update({ 
+          coins: newCoins,
+          bounty_targets: updatedBounties 
+        }).eq('id', athleteId);
+
+        if (error) throw error;
+
+        setUserCoins(newCoins);
+        setBountyTargets(updatedBounties);
+        showToast(`Target Overtaken! +${reward} ChasedCash!`, 'success');
+    } catch (err: any) {
+        showToast(err.message, 'error');
+    } finally {
+        setIsClaiming(null);
+    }
+  };
+
+  const handleShareCode = async (code: string) => {
+    const shareText = `Join me on ChasedSports! Use my invite code: ${code}`;
+    if (navigator.share) {
+      try { await navigator.share({ title: 'ChasedSports Invite', text: shareText }); } catch (err) {}
+    } else {
+      await navigator.clipboard.writeText(shareText);
+      showToast("Invite code copied to clipboard!", "success");
+    }
+  };
+
+  const handleSubmitInviteCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser || !inviteCodeInput.trim()) return;
+    setIsSubmittingCode(true);
+    try {
+        const { data: referrer } = await supabase.from('athletes').select('id, coins, verified_referrals, unlocked_borders').ilike('athletic_net_url', `%athlete/${inviteCodeInput.trim()}/%`).maybeSingle();
+        if (!referrer || referrer.id === currentUser.id) throw new Error("Invalid invite code.");
+        await supabase.from('athletes').update({ referred_by: referrer.id }).eq('id', currentUser.id);
+        
+        if (currentUser.trust_level > 0) {
+            const newCoins = (referrer.coins || 0) + 300; 
+            const newReferralCount = (referrer.verified_referrals || 0) + 1; 
+            let newUnlocked = referrer.unlocked_borders || ['none'];
+            if (newReferralCount >= 5 && !newUnlocked.includes('plasma-surge')) newUnlocked = [...newUnlocked, 'plasma-surge'];
+            await supabase.from('athletes').update({ coins: newCoins, verified_referrals: newReferralCount, unlocked_borders: newUnlocked }).eq('id', referrer.id);
+        }
+        setCurrentUser({ ...currentUser, referred_by: referrer.id });
+        setShowCodeEntry(false);
+        showToast("Invite code applied successfully!", "success");
+        setInviteCodeInput('');
+    } catch (err: any) { showToast(err.message, "error"); } finally { setIsSubmittingCode(false); }
+  };
+
+  const handleSearchRivals = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!searchQuery.trim()) return;
+
+    setIsSearching(true);
+    const { data } = await supabase
+      .from('athletes')
+      .select('id, first_name, last_name, high_school, state, avatar_url, equipped_border, prs, trust_level')
+      .or(`first_name.ilike.%${searchQuery}%,last_name.ilike.%${searchQuery}%,high_school.ilike.%${searchQuery}%`)
+      .neq('id', currentUser?.id)
+      .limit(10);
+
+    const filtered = (data || []).filter(a => !activeRivals.some(ar => ar.id === a.id));
+    setSearchResults(filtered as AthleteProfile[]);
+    setIsSearching(false);
+  };
+
+  const handleAddRival = async (newRival: AthleteProfile) => {
+    if (!currentUser) return;
+    // 🚨 INCREASED LIMIT TO 5 RIVALS 🚨
+    if (activeRivals.length >= 5) {
+      showToast('You can only have 5 active rivals at a time.', 'error');
+      return;
+    }
+
+    try {
+      const updatedRivalIds = [...(currentUser.rival_ids || []), newRival.id];
+      
+      let newContracts: any[] = [];
+      currentUser.prs?.forEach(myPr => {
+        const rivalPr = newRival.prs?.find(p => p.event === myPr.event);
+        if (rivalPr) {
+          const isField = FIELD_EVENTS.includes(myPr.event);
+          const myVal = parseMarkToNumber(myPr.mark, myPr.event);
+          const rVal = parseMarkToNumber(rivalPr.mark, myPr.event);
+          const amIWinning = isField ? myVal > rVal : myVal < rVal && myVal > 0;
+          
+          // ONLY generate a bounty contract if we are losing! Otherwise it's just a friendly/tracking rival.
+          if (!amIWinning) {
+            newContracts.push({
+              type: 'rival_hunt',
+              rivalId: newRival.id,
+              event: myPr.event,
+              status: 'active'
+            });
+          }
+        }
+      });
+
+      const updatedBounties = [...bountyTargets, ...newContracts];
+
+      const { error } = await supabase.from('athletes').update({ 
+        rival_ids: updatedRivalIds,
+        bounty_targets: updatedBounties
+      }).eq('id', currentUser.id);
+
+      if (error) throw error;
+      
+      setActiveRivals([...activeRivals, newRival]);
+      setCurrentUser({ ...currentUser, rival_ids: updatedRivalIds });
+      setBountyTargets(updatedBounties);
+      setSearchQuery('');
+      setSearchResults([]);
+      setRecommendedRivals(recommendedRivals.filter(r => r.id !== newRival.id));
+      showToast(`${newRival.first_name} added to your Tracking List.`, 'success');
+      
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    }
+  };
+
+  const handleRemoveRival = async (rivalId: string) => {
+    if (!currentUser) return;
+    try {
+      const updatedRivalIds = (currentUser.rival_ids || []).filter(id => id !== rivalId);
+      const updatedBounties = bountyTargets.filter(bt => !(bt.type === 'rival_hunt' && bt.rivalId === rivalId));
+
+      await supabase.from('athletes').update({ 
+        rival_ids: updatedRivalIds,
+        bounty_targets: updatedBounties
+      }).eq('id', currentUser.id);
+
+      setActiveRivals(activeRivals.filter(r => r.id !== rivalId));
+      setCurrentUser({ ...currentUser, rival_ids: updatedRivalIds });
+      setBountyTargets(updatedBounties);
+      showToast("Rival dropped.", "success");
+    } catch (err: any) {
+      showToast(err.message, 'error');
     }
   };
 
@@ -224,6 +532,8 @@ export default function CompetePage() {
       </div>
     );
   }
+
+  const standardBounties = bountyTargets.filter(bt => !bt.type);
 
   return (
     <main className="min-h-screen bg-[#F8FAFC] font-sans pb-32 relative">
@@ -326,7 +636,7 @@ export default function CompetePage() {
             <Lock className="w-6 h-6 text-red-500 shrink-0" />
             <div>
               <h4 className="text-red-900 font-bold mb-1">Competitions Locked</h4>
-              <p className="text-red-700 text-sm font-medium mb-3">You must verify your Athletic.net profile to participate in PR Bounties and Leaderboards.</p>
+              <p className="text-red-700 text-sm font-medium mb-3">You must verify your Athletic.net profile to participate in PR Bounties, Leaderboards, and Head-to-Head matchups.</p>
               <Link href="/dashboard" className="inline-block bg-red-600 text-white font-bold px-4 py-2 rounded-lg text-sm hover:bg-red-700 transition-colors">
                 Verify Now
               </Link>
@@ -342,22 +652,26 @@ export default function CompetePage() {
           <button onClick={() => setActiveTab('leaderboard')} className={`flex items-center gap-2 px-6 py-3.5 rounded-2xl font-bold whitespace-nowrap transition-all ${activeTab === 'leaderboard' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'bg-white border border-slate-200 text-slate-500 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200'}`}>
             <TrendingUp className="w-5 h-5" /> Most Improved
           </button>
+          <button onClick={() => setActiveTab('teams')} className={`flex items-center gap-2 px-6 py-3.5 rounded-2xl font-bold whitespace-nowrap transition-all ${activeTab === 'teams' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/20' : 'bg-white border border-slate-200 text-slate-500 hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200'}`}>
+            <ShieldCheck className="w-5 h-5" /> Team Battle
+          </button>
+          <button onClick={() => setActiveTab('rivals')} className={`flex items-center gap-2 px-6 py-3.5 rounded-2xl font-bold whitespace-nowrap transition-all ${activeTab === 'rivals' ? 'bg-red-600 text-white shadow-lg shadow-red-600/20' : 'bg-white border border-slate-200 text-slate-500 hover:bg-red-50 hover:text-red-600 hover:border-red-200'}`}>
+            <Swords className="w-5 h-5" /> Rivals ({activeRivals.length}/5)
+          </button>
         </div>
 
         {/* =========================================
-            TAB 1: PR BOUNTIES (GAMIFIED & CLAIMABLE)
+            TAB 1: PR BOUNTIES 
         ========================================= */}
         {activeTab === 'bounties' && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
-            
-            {/* RPG Style Hero Banner */}
             <div className="bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-slate-900 rounded-[2rem] p-8 md:p-12 text-white shadow-2xl relative overflow-hidden border border-slate-800">
               <div className="absolute top-0 right-0 w-96 h-96 bg-purple-500/20 blur-[100px] rounded-full pointer-events-none"></div>
               <div className="absolute bottom-0 left-0 w-64 h-64 bg-blue-500/20 blur-[80px] rounded-full pointer-events-none"></div>
               
               <div className="relative z-10 flex flex-col md:flex-row items-center gap-8 text-center md:text-left">
                 <div className="w-20 h-20 bg-slate-800/80 border-2 border-slate-600 rounded-2xl flex items-center justify-center shrink-0 shadow-[0_0_30px_rgba(0,0,0,0.5)] transform -rotate-3">
-                  <Swords className="w-10 h-10 text-amber-400" />
+                  <Target className="w-10 h-10 text-amber-400" />
                 </div>
                 <div className="flex-1">
                   <h2 className="text-4xl font-black mb-2 tracking-tight">The Bounty Board</h2>
@@ -368,11 +682,8 @@ export default function CompetePage() {
               </div>
             </div>
 
-            {/* RPG Style Contract Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {bountyTargets.length > 0 ? bountyTargets.map((bt, idx) => {
-                
-                // 🚨 CHECK IF BOUNTY IS CLAIMABLE 🚨
+              {standardBounties.length > 0 ? standardBounties.map((bt, idx) => {
                 const currentRecord = athletePrs.find(p => p.event === bt.event);
                 const currentMark = currentRecord?.mark || bt.mark;
                 
@@ -385,7 +696,6 @@ export default function CompetePage() {
                 else if (!isField && currentNum < baseNum && currentNum > 0) pctImprovement = ((baseNum - currentNum) / baseNum) * 100;
 
                 let achievedTier = null;
-                // Check highest tier first
                 for (const tier of [...BOUNTY_TIERS].reverse()) {
                     if (pctImprovement >= tier.percent) {
                         achievedTier = tier;
@@ -401,7 +711,6 @@ export default function CompetePage() {
                   } ${!isVerified ? 'opacity-60 grayscale-[50%]' : ''}`}>
                     
                     {isClaimable ? (
-                      /* 🚨 CLAIMABLE STATE UI 🚨 */
                       <div className="bg-gradient-to-b from-emerald-950 to-slate-900 h-full rounded-[1.8rem] p-6 sm:p-8 flex flex-col relative z-10 shadow-inner">
                         <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-emerald-400 to-cyan-400"></div>
                         
@@ -444,7 +753,6 @@ export default function CompetePage() {
                         </button>
                       </div>
                     ) : (
-                      /* 🔒 NORMAL/PENDING STATE UI 🔒 */
                       <div className="bg-slate-900 h-full rounded-[1.8rem] p-6 sm:p-8 flex flex-col relative z-10">
                         <div className="flex justify-between items-start mb-8">
                           <div>
@@ -496,21 +804,23 @@ export default function CompetePage() {
         {activeTab === 'leaderboard' && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
             
-            {/* 🚨 LEADERBOARD PAYOUT BANNER 🚨 */}
-            <div className="bg-slate-900 rounded-[2rem] p-5 sm:p-6 flex flex-col md:flex-row items-center justify-between gap-6 border border-slate-800 shadow-xl relative overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 to-purple-500/10"></div>
+            <div className="bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-slate-900 rounded-[2rem] p-8 md:p-12 text-white shadow-2xl relative overflow-hidden border border-slate-800">
+              <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/20 blur-[100px] rounded-full pointer-events-none"></div>
+              <div className="absolute bottom-0 left-0 w-64 h-64 bg-indigo-500/20 blur-[80px] rounded-full pointer-events-none"></div>
               
-              <div className="flex items-center gap-3 relative z-10">
-                <div className="bg-slate-800 p-2.5 rounded-xl border border-slate-700">
-                  <Trophy className="w-6 h-6 text-amber-400" />
+              <div className="relative z-10 flex flex-col md:flex-row items-center gap-8 text-center md:text-left">
+                <div className="w-20 h-20 bg-slate-800/80 border-2 border-slate-600 rounded-2xl flex items-center justify-center shrink-0 shadow-[0_0_30px_rgba(0,0,0,0.5)] transform -rotate-3">
+                  <TrendingUp className="w-10 h-10 text-blue-400" />
                 </div>
-                <div>
-                  <h3 className="text-white font-black text-lg tracking-tight">Season End Payouts</h3>
-                  <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">Hold your rank to earn!</p>
+                <div className="flex-1">
+                  <h2 className="text-4xl font-black mb-2 tracking-tight">Weekly Improvement</h2>
+                  <p className="text-slate-300 font-medium text-lg leading-relaxed max-w-2xl">
+                    Ranked by your cumulative percentage improvement across your top 3 events this week. Hold your rank by Sunday night to earn the payout!
+                  </p>
                 </div>
               </div>
               
-              <div className="flex flex-wrap justify-center items-center gap-3 relative z-10">
+              <div className="mt-8 flex flex-wrap justify-center md:justify-start items-center gap-3 relative z-10">
                  <div className="bg-slate-800 border border-yellow-500/50 text-yellow-400 text-sm font-black px-4 py-2 rounded-xl flex items-center gap-1.5 shadow-[0_0_15px_rgba(234,179,8,0.2)]">
                    1st: 1000 <ChasedCash className="w-5 h-4" />
                  </div>
@@ -529,9 +839,9 @@ export default function CompetePage() {
             <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
               <div className="p-6 md:p-8 border-b border-slate-100 bg-slate-50">
                 <h3 className="text-2xl font-black text-slate-900 mb-2 flex items-center gap-3">
-                  <TrendingUp className="w-7 h-7 text-blue-600" /> Stacked Improvement Rank
+                  <Trophy className="w-7 h-7 text-blue-600" /> Stacked Improvement Rank
                 </h3>
-                <p className="text-slate-500 font-medium">Ranked by the <strong className="text-slate-700">cumulative total percentage</strong> of improvement across your top 3 events this season. Multi-event athletes get rewarded for improving everywhere!</p>
+                <p className="text-slate-500 font-medium">Multi-event athletes get rewarded for improving everywhere!</p>
               </div>
 
               {leaderboardData.length > 0 ? (
@@ -555,7 +865,7 @@ export default function CompetePage() {
                           </div>
 
                           <Link href={`/athlete/${athlete.id}`} className="shrink-0 hover:scale-105 transition-transform z-10">
-                            <AvatarWithBorder avatarUrl={athlete.avatar} borderId={athlete.border} sizeClasses="w-12 h-12" />
+                            <AvatarWithBorder avatarUrl={athlete.avatar ?? null} borderId={athlete.border ?? null} sizeClasses="w-12 h-12" />
                           </Link>
 
                           <div className="flex-1 min-w-0">
@@ -603,6 +913,321 @@ export default function CompetePage() {
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* =========================================
+            TAB 3: TEAM BATTLE 🚨
+        ========================================= */}
+        {activeTab === 'teams' && (
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+            
+            <div className="bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-slate-900 rounded-[2rem] p-8 md:p-12 text-white shadow-2xl relative overflow-hidden border border-slate-800">
+              <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/20 blur-[100px] rounded-full pointer-events-none"></div>
+              <div className="absolute bottom-0 left-0 w-64 h-64 bg-teal-500/20 blur-[80px] rounded-full pointer-events-none"></div>
+              
+              <div className="relative z-10 flex flex-col md:flex-row items-center gap-8 text-center md:text-left">
+                <div className="w-20 h-20 bg-slate-800/80 border-2 border-slate-600 rounded-2xl flex items-center justify-center shrink-0 shadow-[0_0_30px_rgba(0,0,0,0.5)] transform rotate-3">
+                  <ShieldCheck className="w-10 h-10 text-emerald-400" />
+                </div>
+                <div className="flex-1">
+                  <h2 className="text-4xl font-black mb-2 tracking-tight">High School Clash</h2>
+                  <p className="text-slate-300 font-medium text-lg leading-relaxed max-w-2xl">
+                    Represent <strong className="text-emerald-400">{currentUser?.high_school || 'your school'}</strong>. Your individual percentage improvements are added to your school's total score. Dominate the state.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
+              <div className="p-6 md:p-8 border-b border-slate-100 bg-slate-50 flex flex-col sm:flex-row sm:items-center gap-4">
+                <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center shrink-0">
+                  <School className="w-6 h-6 text-emerald-600" />
+                </div>
+                <div>
+                   <h3 className="text-2xl font-black text-slate-900">Team Standings</h3>
+                   <p className="text-slate-500 font-medium text-sm">Combined percentage improvements from all verified athletes.</p>
+                </div>
+              </div>
+              
+              {teamLeaderboard.length > 0 ? (
+                <div className="flex flex-col divide-y divide-slate-100">
+                  {teamLeaderboard.map((team) => (
+                    <div key={team.name} className={`p-4 md:p-6 flex items-center justify-between transition-colors hover:bg-slate-50 ${team.name === currentUser?.high_school ? 'bg-emerald-50/50' : ''}`}>
+                      <div className="flex items-center gap-4">
+                        <div className="w-8 shrink-0 text-center">
+                          <span className={`font-black text-lg ${team.rank === 1 ? 'text-yellow-500' : team.rank === 2 ? 'text-slate-400' : team.rank === 3 ? 'text-amber-600' : 'text-slate-300'}`}>
+                            #{team.rank}
+                          </span>
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-slate-900 text-lg">{team.name}</h4>
+                          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">{team.athletes} Active Athlete{team.athletes > 1 ? 's' : ''}</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="inline-flex items-center bg-emerald-100 text-emerald-700 px-3 py-1.5 rounded-lg font-black text-lg shadow-sm border border-emerald-200">
+                          +{team.score.toFixed(2)}%
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                 <div className="p-12 text-center text-slate-500 font-medium">
+                   <School className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+                   <h4 className="text-lg font-black text-slate-900">No Teams Found</h4>
+                   <p className="text-sm mt-1">Get your teammates to sign up and log PRs to put your school on the map!</p>
+                 </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* =========================================
+            TAB 4: THE RIVALS ARENA 🚨
+        ========================================= */}
+        {activeTab === 'rivals' && (
+          <div className="animate-in fade-in slide-in-from-bottom-4">
+            
+            <div className="bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-slate-900 rounded-[2rem] p-8 md:p-12 text-white shadow-2xl relative overflow-hidden border border-slate-800 mb-6">
+              <div className="absolute top-0 left-0 w-96 h-96 bg-red-500/20 blur-[100px] rounded-full pointer-events-none"></div>
+              
+              <div className="relative z-10 flex flex-col md:flex-row items-center gap-8 text-center md:text-left">
+                <div className="w-20 h-20 bg-slate-800/80 border-2 border-slate-600 rounded-2xl flex items-center justify-center shrink-0 shadow-[0_0_30px_rgba(0,0,0,0.5)] transform rotate-3">
+                  <Swords className="w-10 h-10 text-red-500" />
+                </div>
+                <div className="flex-1">
+                  <h2 className="text-4xl font-black mb-2 tracking-tight">The Rivals Arena</h2>
+                  <p className="text-slate-300 font-medium text-lg leading-relaxed max-w-2xl">
+                    Target athletes who are faster than you to earn dynamic ChasedCash payouts, or track your friends and local competitors just for fun to assert your dominance.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* ACTIVE RIVALS LIST */}
+            {activeRivals.length > 0 && (
+              <div className="space-y-6 mb-8">
+                {activeRivals.map(r => {
+                  const shared = currentUser?.prs?.filter(myPr => r.prs?.some(rPr => rPr.event === myPr.event)) || [];
+                  const isHunting = bountyTargets.some(bt => bt.type === 'rival_hunt' && bt.rivalId === r.id && bt.status === 'active');
+                  
+                  return (
+                    <div key={r.id} className="bg-white rounded-[2rem] border border-slate-200 shadow-xl overflow-hidden relative">
+                      <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-red-500/5 blur-[100px] rounded-full pointer-events-none"></div>
+                      
+                      <div className="p-6 md:p-8 flex flex-col md:flex-row items-center justify-between gap-6 border-b border-slate-100 bg-slate-50 relative z-10">
+                        <div className="flex items-center gap-4">
+                          <AvatarWithBorder avatarUrl={r.avatar_url ?? null} borderId={r.equipped_border ?? null} sizeClasses="w-16 h-16 shadow-md" />
+                          <div>
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <h3 className="text-2xl font-black text-slate-900 tracking-tight">{r.first_name} {r.last_name}</h3>
+                            </div>
+                            <div className="flex items-center gap-2 mt-1">
+                              <p className="text-xs font-bold text-slate-500 uppercase tracking-widest"><MapPin className="w-3 h-3 inline mr-1 -mt-0.5" /> {r.high_school}</p>
+                              <span className="text-slate-300">•</span>
+                              <span className={`text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-md border ${isHunting ? 'bg-red-50 text-red-600 border-red-200' : 'bg-blue-50 text-blue-600 border-blue-200'}`}>
+                                {isHunting ? '🎯 Active Target' : '👀 Tracking'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        <button onClick={() => handleRemoveRival(r.id)} className="text-xs font-bold text-slate-400 hover:text-red-500 transition-colors flex items-center gap-1.5 bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm hover:shadow-md shrink-0">
+                          Drop Target <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      <div className="p-6 md:p-8 relative z-10">
+                        {shared.length === 0 ? (
+                           <div className="text-center py-6">
+                             <p className="text-slate-500 font-medium">No shared events. They need to sync their PRs.</p>
+                           </div>
+                        ) : (
+                          <div className="space-y-4">
+                            {shared.map((myPr, idx) => {
+                              const rivalPr = r.prs?.find(p => p.event === myPr.event);
+                              if (!rivalPr) return null;
+
+                              const isField = FIELD_EVENTS.includes(myPr.event);
+                              const myVal = parseMarkToNumber(myPr.mark, myPr.event);
+                              const rivalVal = parseMarkToNumber(rivalPr.mark, myPr.event);
+                              
+                              let amIWinning = false;
+                              if (isField) amIWinning = myVal > rivalVal;
+                              else amIWinning = myVal < rivalVal && myVal > 0;
+
+                              const isTied = myVal === rivalVal;
+                              const delta = myVal - rivalVal;
+                              const formattedDelta = formatDelta(delta, isField);
+
+                              const hasClaimed = bountyTargets.some(bt => bt.type === 'rival_claim' && bt.rivalId === r.id && bt.event === myPr.event);
+                              const hasActiveHunt = bountyTargets.some(bt => bt.type === 'rival_hunt' && bt.rivalId === r.id && bt.event === myPr.event && bt.status === 'active');
+
+                              const rivalScore = getEventScore(rivalPr.mark, myPr.event, r.gender || 'Boys');
+                              const dynamicReward = 100 + Math.floor((rivalScore - 40) * 15);
+
+                              return (
+                                <div key={idx} className={`bg-slate-50 border rounded-[1.5rem] p-5 flex flex-col md:flex-row md:items-center justify-between gap-6 transition-all ${amIWinning && hasActiveHunt ? 'border-emerald-300 shadow-lg shadow-emerald-500/10' : 'border-slate-200'}`}>
+                                  
+                                  <div className="flex items-center gap-4 w-full md:w-auto">
+                                    <div className={`p-3 rounded-2xl shadow-sm border shrink-0 ${amIWinning ? 'bg-blue-100 text-blue-600 border-blue-200' : isTied ? 'bg-slate-200 text-slate-600 border-slate-300' : 'bg-red-100 text-red-600 border-red-200'}`}>
+                                      <Trophy className="w-5 h-5" />
+                                    </div>
+                                    <div className="flex-1">
+                                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">{myPr.event}</p>
+                                      <h4 className={`text-lg font-black ${amIWinning ? 'text-blue-700' : isTied ? 'text-slate-700' : 'text-red-700'}`}>
+                                        {amIWinning ? 'You are leading' : isTied ? 'Dead Tie' : `${r.first_name} is leading`}
+                                      </h4>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-center gap-4 bg-white p-3 rounded-2xl border border-slate-200 shadow-sm w-full md:w-auto mx-auto">
+                                    <div className="text-center w-20 sm:w-24">
+                                      <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">You</span>
+                                      <span className={`font-black text-xl tracking-tight ${amIWinning ? 'text-blue-600' : 'text-slate-700'}`}>{myPr.mark}</span>
+                                    </div>
+                                    <div className="w-px h-8 bg-slate-200"></div>
+                                    <div className="text-center w-20 sm:w-24 relative group cursor-help">
+                                      <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 truncate">{r.first_name}</span>
+                                      <span className={`font-black text-xl tracking-tight ${!amIWinning && !isTied ? 'text-red-600' : 'text-slate-700'}`}>{rivalPr.mark}</span>
+                                      
+                                      <div className="absolute -top-3 -right-3 bg-slate-900 text-white text-[8px] font-black px-1.5 py-0.5 rounded-md shadow-md opacity-0 group-hover:opacity-100 transition-opacity">
+                                        SCORE: {rivalScore}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex flex-col items-end gap-2 w-full md:w-44 shrink-0">
+                                    {!isTied ? (
+                                      <div className={`text-right w-full flex items-center justify-between md:block ${amIWinning ? 'text-blue-600' : 'text-red-600'}`}>
+                                        <span className="md:block text-[10px] font-bold uppercase tracking-widest opacity-70 mb-0.5">Difference</span>
+                                        <span className="font-black text-2xl tracking-tighter">{amIWinning ? '+' : '-'}{formattedDelta}</span>
+                                      </div>
+                                    ) : (
+                                      <div className="text-right text-slate-400 w-full flex items-center justify-between md:block">
+                                        <span className="md:block text-[10px] font-bold uppercase tracking-widest mb-0.5">Difference</span>
+                                        <span className="font-black text-2xl tracking-tighter">0.00</span>
+                                      </div>
+                                    )}
+                                    
+                                    <div className="w-full mt-2">
+                                      {hasClaimed ? (
+                                        <div className="w-full bg-slate-200 text-slate-400 font-black text-[10px] px-3 py-2 rounded-lg flex items-center justify-center gap-1.5 border border-slate-300">
+                                          <CheckCircle2 className="w-3.5 h-3.5" /> Defeated
+                                        </div>
+                                      ) : amIWinning && hasActiveHunt ? (
+                                        <button 
+                                          onClick={() => handleClaimOvertake(myPr.event, dynamicReward, r.id)}
+                                          disabled={isClaiming === myPr.event + '_overtake'}
+                                          className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-emerald-950 font-black text-xs px-4 py-2.5 rounded-xl transition-all shadow-[0_0_15px_rgba(16,185,129,0.4)] flex items-center justify-center gap-1.5 hover:scale-105 disabled:opacity-50 animate-pulse-slow"
+                                        >
+                                          {isClaiming === myPr.event + '_overtake' ? (
+                                            <><RefreshCw className="w-3 h-3 animate-spin" /> Claiming...</>
+                                          ) : (
+                                            <>Claim {dynamicReward} <ChasedCash className="w-4 h-3.5" /> Bounty</>
+                                          )}
+                                        </button>
+                                      ) : hasActiveHunt ? (
+                                        <div className="w-full bg-slate-900 text-slate-400 font-bold text-[10px] uppercase tracking-widest px-3 py-2 rounded-lg flex items-center justify-center border border-slate-700">
+                                          Beat to earn {dynamicReward} Cash
+                                        </div>
+                                      ) : (
+                                        <div className="w-full bg-blue-50 text-blue-600 font-bold text-[10px] uppercase tracking-widest px-3 py-2 rounded-lg flex items-center justify-center border border-blue-200">
+                                          <Crown className="w-3 h-3 mr-1" /> Dominating
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* SEARCH AND ADD MORE RIVALS */}
+            {activeRivals.length < 5 && (
+              <div className="bg-white rounded-[2rem] p-8 md:p-12 shadow-sm border border-slate-200 relative overflow-hidden">
+                <div className="max-w-2xl mx-auto">
+                  <div className="text-center mb-8">
+                    <div className="w-16 h-16 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-red-100 shadow-sm">
+                      <Crosshair className="w-8 h-8" />
+                    </div>
+                    <h2 className="text-3xl font-black text-slate-900 mb-2 tracking-tight">Acquire a Target</h2>
+                    <p className="text-slate-500 font-medium">Search for athletes faster than you to place active bounties on them. You have {5 - activeRivals.length} open slots.</p>
+                  </div>
+
+                  <form onSubmit={handleSearchRivals} className="flex flex-col sm:flex-row gap-3 mb-10">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                      <input 
+                        type="text" 
+                        placeholder="Search by name or high school..." 
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl pl-12 pr-4 py-4 focus:outline-none focus:ring-2 focus:ring-red-500 font-bold text-lg shadow-inner"
+                      />
+                    </div>
+                    <button type="submit" disabled={isSearching} className="bg-slate-900 hover:bg-black text-white px-8 rounded-xl font-black transition-colors shrink-0 disabled:opacity-50 text-lg shadow-lg">
+                      {isSearching ? '...' : 'Search'}
+                    </button>
+                  </form>
+
+                  {/* RECOMMENDATIONS */}
+                  {!searchQuery && recommendedRivals.length > 0 && (
+                    <div className="mb-8">
+                      <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                        <Zap className="w-3.5 h-3.5 text-amber-400" /> Recommended Targets in {currentUser?.state || 'your area'}
+                      </h4>
+                      <div className="space-y-3">
+                        {recommendedRivals.map((athlete) => (
+                          <div key={athlete.id} className="flex items-center justify-between bg-slate-50 border border-slate-200 p-4 rounded-xl hover:border-red-300 transition-colors group">
+                            <div className="flex items-center gap-4">
+                              <AvatarWithBorder avatarUrl={athlete.avatar_url ?? null} borderId={athlete.equipped_border ?? null} sizeClasses="w-10 h-10" />
+                              <div>
+                                <h4 className="font-bold text-slate-900 group-hover:text-red-600 transition-colors">{athlete.first_name} {athlete.last_name}</h4>
+                                <p className="text-xs font-medium text-slate-500 flex items-center"><MapPin className="w-3 h-3 mr-1" /> {athlete.high_school}</p>
+                              </div>
+                            </div>
+                            <button onClick={() => handleAddRival(athlete)} className="bg-white hover:bg-red-500 text-slate-700 hover:text-white border border-slate-200 hover:border-red-600 font-black px-4 py-2 rounded-lg transition-all text-xs shadow-sm">
+                              Target
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Search Results */}
+                  {searchResults.length > 0 && (
+                    <div className="space-y-3 bg-slate-50 p-6 rounded-[1.5rem] border border-slate-200">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Search Results</p>
+                      {searchResults.map((athlete) => (
+                        <div key={athlete.id} className="flex items-center justify-between bg-white border border-slate-200 p-4 rounded-xl hover:border-red-300 transition-colors group shadow-sm">
+                          <div className="flex items-center gap-4">
+                            <AvatarWithBorder avatarUrl={athlete.avatar_url ?? null} borderId={athlete.equipped_border ?? null} sizeClasses="w-10 h-10" />
+                            <div>
+                              <h4 className="font-bold text-slate-900 group-hover:text-red-600 transition-colors">{athlete.first_name} {athlete.last_name}</h4>
+                              <p className="text-xs font-medium text-slate-500 flex items-center"><MapPin className="w-3 h-3 mr-1" /> {athlete.high_school}</p>
+                            </div>
+                          </div>
+                          <button onClick={() => handleAddRival(athlete)} className="bg-red-50 hover:bg-red-500 text-red-600 hover:text-white border border-red-200 hover:border-red-600 font-black px-4 py-2 rounded-lg transition-all shadow-sm text-xs">
+                            Target
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

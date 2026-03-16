@@ -2,11 +2,21 @@
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
-import { Search, Mail, School, Camera, Star, ChevronRight, Activity, MapPin, Medal, Trash2, ExternalLink, ShieldAlert, CheckCircle2, Flame, Trophy, Pencil, Save, X } from 'lucide-react';
+import { Search, Mail, School, Camera, Star, ChevronRight, Activity, MapPin, Medal, Trash2, ExternalLink, ShieldAlert, CheckCircle2, Flame, Trophy, Pencil, Save, X, Download, MessageSquareText, TrendingUp, Crown, Users, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
 import imageCompression from 'browser-image-compression';
 
-interface CoachProfile { id: string; first_name: string | null; last_name: string | null; school_name: string | null; coach_type: string; avatar_url: string | null; email: string | null; is_verified: boolean; }
+interface CoachProfile { 
+  id: string; 
+  first_name: string | null; 
+  last_name: string | null; 
+  school_name: string | null; 
+  coach_type: string; 
+  avatar_url: string | null; 
+  email: string | null; 
+  is_verified: boolean;
+  is_founder: boolean; 
+}
 
 export default function CollegeCoachDashboard() {
   const supabase = createClient();
@@ -15,6 +25,7 @@ export default function CollegeCoachDashboard() {
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [watchlist, setWatchlist] = useState<any[]>([]);
+  const [hotLeadsCount, setHotLeadsCount] = useState(0);
 
   // VERIFICATION STATE
   const [verificationStep, setVerificationStep] = useState<'idle' | 'sending' | 'input' | 'verifying'>('idle');
@@ -52,7 +63,19 @@ export default function CollegeCoachDashboard() {
         .eq('coach_id', session.user.id)
         .order('created_at', { ascending: false });
 
-      if (savedData) setWatchlist(savedData);
+      if (savedData) {
+        const formattedData = savedData.map((item: any) => ({
+          ...item,
+          athletes: Array.isArray(item.athletes) ? item.athletes[0] : item.athletes
+        }));
+
+        setWatchlist(formattedData);
+        
+        const hotLeads = formattedData.filter(item => {
+          return item.athletes?.prs?.some((pr: any) => isRecentPR(pr.date));
+        });
+        setHotLeadsCount(hotLeads.length);
+      }
 
       setLoading(false);
     }
@@ -174,7 +197,33 @@ export default function CollegeCoachDashboard() {
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) <= 14; 
   };
 
+  const handleExportCSV = () => {
+    if (watchlist.length === 0) return;
+
+    const headers = ['First Name', 'Last Name', 'High School', 'State', 'Grad Year', 'Top Event', 'Top Mark'];
+    const csvData = watchlist.map(item => {
+      const a = item.athletes;
+      if (!a) return '';
+      const topPr = a.prs && a.prs.length > 0 ? a.prs[0] : { event: 'N/A', mark: 'N/A' };
+      return `"${a.first_name}","${a.last_name}","${a.high_school}","${a.state || 'N/A'}","${a.grad_year || 'N/A'}","${topPr.event}","${topPr.mark}"`;
+    });
+
+    const csvString = [headers.join(','), ...csvData.filter(Boolean)].join('\n');
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `${coachProfile?.school_name?.replace(/\s+/g, '_') || 'My'}_Recruiting_Board.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   if (loading) return null;
+
+  // 🚨 CHECK FOR MISSING PROFILE INFO 🚨
+  const profileIncomplete = coachProfile && (!coachProfile.first_name || !coachProfile.last_name || !coachProfile.school_name);
 
   return (
     <main className="min-h-screen bg-[#F8FAFC] font-sans pb-32">
@@ -193,7 +242,7 @@ export default function CollegeCoachDashboard() {
             </div>
             <label className="absolute inset-0 bg-black/50 rounded-full flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
               <Camera className="w-6 h-6 text-white mb-1" />
-              <span className="text-[10px] text-white font-bold uppercase tracking-wider">Update Logo</span>
+              <span className="text-[10px] text-white font-bold uppercase tracking-wider text-center px-2">Update Logo</span>
               <input type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} disabled={isUploadingAvatar} />
             </label>
           </div>
@@ -202,6 +251,27 @@ export default function CollegeCoachDashboard() {
             <div className="inline-flex items-center px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/30 text-blue-300 text-xs font-bold tracking-widest uppercase mb-3">
               NCAA Recruiting Command Center
             </div>
+
+            {/* 🚨 PROFILE INCOMPLETE BANNER 🚨 */}
+            {profileIncomplete && !isEditingProfile && (
+              <div className="mb-6 bg-red-500/10 border border-red-500/30 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in duration-300">
+                <div className="flex items-center gap-3 text-left">
+                  <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center shrink-0">
+                    <AlertTriangle className="w-5 h-5 text-red-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-red-400 font-black text-sm">Profile Incomplete</h3>
+                    <p className="text-red-300/80 text-xs font-medium mt-0.5">Athletes need to know who you are. Please add your name and university.</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={handleEditToggle} 
+                  className="w-full sm:w-auto px-5 py-2 bg-red-500 hover:bg-red-400 text-white text-sm font-black rounded-xl transition-colors shadow-lg shadow-red-500/20 shrink-0"
+                >
+                  Complete Profile
+                </button>
+              </div>
+            )}
             
             {isEditingProfile ? (
               <div className="bg-slate-800/50 p-5 rounded-2xl border border-slate-700 max-w-lg mx-auto md:mx-0 animate-in fade-in slide-in-from-top-2 duration-200">
@@ -220,7 +290,7 @@ export default function CollegeCoachDashboard() {
                   <input type="text" value={editSchoolName} onChange={e => setEditSchoolName(e.target.value)} placeholder="State University" className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 mt-1" />
                 </div>
                 <div className="flex items-center gap-3">
-                  <button onClick={handleSaveProfile} disabled={isSavingProfile} className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-xl flex items-center justify-center transition-colors shadow-lg disabled:opacity-50">
+                  <button onClick={handleSaveProfile} disabled={isSavingProfile || !editFirstName.trim() || !editLastName.trim() || !editSchoolName.trim()} className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-xl flex items-center justify-center transition-colors shadow-lg disabled:opacity-50">
                     <Save className="w-4 h-4 mr-2" /> {isSavingProfile ? 'Saving...' : 'Save Profile'}
                   </button>
                   <button onClick={() => setIsEditingProfile(false)} className="px-4 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-white font-bold flex items-center transition-colors">
@@ -232,11 +302,20 @@ export default function CollegeCoachDashboard() {
               <div className="group relative w-fit mx-auto md:mx-0">
                 <h1 className="text-4xl font-black mb-2 flex flex-col md:flex-row md:items-center justify-center md:justify-start gap-2">
                   {coachProfile?.first_name ? `Coach ${coachProfile.last_name}` : 'Welcome, Coach'}
-                  {coachProfile?.is_verified && (
-                    <span title="Verified Coach" className="flex items-center shrink-0">
-                      <CheckCircle2 className="w-6 h-6 text-blue-400" />
-                    </span>
-                  )}
+                  
+                  <div className="flex items-center gap-2 justify-center md:justify-start mt-2 md:mt-0">
+                    {coachProfile?.is_verified && (
+                      <span title="Verified Coach" className="flex items-center shrink-0">
+                        <CheckCircle2 className="w-6 h-6 text-blue-400" />
+                      </span>
+                    )}
+                    
+                    {coachProfile?.is_founder && (
+                      <span className="bg-gradient-to-r from-amber-400 to-amber-600 text-amber-950 text-[10px] font-black px-2.5 py-1 rounded-lg uppercase tracking-widest flex items-center shadow-sm">
+                        <Crown className="w-3.5 h-3.5 mr-1" /> Founder
+                      </span>
+                    )}
+                  </div>
                 </h1>
 
                 <p className="text-lg text-slate-300 font-medium flex flex-wrap items-center justify-center md:justify-start gap-x-4 gap-y-2 mt-2">
@@ -303,6 +382,39 @@ export default function CollegeCoachDashboard() {
           </div>
         )}
 
+        {/* COMMAND CENTER STAT CARDS */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 flex items-center justify-between">
+            <div>
+              <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Athletes Tracked</p>
+              <h3 className="text-3xl font-black text-slate-900">{watchlist.length}</h3>
+            </div>
+            <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center border border-blue-100">
+              <Users className="w-6 h-6 text-blue-600" />
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 flex items-center justify-between">
+            <div>
+              <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Hot Leads (New PRs)</p>
+              <h3 className="text-3xl font-black text-slate-900">{hotLeadsCount}</h3>
+            </div>
+            <div className="w-12 h-12 bg-orange-50 rounded-2xl flex items-center justify-center border border-orange-100">
+              <Flame className="w-6 h-6 text-orange-500" />
+            </div>
+          </div>
+
+          <Link href="/dashboard/messages" className="bg-slate-900 rounded-3xl p-6 shadow-lg border border-slate-800 flex items-center justify-between hover:bg-slate-800 transition-colors group">
+            <div>
+              <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Unread Messages</p>
+              <h3 className="text-3xl font-black text-white">{unreadCount}</h3>
+            </div>
+            <div className="w-12 h-12 bg-purple-500/20 rounded-2xl flex items-center justify-center border border-purple-500/30 group-hover:scale-110 transition-transform">
+              <Mail className="w-6 h-6 text-purple-400" />
+            </div>
+          </Link>
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
           {/* LEFT COLUMN: QUICK ACTIONS */}
@@ -319,13 +431,8 @@ export default function CollegeCoachDashboard() {
             </Link>
 
             <Link href="/dashboard/messages" className="bg-white rounded-3xl p-8 shadow-sm border border-slate-200 hover:border-purple-400 hover:shadow-md transition-all group block relative overflow-hidden">
-              {unreadCount > 0 && (
-                <div className="absolute top-6 right-6 bg-red-500 text-white text-xs font-black px-2.5 py-1 rounded-full animate-pulse">
-                  {unreadCount} New
-                </div>
-              )}
               <div className="w-14 h-14 bg-purple-50 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 group-hover:bg-purple-500 transition-all">
-                <Mail className="w-6 h-6 text-purple-600 group-hover:text-white transition-colors" />
+                <MessageSquareText className="w-6 h-6 text-purple-600 group-hover:text-white transition-colors" />
               </div>
               <h3 className="text-2xl font-black text-slate-900 mb-2">Recruiting Inbox</h3>
               <p className="text-slate-500 font-medium mb-4">Manage direct pitches from verified high school athletes and their coaches.</p>
@@ -338,22 +445,28 @@ export default function CollegeCoachDashboard() {
           {/* RIGHT COLUMN: THE WATCHLIST */}
           <div className="lg:col-span-2 space-y-6">
             <div className="bg-white rounded-3xl p-8 md:p-10 shadow-sm border border-slate-200 h-full">
-              <div className="flex items-center justify-between mb-8 pb-6 border-b border-slate-100">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 pb-6 border-b border-slate-100 gap-4">
                 <div>
                   <h2 className="text-2xl font-black text-slate-900 flex items-center">
                     <Star className="w-6 h-6 mr-3 text-yellow-400 fill-yellow-400" /> My Watchlist
                   </h2>
                   <p className="text-slate-500 font-medium mt-1">Athletes you are actively tracking.</p>
                 </div>
-                <div className="bg-slate-100 text-slate-600 font-bold px-4 py-2 rounded-xl text-sm">
-                  {watchlist.length} Saved
-                </div>
+                
+                {watchlist.length > 0 && (
+                  <button 
+                    onClick={handleExportCSV}
+                    className="flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-sm transition-colors border border-slate-200"
+                  >
+                    <Download className="w-4 h-4" /> Export CSV
+                  </button>
+                )}
               </div>
 
               {watchlist.length === 0 ? (
                 <div className="text-center py-16 px-6 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
                   <div className="w-20 h-20 bg-white rounded-full shadow-sm flex items-center justify-center mx-auto mb-6">
-                    <Activity className="w-8 h-8 text-slate-300" />
+                    <TrendingUp className="w-8 h-8 text-slate-300" />
                   </div>
                   <h3 className="text-xl font-black text-slate-900 mb-2">Your board is empty!</h3>
                   <p className="text-slate-500 max-w-md mx-auto mb-8 font-medium">
@@ -369,7 +482,6 @@ export default function CollegeCoachDashboard() {
                     const athlete = item.athletes;
                     if (!athlete) return null;
 
-                    // PR Math & Grid Slicing
                     const hasRecentPR = athlete.prs?.some((pr: any) => isRecentPR(pr.date));
                     const displayPrs = athlete.prs?.slice(0, 4) || [];
                     const extraPrsCount = (athlete.prs?.length || 0) - 4;
@@ -377,9 +489,8 @@ export default function CollegeCoachDashboard() {
                     return (
                       <div key={item.id} className="bg-white border border-slate-200 rounded-[1.5rem] p-6 hover:border-blue-300 hover:shadow-lg transition-all group relative flex flex-col">
                         
-                        {/* RECENT PR FIRE BADGE */}
                         {hasRecentPR && (
-                          <div className="absolute -top-3 -right-3 bg-orange-500 text-white text-[10px] font-black px-3 py-1.5 rounded-full shadow-md flex items-center gap-1 animate-bounce z-10">
+                          <div className="absolute -top-3 -left-3 bg-gradient-to-r from-orange-400 to-orange-500 text-white text-[10px] font-black px-3 py-1.5 rounded-full shadow-md flex items-center gap-1 animate-bounce z-10 border border-orange-300">
                             <Flame className="w-3 h-3 fill-white" /> NEW PR
                           </div>
                         )}
@@ -415,8 +526,7 @@ export default function CollegeCoachDashboard() {
                           <span className="truncate">{athlete.high_school} {athlete.state ? `• ${athlete.state}` : ''}</span>
                         </div>
 
-                        {/* 🏆 STAT GRID */}
-                        <div className="mb-5 flex-1">
+                        <div className="mb-6 flex-1">
                           <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center">
                             <Trophy className="w-3 h-3 mr-1" /> Top Marks
                           </h5>
@@ -442,9 +552,12 @@ export default function CollegeCoachDashboard() {
                           )}
                         </div>
 
-                        <div className="mt-auto pt-4 border-t border-slate-100">
-                          <Link href={`/athlete/${athlete.id}`} className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl flex items-center justify-center text-sm hover:bg-blue-600 transition-colors shadow-sm">
-                            View Full Profile <ExternalLink className="w-4 h-4 ml-1.5 opacity-70" />
+                        <div className="mt-auto pt-4 border-t border-slate-100 flex gap-2">
+                          <Link href={`/athlete/${athlete.id}?action=message`} className="flex-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-bold py-2.5 rounded-xl flex items-center justify-center text-sm transition-colors shadow-sm">
+                            <Mail className="w-4 h-4 mr-1.5" /> Message
+                          </Link>
+                          <Link href={`/athlete/${athlete.id}`} className="flex-1 bg-slate-900 text-white font-bold py-2.5 rounded-xl flex items-center justify-center text-sm hover:bg-slate-800 transition-colors shadow-sm">
+                            Profile <ExternalLink className="w-4 h-4 ml-1.5 opacity-70" />
                           </Link>
                         </div>
 
