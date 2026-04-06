@@ -3,16 +3,12 @@
 import { useEffect, useState, useRef } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation'; 
-import { MessageSquare, Send, Clock, ShieldCheck, CheckCircle2, MapPin, Mail, Lock, X, Trophy, GraduationCap, ChevronDown, School, UserCircle2, Users, Coffee, Globe, Reply, AlertCircle, MoreHorizontal, Flag, Flame, Target, Image as ImageIcon, Crown, Sparkles, Rocket, EyeOff, FileText } from 'lucide-react';
+import { MessageSquare, Send, Clock, ShieldCheck, CheckCircle2, MapPin, Mail, Lock, X, Trophy, GraduationCap, ChevronDown, School, UserCircle2, Users, Coffee, Globe, Reply, AlertCircle, MoreHorizontal, Flag, Flame, Target, Image as ImageIcon, Crown, Sparkles, Rocket, EyeOff, FileText, Search, Filter, BookmarkPlus, BookmarkCheck, BarChart3, RefreshCw, Save, Timer } from 'lucide-react';
 import Link from 'next/link';
 
-// 🚨 IMPORT THE BORDER COMPONENT
 import { AvatarWithBorder } from '@/components/AnimatedBorders';
 
-// 🚨 PROFANITY FILTER LIST
-const BAD_WORDS = [
-  'fuck', 'shit', 'bitch', 'ass', 'asshole', 'dick', 'pussy', 'cunt', 'slut', 'whore', 'fag', 'faggot', 'nigger', 'nigga', 'retard', 'bastard', 'motherfucker'
-];
+const BAD_WORDS = ['fuck', 'shit', 'bitch', 'ass', 'asshole', 'dick', 'pussy', 'cunt', 'slut', 'whore', 'fag', 'faggot', 'nigger', 'nigga', 'retard', 'bastard', 'motherfucker'];
 
 const containsBadWords = (text: string) => {
   return BAD_WORDS.some(word => {
@@ -21,7 +17,23 @@ const containsBadWords = (text: string) => {
   });
 };
 
-// --- EARNED TITLES DICTIONARY ---
+const TRACK_EVENTS = [
+  '50 Meters', '55 Meters', '60 Meters', '100 Meters', '150 Meters', '200 Meters', '300 Meters', '400 Meters', '500 Meters', '600 Meters', '800 Meters', '1000 Meters', '1500 Meters', '1600 Meters', '1 Mile', '3000 Meters', '3200 Meters', '2 Mile', '5000 Meters', '10,000 Meters', '100m Hurdles', '110m Hurdles', '200m Hurdles', '300m Hurdles', '400m Hurdles', 'Shot Put', 'Discus', 'Javelin', 'Hammer', 'Weight Throw', 'High Jump', 'Pole Vault', 'Long Jump', 'Triple Jump', 'Pentathlon', 'Heptathlon', 'Decathlon'
+];
+
+const FIELD_EVENTS = ['Shot Put', 'Discus', 'Javelin', 'Hammer', 'High Jump', 'Pole Vault', 'Long Jump', 'Triple Jump'];
+
+const TIER_THRESHOLDS: Record<string, number> = {
+  'Power 4 D1': 95,
+  'Mid-Major D1': 85,
+  'D1 Walk-On / Top D2': 75,
+  'Solid D2 / High D3': 65,
+  'D3 / NAIA': 55,
+  'Strong Varsity': 40,
+  'Varsity Standard': 20,
+  'Any': 5
+};
+
 const EARNED_TITLES = [
   { id: 'legend', name: 'Legend', badgeClass: 'legend-badge' },
   { id: 'champion', name: 'Champion', badgeClass: 'champion-badge' },
@@ -40,9 +52,12 @@ const PRO_BADGES = [
 ];
 
 interface AthleteData {
+  id: string;
   first_name: string;
   last_name: string;
   high_school: string;
+  state: string;
+  gender: string;
   avatar_url: string | null;
   trust_level: number;
   prs: { event: string; mark: string }[] | null;
@@ -53,38 +68,176 @@ interface AthleteData {
   is_premium?: boolean; 
   boosts_available?: number;
   saved_resume?: string | null; 
+  profile_views?: number;
 }
 
 interface CommentData {
-  id: string;
-  athlete_id: string;
-  name: string;
-  avatar_url: string | null;
-  border: string | null;
-  text: string;
-  created_at: string;
+  id: string; athlete_id: string; name: string; avatar_url: string | null; border: string | null; text: string; created_at: string;
 }
 
 interface Post {
-  id: string;
-  content: string;
-  created_at: string;
-  athlete_id: string;
-  linked_pr_event?: string | null; 
-  linked_pr_mark?: string | null;  
-  linked_prs?: { event: string; mark: string }[] | null; 
-  channel?: string | null;
-  image_url?: string | null; 
-  likes?: string[]; 
-  is_bounty?: boolean; 
-  bounty_amount?: number;
-  comments?: CommentData[]; 
-  pro_badge?: string | null;
-  is_boosted?: boolean;
-  hide_rank?: boolean; 
-  attached_resume?: string | null; 
-  athletes: AthleteData;
+  id: string; content: string; created_at: string; athlete_id: string; linked_pr_event?: string | null; linked_pr_mark?: string | null;  
+  linked_prs?: { event: string; mark: string }[] | null; channel?: string | null; image_url?: string | null; likes?: string[]; 
+  is_bounty?: boolean; bounty_amount?: number; comments?: CommentData[]; pro_badge?: string | null; is_boosted?: boolean;
+  hide_rank?: boolean; attached_resume?: string | null; athletes: AthleteData;
 }
+
+// 🚨 EXTRACTED MATH HELPER FUNCTIONS 🚨
+const RECRUITING_STANDARDS: Record<string, Record<string, { t1: number, t2: number, t3: number, t4: number, t5: number, t6: number, t7: number, isField?: boolean }>> = {
+  'Boys': {
+    '60 Meters': { t1: 6.75, t2: 6.90, t3: 7.05, t4: 7.20, t5: 7.40, t6: 7.60, t7: 8.00 },
+    '100 Meters': { t1: 10.5, t2: 10.8, t3: 11.0, t4: 11.3, t5: 11.6, t6: 11.9, t7: 12.6 },
+    '200 Meters': { t1: 21.2, t2: 21.8, t3: 22.2, t4: 22.8, t5: 23.5, t6: 24.5, t7: 26.0 },
+    '400 Meters': { t1: 47.5, t2: 49.0, t3: 50.0, t4: 51.5, t5: 53.0, t6: 55.0, t7: 58.0 },
+    '800 Meters': { t1: 112, t2: 115, t3: 117, t4: 120, t5: 125, t6: 130, t7: 140 }, 
+    '1500 Meters': { t1: 231, t2: 239, t3: 244, t4: 250, t5: 264, t6: 275, t7: 300 },
+    '1600 Meters': { t1: 250, t2: 258, t3: 264, t4: 270, t5: 285, t6: 295, t7: 320 }, 
+    '3000 Meters': { t1: 500, t2: 518, t3: 532, t4: 546, t5: 574, t6: 600, t7: 660 },
+    '3200 Meters': { t1: 540, t2: 560, t3: 575, t4: 590, t5: 620, t6: 650, t7: 720 }, 
+    '110m Hurdles': { t1: 13.8, t2: 14.2, t3: 14.6, t4: 15.0, t5: 15.5, t6: 16.5, t7: 18.5 },
+    '200m Hurdles': { t1: 24.5, t2: 25.5, t3: 26.5, t4: 27.5, t5: 29.0, t6: 30.5, t7: 33.0 },
+    '300m Hurdles': { t1: 37.0, t2: 38.5, t3: 39.5, t4: 41.0, t5: 42.5, t6: 44.5, t7: 48.0 },
+    '400m Hurdles': { t1: 52.0, t2: 54.0, t3: 56.0, t4: 58.0, t5: 60.0, t6: 63.0, t7: 68.0 },
+    'Long Jump': { t1: 288, t2: 270, t3: 260, t4: 252, t5: 240, t6: 228, t7: 204, isField: true }, 
+    'Triple Jump': { t1: 588, t2: 564, t3: 540, t4: 516, t5: 492, t6: 468, t7: 420, isField: true }, 
+    'High Jump': { t1: 82, t2: 78, t3: 76, t4: 74, t5: 70, t6: 66, t7: 60, isField: true }, 
+    'Pole Vault': { t1: 198, t2: 186, t3: 174, t4: 162, t5: 150, t6: 132, t7: 108, isField: true },
+    'Shot Put': { t1: 720, t2: 660, t3: 600, t4: 540, t5: 480, t6: 444, t7: 360, isField: true }, 
+    'Discus': { t1: 2220, t2: 2040, t3: 1860, t4: 1740, t5: 1620, t6: 1440, t7: 1080, isField: true },
+    'Javelin': { t1: 2340, t2: 2160, t3: 2040, t4: 1920, t5: 1800, t6: 1620, t7: 1200, isField: true },
+    'Hammer': { t1: 2400, t2: 2160, t3: 1920, t4: 1740, t5: 1560, t6: 1320, t7: 960, isField: true }
+  },
+  'Girls': {
+    '60 Meters': { t1: 7.45, t2: 7.65, t3: 7.85, t4: 8.05, t5: 8.30, t6: 8.60, t7: 9.20 },
+    '100 Meters': { t1: 11.7, t2: 12.1, t3: 12.4, t4: 12.8, t5: 13.2, t6: 13.6, t7: 14.5 },
+    '200 Meters': { t1: 24.2, t2: 24.8, t3: 25.5, t4: 26.2, t5: 27.0, t6: 28.5, t7: 31.0 },
+    '400 Meters': { t1: 54.5, t2: 57.0, t3: 58.5, t4: 60.5, t5: 63.0, t6: 66.0, t7: 72.0 },
+    '800 Meters': { t1: 130, t2: 135, t3: 140, t4: 145, t5: 152, t6: 160, t7: 175 }, 
+    '1500 Meters': { t1: 268, t2: 282, t3: 291, t4: 300, t5: 314, t6: 330, t7: 375 },
+    '1600 Meters': { t1: 290, t2: 305, t3: 315, t4: 325, t5: 340, t6: 360, t7: 400 }, 
+    '3000 Meters': { t1: 583, t2: 611, t3: 638, t4: 666, t5: 694, t6: 730, t7: 840 },
+    '3200 Meters': { t1: 630, t2: 660, t3: 690, t4: 720, t5: 750, t6: 800, t7: 900 }, 
+    '100m Hurdles': { t1: 13.8, t2: 14.3, t3: 14.8, t4: 15.5, t5: 16.5, t6: 17.8, t7: 20.0 },
+    '200m Hurdles': { t1: 28.0, t2: 29.0, t3: 30.5, t4: 32.0, t5: 34.0, t6: 36.0, t7: 40.0 },
+    '300m Hurdles': { t1: 42.5, t2: 44.5, t3: 46.5, t4: 48.5, t5: 51.0, t6: 54.0, t7: 59.0 },
+    '400m Hurdles': { t1: 60.0, t2: 63.0, t3: 66.0, t4: 69.0, t5: 72.0, t6: 76.0, t7: 85.0 },
+    'Long Jump': { t1: 234, t2: 222, t3: 210, t4: 198, t5: 186, t6: 174, t7: 150, isField: true }, 
+    'Triple Jump': { t1: 480, t2: 456, t3: 432, t4: 408, t5: 384, t6: 360, t7: 312, isField: true },
+    'High Jump': { t1: 68, t2: 64, t3: 62, t4: 60, t5: 58, t6: 54, t7: 50, isField: true }, 
+    'Pole Vault': { t1: 156, t2: 144, t3: 132, t4: 120, t5: 108, t6: 90, t7: 72, isField: true },
+    'Shot Put': { t1: 540, t2: 480, t3: 432, t4: 396, t5: 360, t6: 324, t7: 264, isField: true }, 
+    'Discus': { t1: 1800, t2: 1620, t3: 1500, t4: 1380, t5: 1260, t6: 1080, t7: 840, isField: true },
+    'Javelin': { t1: 1740, t2: 1560, t3: 1440, t4: 1320, t5: 1200, t6: 1020, t7: 780, isField: true },
+    'Hammer': { t1: 1920, t2: 1680, t3: 1500, t4: 1320, t5: 1140, t6: 960, t7: 720, isField: true }
+  }
+};
+
+const convertMarkToNumber = (markStr: string, isField: boolean): number => {
+  if (isField) {
+    const clean = markStr.replace(/[^0-9.]/g, ' ').trim().split(/\s+/);
+    const feet = parseFloat(clean[0]) || 0;
+    const inches = parseFloat(clean[1]) || 0;
+    return (feet * 12) + inches;
+  } else {
+    if (markStr.includes(':')) {
+      const parts = markStr.split(':');
+      return (parseFloat(parts[0]) * 60) + parseFloat(parts[1]);
+    }
+    return parseFloat(markStr.replace(/[a-zA-Z]/g, '').trim()) || 99999;
+  }
+};
+
+const formatMarkFromNumber = (val: number, isField: boolean): string => {
+  if (isField) {
+    const feet = Math.floor(val / 12);
+    const inches = val % 12;
+    if (feet > 0) return `${feet}' ${inches.toFixed(1).replace(/\.0$/, '')}"`;
+    return `${inches.toFixed(1).replace(/\.0$/, '')}"`;
+  } else {
+    if (val >= 60) {
+      const minutes = Math.floor(val / 60);
+      const seconds = (val % 60).toFixed(2).padStart(5, '0');
+      return `${minutes}:${seconds}`;
+    }
+    return val.toFixed(2);
+  }
+};
+
+const getEventScore = (markStr: string, event: string, gender: string): number => {
+  const standards = RECRUITING_STANDARDS[gender] || RECRUITING_STANDARDS['Boys'];
+  const normalizedEvent = event
+    .replace(/Meter\b/i, 'Meters')
+    .replace('100 Meter Hurdles', '100m Hurdles')
+    .replace('110 Meter Hurdles', '110m Hurdles')
+    .replace('200 Meter Hurdles', '200m Hurdles')
+    .replace('300 Meter Hurdles', '300m Hurdles')
+    .replace('400 Meter Hurdles', '400m Hurdles');
+
+  const eventStds = standards[normalizedEvent] || standards[event];
+  if (!eventStds) return 5;
+
+  const val = convertMarkToNumber(markStr, !!eventStds.isField);
+  let score = 5;
+
+  if (eventStds.isField) {
+    if (val >= eventStds.t1) score = 95 + Math.min(4, ((val - eventStds.t1) / (eventStds.t1 * 0.05)) * 4);
+    else if (val >= eventStds.t2) score = 85 + ((val - eventStds.t2) / (eventStds.t1 - eventStds.t2)) * 10;
+    else if (val >= eventStds.t3) score = 75 + ((val - eventStds.t3) / (eventStds.t2 - eventStds.t3)) * 10;
+    else if (val >= eventStds.t4) score = 65 + ((val - eventStds.t4) / (eventStds.t3 - eventStds.t4)) * 10;
+    else if (val >= eventStds.t5) score = 55 + ((val - eventStds.t5) / (eventStds.t4 - eventStds.t5)) * 10;
+    else if (val >= eventStds.t6) score = 40 + ((val - eventStds.t6) / (eventStds.t5 - eventStds.t6)) * 14;
+    else if (val >= eventStds.t7) score = 20 + ((val - eventStds.t7) / (eventStds.t6 - eventStds.t7)) * 19;
+    else { const t8 = eventStds.t7 * 0.85; if (val >= t8) { score = 5 + ((val - t8) / (eventStds.t7 - t8)) * 14; } }
+  } else {
+    if (val <= eventStds.t1) score = 95 + Math.min(4, ((eventStds.t1 - val) / (eventStds.t1 * 0.05)) * 4);
+    else if (val <= eventStds.t2) score = 85 + ((eventStds.t2 - val) / (eventStds.t2 - eventStds.t1)) * 10;
+    else if (val <= eventStds.t3) score = 75 + ((eventStds.t3 - val) / (eventStds.t3 - eventStds.t2)) * 10;
+    else if (val <= eventStds.t4) score = 65 + ((eventStds.t4 - val) / (eventStds.t4 - eventStds.t3)) * 10;
+    else if (val <= eventStds.t5) score = 55 + ((eventStds.t5 - val) / (eventStds.t5 - eventStds.t4)) * 10;
+    else if (val <= eventStds.t6) score = 40 + ((eventStds.t6 - val) / (eventStds.t6 - eventStds.t5)) * 14;
+    else if (val <= eventStds.t7) score = 20 + ((eventStds.t7 - val) / (eventStds.t7 - eventStds.t6)) * 19;
+    else { const t8 = eventStds.t7 * 1.15; if (val <= t8) { score = 5 + ((t8 - val) / (t8 - eventStds.t7)) * 14; } }
+  }
+  return Math.min(99, Math.max(5, Math.round(score)));
+};
+
+interface ProjectionResult {
+  overallScore: number;
+  overallLabel: string;
+  overallDesc: string;
+  color: string;
+  bg: string;
+  border: string;
+  bestEvent: string;
+  eventBreakdowns: any[];
+}
+
+const getAthleteProjection = (prs: any[], gender: string): ProjectionResult => {
+  if (!prs || !Array.isArray(prs) || prs.length === 0) return { overallScore: 0, overallLabel: 'Unranked', overallDesc: '', color: 'text-slate-500', bg: '', border: '', bestEvent: 'N/A', eventBreakdowns: [] };
+
+  let bestScore = 0;
+  let bestTier = 'Developmental';
+
+  prs.forEach((pr) => {
+    if (!pr.event || !pr.mark) return;
+    const score = getEventScore(pr.mark, pr.event, gender);
+    if (score > bestScore) bestScore = score;
+  });
+
+  bestScore = Math.min(99, Math.max(5, Math.round(bestScore)));
+  let color = '';
+  
+  if (bestScore >= 95) { bestTier = 'Power 4 D1'; color = 'text-fuchsia-600'; }
+  else if (bestScore >= 85) { bestTier = 'Mid-Major D1'; color = 'text-purple-600'; }
+  else if (bestScore >= 75) { bestTier = 'D1 Walk-On'; color = 'text-blue-600'; }
+  else if (bestScore >= 65) { bestTier = 'Top D2/D3'; color = 'text-emerald-600'; }
+  else if (bestScore >= 55) { bestTier = 'NAIA Prospect'; color = 'text-amber-600'; }
+  else if (bestScore >= 40) { bestTier = 'Strong Varsity'; color = 'text-slate-600'; }
+  else if (bestScore >= 20) { bestTier = 'Varsity Standard'; color = 'text-slate-500'; }
+  else { bestTier = 'JV Standard'; color = 'text-slate-400'; }
+
+  return { overallScore: bestScore, overallLabel: bestTier, overallDesc: '', color, bg: '', border: '', bestEvent: prs[0]?.event || 'N/A', eventBreakdowns: [] };
+};
 
 export default function FeedPage() {
   const supabase = createClient();
@@ -92,7 +245,6 @@ export default function FeedPage() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // User State
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [currentUserEmail, setCurrentUserEmail] = useState<string>(''); 
   const [currentUserProfile, setCurrentUserProfile] = useState<AthleteData | null>(null);
@@ -100,13 +252,18 @@ export default function FeedPage() {
   const [coachType, setCoachType] = useState<string | null>(null);
   const [isVerifiedAthlete, setIsVerifiedAthlete] = useState(false);
   const [isVerifiedCoach, setIsVerifiedCoach] = useState(false);
+  const [isPremiumCoach, setIsPremiumCoach] = useState(false);
   const [myPRs, setMyPRs] = useState<{event: string, mark: string}[]>([]);
   const [isGraduated, setIsGraduated] = useState(false);
+  const [coachWatchlist, setCoachWatchlist] = useState<string[]>([]);
   
-  // Tab State
   const [feedTab, setFeedTab] = useState<'recruiting' | 'athlete' | 'bounties' | 'legacy'>('recruiting');
 
-  // Post Creator State
+  // 🚨 FILTER ENGINE STATE (Includes timeMin for TS Safety) 🚨
+  const [discoveryFilters, setDiscoveryFilters] = useState({ gender: 'Any', gradYear: 'Any', state: '', event: '', targetTier: 'Any', timeMin: '' });
+  const [activeFilters, setActiveFilters] = useState({ gender: 'Any', gradYear: 'Any', state: '', event: '', targetTier: 'Any', timeMin: '' });
+  const [isApplyingFilters, setIsApplyingFilters] = useState(false);
+
   const [newPostContent, setNewPostContent] = useState('');
   const [selectedPRIndex, setSelectedPRIndex] = useState<string>(''); 
   const [selectedPRs, setSelectedPRs] = useState<number[]>([]); 
@@ -115,7 +272,6 @@ export default function FeedPage() {
   const [selectedProBadge, setSelectedProBadge] = useState<string | null>(null);
   const [hideRank, setHideRank] = useState(false);
   
-  // Resume State
   const [showResumeInput, setShowResumeInput] = useState(false);
   const [resumeText, setResumeText] = useState('');
   const [viewingResumePost, setViewingResumePost] = useState<Post | null>(null);
@@ -124,16 +280,13 @@ export default function FeedPage() {
   const [isPosting, setIsPosting] = useState(false);
   const [timeUntilNextPost, setTimeUntilNextPost] = useState<string | null>(null);
   
-  // Boost State
   const [isBoosting, setIsBoosting] = useState(false);
   const [postToBoost, setPostToBoost] = useState<string | null>(null);
 
-  // Comments State
   const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({});
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
 
-  // Messaging & UI State
   const [isMessageModalOpen, setIsMessageModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'pitch' | 'chat'>('pitch');
   const [selectedPostForMessage, setSelectedPostForMessage] = useState<Post | null>(null);
@@ -148,9 +301,26 @@ export default function FeedPage() {
 
   const [toast, setToast] = useState<{ message: string; type: 'error' | 'success' } | null>(null);
 
+  const hasLoggedImpression = useRef(false);
+
   const showToast = (message: string, type: 'error' | 'success' = 'error') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 4000);
+  };
+
+  const canMessageAthlete = (gradYear: number | null) => {
+    if (viewerRole !== 'coach') return true; 
+    if (!gradYear) return true; 
+    
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const isPastJune15 = today.getMonth() > 5 || (today.getMonth() === 5 && today.getDate() >= 15);
+    
+    const sophomoreYear = gradYear - 2;
+    if (currentYear > sophomoreYear || (currentYear === sophomoreYear && isPastJune15)) {
+      return true;
+    }
+    return false;
   };
 
   useEffect(() => {
@@ -160,23 +330,33 @@ export default function FeedPage() {
   async function fetchFeedAndUser() {
     const { data: { session } } = await supabase.auth.getSession();
     
+    let isCoachCheck = false;
+
     if (session) {
       setCurrentUserId(session.user.id);
       setCurrentUserEmail(session.user.email || '');
 
-      const { data: cData } = await supabase.from('coaches').select('trust_level, first_name, last_name, school_name, coach_type, avatar_url').eq('id', session.user.id).maybeSingle();
+      const { data: cData, error: cError } = await supabase.from('coaches').select('*').eq('id', session.user.id).maybeSingle();
+      if (cError) console.error("🚨 Coach Fetch Error:", cError);
       
       if (cData) {
+        isCoachCheck = true;
         setViewerRole('coach');
-        setIsVerifiedCoach(cData.trust_level > 0);
-        setCoachType(cData.coach_type);
-        setSenderName(`Coach ${cData.last_name}`);
-        setSenderSchool(cData.school_name || '');
+        setIsVerifiedCoach(cData.is_verified === true);
+        setIsPremiumCoach(cData.is_premium === true);
+        setCoachType(cData.coach_type || 'college');
+        setSenderName(`Coach ${cData.last_name || cData.name || ''}`);
+        setSenderSchool(cData.school_name || cData.name || 'College Program');
         setSenderEmail(session.user.email || '');
+        setFeedTab('recruiting'); 
+
+        const { data: savedData } = await supabase.from('saved_recruits').select('athlete_id').eq('coach_id', session.user.id);
+        if (savedData) setCoachWatchlist(savedData.map(s => s.athlete_id));
+
       } else {
         const { data: aData } = await supabase
           .from('athletes')
-          .select('first_name, last_name, high_school, avatar_url, trust_level, prs, equipped_border, equipped_title, majors, grad_year, is_premium, boosts_available, saved_resume')
+          .select('id, first_name, last_name, high_school, state, gender, avatar_url, trust_level, prs, equipped_border, equipped_title, majors, grad_year, is_premium, boosts_available, saved_resume, profile_views')
           .eq('id', session.user.id)
           .maybeSingle();
 
@@ -230,27 +410,21 @@ export default function FeedPage() {
       .from('posts')
       .select(`
         id, content, created_at, athlete_id, linked_pr_event, linked_pr_mark, linked_prs, channel, image_url, likes, is_bounty, bounty_amount, comments, pro_badge, is_boosted, hide_rank, attached_resume,
-        athletes (first_name, last_name, high_school, avatar_url, trust_level, prs, equipped_border, equipped_title, majors, grad_year, is_premium)
+        athletes (id, first_name, last_name, high_school, state, gender, avatar_url, trust_level, prs, equipped_border, equipped_title, majors, grad_year, is_premium, profile_views)
       `);
     
-    // 🚨 24 HOUR EXPIRATION LOGIC 🚨
     const now = new Date().getTime();
     const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
 
     const processedPosts = (feedData || []).map((post: any) => {
       let activeBoost = post.is_boosted;
-      
       if (activeBoost) {
         const postAge = now - new Date(post.created_at).getTime();
-        // If the post is older than 24 hours, strip the boost on the frontend
-        if (postAge > TWENTY_FOUR_HOURS) {
-          activeBoost = false;
-        }
+        if (postAge > TWENTY_FOUR_HOURS) activeBoost = false;
       }
       return { ...post, is_boosted: activeBoost };
     });
 
-    // 🚨 MANUALLY RE-SORT POSTS AFTER EXPIRATIONS 🚨
     processedPosts.sort((a, b) => {
       if (a.is_boosted && !b.is_boosted) return -1;
       if (!a.is_boosted && b.is_boosted) return 1;
@@ -258,32 +432,35 @@ export default function FeedPage() {
     });
 
     setPosts(processedPosts as Post[]);
+
+    if (isCoachCheck && feedData && feedData.length > 0 && !hasLoggedImpression.current) {
+       hasLoggedImpression.current = true; 
+       const uniqueAthleteIds = Array.from(new Set(feedData.map((p: any) => p.athlete_id)));
+       if (uniqueAthleteIds.length > 0) {
+           const { error } = await supabase.rpc('increment_search_appearances', { athlete_ids: uniqueAthleteIds });
+           if (error) console.error("🚨 Feed Impression Error:", error);
+       }
+    }
+
     setLoading(false);
   }
 
-  const handleTogglePRSelection = (index: number) => {
-    setSelectedPRs(prev => 
-      prev.includes(index) ? prev.filter(i => i !== index) : [...prev, index]
-    );
+  const handleViewProfile = (athleteId: string) => {
+    router.push(`/athlete/${athleteId}`);
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    if (!file.type.startsWith('image/')) {
-      showToast("Only images are supported at this time.", "error");
-      e.target.value = ''; 
-      return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      showToast("Images must be under 5MB. Please compress your image.", "error");
-      e.target.value = ''; 
-      return;
-    }
-
+    if (!file.type.startsWith('image/')) { showToast("Only images are supported at this time.", "error"); e.target.value = ''; return; }
+    if (file.size > 5 * 1024 * 1024) { showToast("Images must be under 5MB. Please compress your image.", "error"); e.target.value = ''; return; }
     setMediaFile(file);
+  };
+
+  const handleTogglePRSelection = (index: number) => {
+    setSelectedPRs(prev => 
+      prev.includes(index) ? prev.filter(i => i !== index) : [...prev, index]
+    );
   };
 
   const handleCreatePost = async (e: React.FormEvent) => {
@@ -313,16 +490,12 @@ export default function FeedPage() {
     try {
       if (feedTab === 'recruiting') {
         const updates: any = { majors: myMajors };
-        if (isPremium && showResumeInput) {
-          updates.saved_resume = resumeText;
-        }
+        if (isPremium && showResumeInput) updates.saved_resume = resumeText;
         await supabase.from('athletes').update(updates).eq('id', currentUserId);
       }
 
       let uploadedMediaUrl = null;
-      if (mediaFile) {
-        uploadedMediaUrl = URL.createObjectURL(mediaFile); 
-      }
+      if (mediaFile) uploadedMediaUrl = URL.createObjectURL(mediaFile); 
 
       const finalLinkedPRs = isPremium 
         ? selectedPRs.map(i => myPRs[i]) 
@@ -345,57 +518,31 @@ export default function FeedPage() {
 
       if (error) throw error;
       
-      setNewPostContent('');
-      setSelectedPRIndex('');
-      setSelectedPRs([]);
-      setMediaFile(null);
-      setSelectedProBadge(null);
-      setHideRank(false);
-      setShowResumeInput(false);
-      
-      if (feedTab === 'recruiting') {
-        setTimeUntilNextPost('24h remaining');
-      }
-      
+      setNewPostContent(''); setSelectedPRIndex(''); setSelectedPRs([]); setMediaFile(null); setSelectedProBadge(null); setHideRank(false); setShowResumeInput(false);
+      if (feedTab === 'recruiting') setTimeUntilNextPost('24h remaining');
       fetchFeedAndUser(); 
       showToast("Posted successfully!", "success");
-    } catch (err: any) { 
-      showToast(`Error posting: ${err.message}`); 
-    } finally { 
-      setIsPosting(false); 
-    }
+    } catch (err: any) { showToast(`Error posting: ${err.message}`); } finally { setIsPosting(false); }
   };
 
   const handleBoostClick = (postId: string) => {
     if (!currentUserProfile) return;
     const availableBoosts = currentUserProfile.boosts_available || 0;
-
-    if (availableBoosts <= 0) {
-      showToast("You are out of Boosts! Upgrade or visit the Vault to get more.", "error");
-      return;
-    }
+    if (availableBoosts <= 0) { showToast("You are out of Boosts! Upgrade or visit the Vault to get more.", "error"); return; }
     setPostToBoost(postId);
   };
 
   const confirmBoost = async () => {
     if (!postToBoost || !currentUserProfile || !currentUserId) return;
     setIsBoosting(true);
-    
     const availableBoosts = currentUserProfile.boosts_available || 0;
 
     try {
-      const { error } = await supabase.rpc('apply_post_boost', { 
-        p_post_id: postToBoost, 
-        p_athlete_id: currentUserId 
-      });
-
+      const { error } = await supabase.rpc('apply_post_boost', { p_post_id: postToBoost, p_athlete_id: currentUserId });
       if (error) throw error;
 
-      // 🚨 DYNAMICALLY RE-SORT THE ARRAY AFTER BOOSTING 🚨
       setPosts(currentPosts => {
-        const updated = currentPosts.map(post => 
-          post.id === postToBoost ? { ...post, is_boosted: true } : post
-        );
+        const updated = currentPosts.map(post => post.id === postToBoost ? { ...post, is_boosted: true } : post);
         return updated.sort((a, b) => {
           if (a.is_boosted && !b.is_boosted) return -1;
           if (!a.is_boosted && b.is_boosted) return 1;
@@ -403,29 +550,15 @@ export default function FeedPage() {
         });
       });
       
-      setCurrentUserProfile({
-        ...currentUserProfile,
-        boosts_available: availableBoosts - 1
-      });
-
+      setCurrentUserProfile({ ...currentUserProfile, boosts_available: availableBoosts - 1 });
       showToast(`Post Boosted! You have ${availableBoosts - 1} boosts left.`, "success");
-    } catch (err: any) {
-      console.error(err);
-      showToast("Failed to boost: " + err.message);
-    } finally {
-      setIsBoosting(false);
-      setPostToBoost(null); 
-    }
+    } catch (err: any) { showToast("Failed to boost: " + err.message); } finally { setIsBoosting(false); setPostToBoost(null); }
   };
 
   const handleAddComment = async (postId: string) => {
     const text = commentInputs[postId];
     if (!text || !text.trim() || !currentUserId) return;
-
-    if (containsBadWords(text)) {
-      showToast("Your text contains inappropriate language.");
-      return;
-    }
+    if (containsBadWords(text)) { showToast("Your text contains inappropriate language."); return; }
 
     setIsSubmittingComment(true);
     try {
@@ -435,7 +568,7 @@ export default function FeedPage() {
       const newComment: CommentData = {
         id: Math.random().toString(), 
         athlete_id: currentUserId,
-        name: currentUserProfile ? `${currentUserProfile.first_name} ${currentUserProfile.last_name}` : 'Coach',
+        name: currentUserProfile ? `${currentUserProfile.first_name} ${currentUserProfile.last_name}` : senderName,
         avatar_url: myAvatar || '', 
         border: myBorder || 'none',
         text: text.trim(),
@@ -443,41 +576,22 @@ export default function FeedPage() {
       };
 
       setPosts(currentPosts => currentPosts.map(post => {
-        if (post.id === postId) {
-          return { ...post, comments: [...(post.comments || []), newComment] };
-        }
+        if (post.id === postId) return { ...post, comments: [...(post.comments || []), newComment] };
         return post;
       }));
       setCommentInputs(prev => ({ ...prev, [postId]: '' }));
 
       const { error } = await supabase.rpc('add_post_comment', { 
-        p_post_id: postId, 
-        p_athlete_id: currentUserId, 
-        p_name: newComment.name,
-        p_avatar_url: newComment.avatar_url,
-        p_border: newComment.border,
-        p_text: newComment.text
+        p_post_id: postId, p_athlete_id: currentUserId, p_name: newComment.name, p_avatar_url: newComment.avatar_url, p_border: newComment.border, p_text: newComment.text
       });
-
       if (error) throw error;
-
-    } catch (err: any) {
-      console.error(err);
-      showToast("Failed to submit: " + err.message);
-    } finally {
-      setIsSubmittingComment(false);
-    }
+    } catch (err: any) { showToast("Failed to submit: " + err.message); } finally { setIsSubmittingComment(false); }
   };
 
-  const toggleComments = (postId: string) => {
-    setExpandedComments(prev => ({ ...prev, [postId]: !prev[postId] }));
-  };
+  const toggleComments = (postId: string) => { setExpandedComments(prev => ({ ...prev, [postId]: !prev[postId] })); };
 
   const handleToggleFire = async (postId: string) => {
-    if (!currentUserId) {
-      router.push('/login');
-      return;
-    }
+    if (!currentUserId) { router.push('/login'); return; }
 
     setPosts(currentPosts => currentPosts.map(post => {
       if (post.id === postId) {
@@ -488,24 +602,19 @@ export default function FeedPage() {
       }
       return post;
     }));
-
     await supabase.rpc('toggle_post_like', { p_post_id: postId, p_user_id: currentUserId });
   };
 
   const handleContactClick = (post: Post) => {
-    if (viewerRole === 'guest' || !currentUserId) {
-      router.push('/login?reason=contact');
-      return;
-    }
-    if (viewerRole === 'coach' && !isVerifiedCoach) {
-      showToast("Please verify your coaching profile on the dashboard to send direct pitches.");
-      return;
-    }
-    if (viewerRole === 'athlete' && !isVerifiedAthlete) {
-      showToast("Please sync your Athletic.net profile to message other athletes.");
-      return;
-    }
+    if (viewerRole === 'guest' || !currentUserId) { router.push('/login?reason=contact'); return; }
+    if (viewerRole === 'coach' && !isVerifiedCoach) { showToast("Please verify your coaching profile on the dashboard to send direct pitches."); return; }
+    if (viewerRole === 'athlete' && !isVerifiedAthlete) { showToast("Please sync your Athletic.net profile to message other athletes."); return; }
     
+    if (viewerRole === 'coach' && post.athletes.grad_year && !canMessageAthlete(post.athletes.grad_year)) {
+      showToast("NCAA Compliance: You cannot directly message athletes prior to June 15th after their sophomore year.", "error");
+      return;
+    }
+
     openMessageModal(post, 'pitch');
   };
 
@@ -519,17 +628,8 @@ export default function FeedPage() {
       const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       const checkEmail = currentUserEmail || senderEmail;
       
-      const { count } = await supabase
-        .from('messages')
-        .select('id', { count: 'exact', head: true })
-        .eq('sender_email', checkEmail)
-        .gte('created_at', twentyFourHoursAgo);
-
-      if (count !== null && count >= 10) {
-        showToast("Daily Limit Reached: You can only send 10 new connection requests or pitches per day.");
-        setIsSending(false);
-        return;
-      }
+      const { count } = await supabase.from('messages').select('id', { count: 'exact', head: true }).eq('sender_email', checkEmail).gte('created_at', twentyFourHoursAgo);
+      if (count !== null && count >= 10) { showToast("Daily Limit Reached: You can only send 10 new connection requests or pitches per day."); setIsSending(false); return; }
 
       const { error } = await supabase.from('messages').insert({
         athlete_id: selectedPostForMessage.athlete_id,
@@ -542,28 +642,17 @@ export default function FeedPage() {
       
       if (error) throw error;
       setSendSuccess(true);
-      setTimeout(() => {
-        setIsMessageModalOpen(false);
-        setSendSuccess(false);
-        setMessageContent('');
-      }, 2000);
-    } catch (error: any) { 
-      showToast(`Failed to send message: ${error.message}`); 
-    } finally { setIsSending(false); }
+      setTimeout(() => { setIsMessageModalOpen(false); setSendSuccess(false); setMessageContent(''); }, 2000);
+    } catch (error: any) { showToast(`Failed to send message: ${error.message}`); } finally { setIsSending(false); }
   };
 
   const openMessageModal = (post: Post, mode: 'pitch' | 'chat') => {
-    setSelectedPostForMessage(post);
-    setModalMode(mode);
-    setSendSuccess(false);
-    setIsMessageModalOpen(true);
+    setSelectedPostForMessage(post); setModalMode(mode); setSendSuccess(false); setIsMessageModalOpen(true);
   };
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const today = new Date();
+    const date = new Date(dateString); const today = new Date();
     const isToday = date.getDate() === today.getDate() && date.getMonth() === today.getMonth() && date.getFullYear() === today.getFullYear();
-    
     if (isToday) return `Today at ${date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
   };
@@ -588,11 +677,88 @@ export default function FeedPage() {
     );
   }
 
-  const filteredPosts = posts.filter(post => {
-    if (feedTab === 'recruiting') return !post.channel || post.channel === 'recruiting' || post.channel === 'main'; 
-    if (feedTab === 'bounties') return post.is_bounty === true;
-    return post.channel === feedTab;
+  // 🚨 RECRUITING FEED FILTER & DEDUPLICATION ALGORITHM 🚨
+  let filteredPosts = posts.filter(post => {
+    
+    // Tab logic
+    if (feedTab === 'recruiting') {
+      if (post.channel && post.channel !== 'recruiting' && post.channel !== 'main') return false;
+    } else if (feedTab === 'bounties') {
+      if (!post.is_bounty) return false;
+    } else {
+      if (post.channel !== feedTab) return false;
+    }
+
+    // Interactive Filtering Logic (Only in Recruiting Tab)
+    if (feedTab === 'recruiting' && isApplyingFilters) {
+      
+      // 🚨 PRO BYPASS RULE: If free coach, Boosted posts ALWAYS bypass filters and show at the top.
+      // If Pro Coach, they don't get the bypass immunity; they are strictly filtered out if they don't match.
+      if (!isPremiumCoach && post.is_boosted) {
+        return true; 
+      }
+
+      const a = post.athletes;
+      
+      if (activeFilters.gender !== 'Any' && a.gender !== activeFilters.gender) return false;
+      if (activeFilters.gradYear !== 'Any' && a.grad_year?.toString() !== activeFilters.gradYear) return false;
+      if (activeFilters.state && a.state?.toLowerCase() !== activeFilters.state.toLowerCase()) return false;
+
+      // FREE COACHES ONLY GET EVENT FILTER (NO TIER, NO TIME MIN)
+      if (!isPremiumCoach) {
+         if (activeFilters.event && activeFilters.event !== 'Any Event') {
+            const hasEvent = a.prs?.some(p => p.event === activeFilters.event);
+            if (!hasEvent) return false;
+         }
+         return true;
+      }
+
+      // PRO COACHES GET TIER AND TIME MIN
+      const reqTierScore = TIER_THRESHOLDS[activeFilters.targetTier] || 5;
+      
+      if (activeFilters.event || reqTierScore > 5 || activeFilters.timeMin) {
+        if (!a.prs || a.prs.length === 0) return false;
+        
+        let passesEventCriteria = false;
+        
+        if (activeFilters.event && activeFilters.event !== 'Any Event') {
+          const pr = a.prs.find(p => p.event === activeFilters.event);
+          if (!pr) return false;
+          
+          const score = getEventScore(pr.mark, pr.event, a.gender || 'Boys');
+          if (score < reqTierScore) return false;
+
+          // ADVANCED BYPASS TIME FILTER (PRO ONLY)
+          if (activeFilters.timeMin) {
+            const isField = FIELD_EVENTS.includes(pr.event);
+            const reqVal = convertMarkToNumber(activeFilters.timeMin, isField);
+            const markVal = convertMarkToNumber(pr.mark, isField);
+            // Track = lower is better (mark <= req). Field = higher is better (mark >= req)
+            if (isField ? markVal < reqVal : markVal > reqVal) return false;
+          }
+          
+          passesEventCriteria = true;
+        } else {
+          // No specific event, just check if ANY event meets the target tier score
+          passesEventCriteria = a.prs.some(pr => getEventScore(pr.mark, pr.event, a.gender || 'Boys') >= reqTierScore);
+        }
+
+        if (!passesEventCriteria) return false;
+      }
+    }
+
+    return true;
   });
+
+  if (feedTab === 'recruiting') {
+    const seenAthletes = new Set();
+    filteredPosts = filteredPosts.filter(post => {
+      // Always allow boosted posts to be considered the "one" post for that athlete
+      if (seenAthletes.has(post.athlete_id)) return false;
+      seenAthletes.add(post.athlete_id);
+      return true;
+    });
+  }
 
   const canViewAthleteFeed = viewerRole === 'athlete' && !isGraduated;
   const canViewLegacy = viewerRole === 'athlete' && isGraduated;
@@ -611,9 +777,7 @@ export default function FeedPage() {
         </div>
       )}
 
-      {openDropdownId && (
-        <div className="fixed inset-0 z-[80]" onClick={() => setOpenDropdownId(null)} />
-      )}
+      {openDropdownId && <div className="fixed inset-0 z-[80]" onClick={() => setOpenDropdownId(null)} />}
 
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes shimmerSlow { 0% { background-position: -200% center; } 100% { background-position: 200% center; } }
@@ -635,19 +799,25 @@ export default function FeedPage() {
           <p className="text-slate-500 font-medium text-lg">Live updates, bounties, and conversations from verified athletes.</p>
         </div>
 
-        {/* DYNAMIC TAB BAR */}
+        {/* 🚨 DYNAMIC TAB BAR 🚨 */}
         <div className="flex gap-2 mb-8 overflow-x-auto hide-scrollbar pb-2">
+          
           <button onClick={() => setFeedTab('recruiting')} className={`flex items-center gap-2 px-5 py-3 rounded-2xl font-bold whitespace-nowrap transition-all ${feedTab === 'recruiting' ? 'bg-slate-900 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
-            <ShieldCheck className="w-4 h-4" /> Recruiting
+            <ShieldCheck className="w-4 h-4" /> Recruiting Engine
           </button>
+          
           {canViewAthleteFeed && (
             <button onClick={() => setFeedTab('athlete')} className={`flex items-center gap-2 px-5 py-3 rounded-2xl font-bold whitespace-nowrap transition-all ${feedTab === 'athlete' ? 'bg-blue-600 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-500 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200'}`}>
               <Users className="w-4 h-4" /> Athlete Feed
             </button>
           )}
-          <button onClick={() => setFeedTab('bounties')} className={`flex items-center gap-2 px-5 py-3 rounded-2xl font-bold whitespace-nowrap transition-all ${feedTab === 'bounties' ? 'bg-amber-500 text-amber-950 shadow-md' : 'bg-white border border-slate-200 text-amber-600 hover:bg-amber-50 hover:border-amber-300'}`}>
-            <Target className="w-4 h-4" /> Bounties
-          </button>
+          
+          {viewerRole !== 'coach' && (
+            <button onClick={() => setFeedTab('bounties')} className={`flex items-center gap-2 px-5 py-3 rounded-2xl font-bold whitespace-nowrap transition-all ${feedTab === 'bounties' ? 'bg-amber-500 text-amber-950 shadow-md' : 'bg-white border border-slate-200 text-amber-600 hover:bg-amber-50 hover:border-amber-300'}`}>
+              <Target className="w-4 h-4" /> Bounties
+            </button>
+          )}
+
           {canViewLegacy && (
             <button onClick={() => setFeedTab('legacy')} className={`flex items-center gap-2 px-5 py-3 rounded-2xl font-bold whitespace-nowrap transition-all ${feedTab === 'legacy' ? 'bg-indigo-600 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200'}`}>
               <Coffee className="w-4 h-4" /> Legacy Lounge
@@ -655,8 +825,131 @@ export default function FeedPage() {
           )}
         </div>
 
+        {/* 🚨 COACH DISCOVERY FILTERS (REDESIGNED & LOCKED) 🚨 */}
+        {feedTab === 'recruiting' && viewerRole === 'coach' && (
+          <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <div className="bg-white rounded-[2rem] p-6 sm:p-8 shadow-sm border border-slate-200 mb-8 relative overflow-hidden">
+              
+              <div className="flex items-center gap-2 mb-1">
+                <Filter className="w-5 h-5 text-indigo-600" />
+                <h2 className="text-xl font-black text-slate-900">Database Filters</h2>
+              </div>
+              <p className="text-sm font-medium text-slate-500 mb-6">Narrow results to find your perfect recruit.</p>
+
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                setActiveFilters(discoveryFilters);
+                setIsApplyingFilters(true);
+              }} className="flex flex-col gap-6">
+                
+                {/* 🟢 BASIC FILTERS - UNLOCKED FOR ALL COACHES 🟢 */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="flex flex-col">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Division</label>
+                    <select value={discoveryFilters.gender} onChange={(e) => setDiscoveryFilters({...discoveryFilters, gender: e.target.value})} className="bg-slate-50 border border-slate-200 text-slate-700 text-sm font-bold rounded-xl px-4 py-3 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all">
+                      <option value="Any">Any</option>
+                      <option value="Boys">Mens</option>
+                      <option value="Girls">Womens</option>
+                    </select>
+                  </div>
+                  
+                  <div className="flex flex-col">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Grad Year</label>
+                    <select value={discoveryFilters.gradYear} onChange={(e) => setDiscoveryFilters({...discoveryFilters, gradYear: e.target.value})} className="bg-slate-50 border border-slate-200 text-slate-700 text-sm font-bold rounded-xl px-4 py-3 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all">
+                      <option value="Any">All Years</option>
+                      <option value="2024">2024</option>
+                      <option value="2025">2025</option>
+                      <option value="2026">2026</option>
+                      <option value="2027">2027</option>
+                      <option value="2028">2028</option>
+                      <option value="2029">2029</option>
+                    </select>
+                  </div>
+
+                  <div className="flex flex-col">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 ml-1">State</label>
+                    <input type="text" maxLength={2} placeholder="e.g. CA, TX" value={discoveryFilters.state} onChange={(e) => setDiscoveryFilters({...discoveryFilters, state: e.target.value.toUpperCase()})} className="bg-slate-50 border border-slate-200 text-slate-700 text-sm font-bold rounded-xl px-4 py-3 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all uppercase placeholder:text-slate-300" />
+                  </div>
+
+                  <div className="flex flex-col">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Key Event</label>
+                    <select value={discoveryFilters.event} onChange={(e) => setDiscoveryFilters({...discoveryFilters, event: e.target.value})} className="bg-slate-50 border border-slate-200 text-slate-700 text-sm font-bold rounded-xl px-4 py-3 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all">
+                      <option value="">Any Event</option>
+                      {TRACK_EVENTS.map(ev => <option key={ev} value={ev}>{ev}</option>)}
+                      {FIELD_EVENTS.map(ev => <option key={ev} value={ev}>{ev}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                {/* 🔒 ADVANCED "BYPASS" FILTERS - LOCKED FOR FREE USERS 🔒 */}
+                <div className="relative rounded-2xl bg-slate-50 border border-slate-100 p-6 overflow-hidden">
+                  
+                  {!isPremiumCoach && (
+                    <div className="absolute inset-0 z-10 bg-white/60 backdrop-blur-sm flex flex-col items-center justify-center border border-slate-200 rounded-2xl">
+                       <div className="flex items-center gap-2 mb-1">
+                          <Lock className="w-4 h-4 text-indigo-600" />
+                          <h3 className="font-black text-slate-900">Advanced Filters Locked</h3>
+                       </div>
+                       <p className="text-xs font-medium text-slate-500 mb-3 text-center max-w-xs">Upgrade to Coach Pro to bypass the Boost Feed and search by strict time/mark minimums.</p>
+                       <Link href="/coach-pro" className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold py-2 px-4 rounded-lg flex items-center gap-1.5 shadow-sm transition-colors">
+                          <Crown className="w-3.5 h-3.5 text-amber-400" /> Unlock Pro Engine
+                       </Link>
+                    </div>
+                  )}
+                  
+                  <div className={`${!isPremiumCoach ? 'opacity-30 blur-[2px] pointer-events-none select-none' : ''}`}>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      
+                      <div className="flex flex-col">
+                        <label className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest mb-1.5 ml-1">Target Tier (Pro)</label>
+                        <select value={discoveryFilters.targetTier} onChange={(e) => setDiscoveryFilters({...discoveryFilters, targetTier: e.target.value})} className="w-full bg-white border border-indigo-200 text-slate-900 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-bold transition-all">
+                          <option value="Any">Any</option>
+                          {Object.keys(TIER_THRESHOLDS).map(tier => <option key={tier} value={tier}>{tier}</option>)}
+                        </select>
+                      </div>
+
+                      <div className="flex flex-col">
+                        <label className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest mb-1.5 ml-1">Time/Mark Minimum (Pro)</label>
+                        <input type="text" placeholder="e.g. 10.8 or 21' 6&quot;" value={discoveryFilters.timeMin} onChange={(e) => setDiscoveryFilters({...discoveryFilters, timeMin: e.target.value})} className="w-full bg-white border border-indigo-200 text-slate-900 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-medium placeholder:text-slate-300" />
+                      </div>
+                      
+                      <div className="flex flex-col justify-end">
+                        <button type="button" className="w-full bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold py-3 px-4 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2 text-sm h-[46px]">
+                          <Save className="w-4 h-4" /> Save Preset
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <button type="submit" className="w-full bg-slate-900 hover:bg-indigo-600 text-white font-black py-4 rounded-xl transition-all shadow-md mt-2 text-base">
+                  <div className="flex items-center justify-center gap-2">Find Target Recruits</div>
+                </button>
+
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* FEED FILTERS HEADER (SHOWS ACTIVE FILTERS AND CLEAR BUTTON) */}
+        {isApplyingFilters && viewerRole === 'coach' && feedTab === 'recruiting' && (
+           <div className="flex items-center justify-between mb-4 px-2">
+              <h3 className="font-black text-slate-500 uppercase tracking-widest text-xs">Search Results ({filteredPosts.length})</h3>
+              <button 
+                onClick={() => {
+                  setIsApplyingFilters(false);
+                  setDiscoveryFilters({ gender: 'Any', gradYear: 'Any', state: '', event: '', targetTier: 'Any', timeMin: '' });
+                  setActiveFilters({ gender: 'Any', gradYear: 'Any', state: '', event: '', targetTier: 'Any', timeMin: '' });
+                }} 
+                className="text-xs font-bold text-indigo-600 hover:text-indigo-500"
+              >
+                Clear Search
+              </button>
+           </div>
+        )}
+
         {/* 🚨 HIGHLIGHTED BANNERS 🚨 */}
-        {feedTab === 'recruiting' && (
+        {feedTab === 'recruiting' && viewerRole !== 'coach' && (
           <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-purple-900 rounded-[2rem] p-6 mb-8 text-white relative overflow-hidden shadow-lg border border-blue-700 flex flex-col sm:flex-row items-center justify-between gap-6">
             <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
             <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/20 blur-[80px] rounded-full pointer-events-none"></div>
@@ -686,7 +979,7 @@ export default function FeedPage() {
           </div>
         )}
 
-        {/* --- POST CREATOR --- */}
+        {/* --- POST CREATOR (Hidden from Coaches) --- */}
         {viewerRole === 'athlete' && isVerifiedAthlete && (feedTab === 'recruiting' || feedTab === 'athlete' || feedTab === 'legacy') && (
           <div className="bg-white rounded-[2rem] border border-slate-200 shadow-xl shadow-slate-200/50 mb-8 relative overflow-hidden z-10">
             <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 blur-[50px] rounded-full pointer-events-none"></div>
@@ -842,7 +1135,7 @@ export default function FeedPage() {
                       maxLength={500} 
                       value={newPostContent} 
                       onChange={(e) => setNewPostContent(e.target.value)} 
-                      placeholder="Just finished a brutal 400m repeat workout... anyone else's legs dead?" 
+                      placeholder="Just finished a brutal workout... anyone else's legs dead?" 
                       className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl p-4 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium resize-none h-24" 
                     />
                   )}
@@ -884,14 +1177,14 @@ export default function FeedPage() {
         {/* --- THE SEAMLESS TIMELINE LIST --- */}
         <div>
           {filteredPosts.length === 0 ? (
-            <div className="text-center py-20 bg-white rounded-[2.5rem] border border-slate-200 border-dashed shadow-sm">
+            <div className="text-center py-20 bg-white rounded-[2.5rem] border border-slate-200 border-dashed shadow-sm mt-8">
               {feedTab === 'bounties' ? (
                 <Target className="w-12 h-12 text-slate-300 mx-auto mb-4" />
               ) : (
                 <MessageSquare className="w-12 h-12 text-slate-300 mx-auto mb-4" />
               )}
               <h3 className="text-2xl font-black text-slate-900 mb-2">Nothing here yet...</h3>
-              <p className="text-slate-500 font-medium">Be the first to make some noise!</p>
+              <p className="text-slate-500 font-medium">No posts match your filters. Try broadening your search.</p>
             </div>
           ) : (
             <div className="flex flex-col gap-6">
@@ -924,6 +1217,9 @@ export default function FeedPage() {
 
                 const allowCommentInput = canUserInteract && (!isRecruiting || isMyPost || !hasResponded);
 
+                // 🚨 NCAA RESTRICTION CHECK FOR POSTS 🚨
+                const isNCAARestricted = viewerRole === 'coach' && post.athletes.grad_year && !canMessageAthlete(post.athletes.grad_year);
+
                 // 🚨 AUTOMATED BOUNTY CARD
                 if (post.is_bounty) {
                   return (
@@ -932,14 +1228,19 @@ export default function FeedPage() {
                         <Target className="w-24 h-24 text-amber-500" />
                       </div>
                       <div className="flex items-center gap-4 mb-4 relative z-10">
-                        <Link href={`/athlete/${post.athlete_id}`} className="shrink-0 group-hover:scale-105 transition-transform">
+                        
+                        {/* 🚨 CLICKABLE AVATAR 🚨 */}
+                        <button onClick={() => handleViewProfile(post.athlete_id)} className="shrink-0 group-hover:scale-105 transition-transform text-left">
                           <AvatarWithBorder avatarUrl={post.athletes.avatar_url} borderId={post.athletes.equipped_border} sizeClasses="w-12 h-12" />
-                        </Link>
+                        </button>
+                        
                         <div>
                           <p className="text-xs font-bold text-amber-600 uppercase tracking-widest mb-0.5">Bounty Claimed!</p>
-                          <Link href={`/athlete/${post.athlete_id}`} className="font-black text-lg text-slate-900 hover:text-blue-600 transition-colors">
+                          
+                          {/* 🚨 CLICKABLE NAME 🚨 */}
+                          <button onClick={() => handleViewProfile(post.athlete_id)} className="text-left font-black text-lg text-slate-900 hover:text-blue-600 transition-colors">
                             {post.athletes.first_name} {post.athletes.last_name}
-                          </Link>
+                          </button>
                         </div>
                       </div>
                       
@@ -978,13 +1279,16 @@ export default function FeedPage() {
                     <div className="flex justify-between items-start mb-4">
                       <div className="flex items-start gap-4 min-w-0">
                         
-                        <Link href={`/athlete/${post.athlete_id}`} className="shrink-0 group-hover:scale-105 transition-transform z-10">
+                        {/* 🚨 CLICKABLE AVATAR 🚨 */}
+                        <button onClick={() => handleViewProfile(post.athlete_id)} className="shrink-0 group-hover:scale-105 transition-transform z-10 text-left">
                           <AvatarWithBorder avatarUrl={post.athletes.avatar_url} borderId={post.athletes.equipped_border} sizeClasses="w-12 h-12 sm:w-14 sm:h-14" />
-                        </Link>
+                        </button>
 
                         <div className="min-w-0 pt-0.5">
                           <div className="flex items-center gap-2 mb-1">
-                            <Link href={`/athlete/${post.athlete_id}`} className="flex items-center gap-1.5 hover:opacity-80 transition-opacity">
+                            
+                            {/* 🚨 CLICKABLE NAME 🚨 */}
+                            <button onClick={() => handleViewProfile(post.athlete_id)} className="text-left flex items-center gap-1.5 hover:opacity-80 transition-opacity">
                               <h3 className={`font-black text-lg sm:text-xl tracking-tight leading-tight truncate ${isPremiumPost ? 'text-white' : 'text-slate-900'}`}>
                                 {post.athletes.first_name} {post.athletes.last_name}
                               </h3>
@@ -998,7 +1302,7 @@ export default function FeedPage() {
                                   <Crown className="w-3 h-3" />
                                 </span>
                               )}
-                            </Link>
+                            </button>
                             
                             {/* Render Rank Title (Unless Hidden) */}
                             {activeTitle && activeTitle.id !== 'prospect' && !post.hide_rank && (
@@ -1041,13 +1345,21 @@ export default function FeedPage() {
                         
                         {openDropdownId === post.id && (
                           <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-slate-200 rounded-xl shadow-xl py-2 z-[100] animate-in fade-in zoom-in-95 duration-100">
-                            <Link href={`/athlete/${post.athlete_id}`} className="flex items-center w-full px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 transition-colors">
+                            
+                            {/* 🚨 CLICKABLE DROP-DOWN VIEW PROFILE 🚨 */}
+                            <button onClick={() => { setOpenDropdownId(null); handleViewProfile(post.athlete_id); }} className="flex items-center w-full px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 transition-colors text-left">
                               <UserCircle2 className="w-4 h-4 mr-2.5" /> View Profile
-                            </Link>
-                            {!isMyPost && (
+                            </button>
+
+                            {!isMyPost && !isNCAARestricted && (
                               <button onClick={() => { setOpenDropdownId(null); handleContactClick(post); }} className="flex items-center w-full px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 transition-colors text-left">
                                 <Mail className="w-4 h-4 mr-2.5" /> Direct Message
                               </button>
+                            )}
+                            {isNCAARestricted && (
+                              <div className="flex items-center w-full px-4 py-2.5 text-sm font-bold text-slate-400 cursor-not-allowed bg-slate-50">
+                                <Lock className="w-4 h-4 mr-2.5" /> NCAA Restricted
+                              </div>
                             )}
                             <button onClick={() => { setOpenDropdownId(null); showToast('Post reported.', 'success'); }} className="flex items-center w-full px-4 py-2.5 text-sm font-bold text-red-600 hover:bg-red-50 transition-colors text-left border-t border-slate-100 mt-1 pt-2">
                               <Flag className="w-4 h-4 mr-2.5" /> Report Post
@@ -1115,24 +1427,41 @@ export default function FeedPage() {
                         </div>
                       ) : null}
 
-                      {/* 🚨 ACTIONS ROW */}
+                      {/* 🚨 ACTIONS ROW WITH NEW VIEW PROFILE BUTTON 🚨 */}
                       <div className="flex flex-wrap items-center gap-3 pt-2">
                         <button onClick={() => handleToggleFire(post.id)} className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-black transition-colors shadow-sm ${iLikedThis ? 'bg-orange-500 text-white' : (isPremiumPost ? 'bg-slate-800 text-slate-400 hover:bg-slate-700 border border-slate-700' : 'bg-slate-50 text-slate-500 hover:bg-slate-100 border border-slate-200')}`}>
                           <Flame className={`w-4 h-4 ${iLikedThis ? 'fill-current' : ''}`} /> {likesCount > 0 ? likesCount : 'Hype'}
                         </button>
                         
+                        {isNCAARestricted ? (
+                          <button 
+                            disabled
+                            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-black transition-colors shadow-sm cursor-not-allowed ${isPremiumPost ? 'bg-slate-800 text-slate-500 border border-slate-700' : 'bg-slate-100 text-slate-400 border border-slate-200'}`}
+                          >
+                            <Lock className="w-4 h-4" /> Restricted
+                          </button>
+                        ) : (
+                          <button 
+                            onClick={() => {
+                              if (isRecruiting) {
+                                handleContactClick(post);
+                              } else {
+                                toggleComments(post.id);
+                              }
+                            }} 
+                            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-black transition-colors shadow-sm ${isCommentsOpen && !isRecruiting ? (isPremiumPost ? 'bg-blue-500 text-white border border-blue-500' : 'bg-blue-600 text-white border border-blue-600') : (isPremiumPost ? 'bg-slate-800 text-slate-400 hover:bg-slate-700 border border-slate-700' : 'bg-slate-50 text-slate-500 hover:bg-slate-100 border border-slate-200')}`}
+                          >
+                            <MessageSquare className="w-4 h-4" /> 
+                            {isRecruiting ? 'Respond' : (commentsCount > 0 ? commentsCount : 'Comment')}
+                          </button>
+                        )}
+
+                        {/* 🚨 NEW: OBVIOUS VIEW PROFILE BUTTON 🚨 */}
                         <button 
-                          onClick={() => {
-                            if (isRecruiting) {
-                              handleContactClick(post);
-                            } else {
-                              toggleComments(post.id);
-                            }
-                          }} 
-                          className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-black transition-colors shadow-sm ${isCommentsOpen && !isRecruiting ? (isPremiumPost ? 'bg-blue-500 text-white border border-blue-500' : 'bg-blue-600 text-white border border-blue-600') : (isPremiumPost ? 'bg-slate-800 text-slate-400 hover:bg-slate-700 border border-slate-700' : 'bg-slate-50 text-slate-500 hover:bg-slate-100 border border-slate-200')}`}
+                          onClick={() => handleViewProfile(post.athlete_id)}
+                          className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-black transition-colors shadow-sm ${isPremiumPost ? 'bg-blue-600 hover:bg-blue-500 text-white border border-blue-500' : 'bg-slate-900 hover:bg-slate-800 text-white border border-slate-800'}`}
                         >
-                          <MessageSquare className="w-4 h-4" /> 
-                          {isRecruiting ? 'Respond' : (commentsCount > 0 ? commentsCount : 'Comment')}
+                          <UserCircle2 className="w-4 h-4" /> View Profile
                         </button>
 
                         {/* VIEW RESUME BUTTON */}
@@ -1224,6 +1553,7 @@ export default function FeedPage() {
             </div>
           )}
         </div>
+
       </div>
 
       {/* 🚨 RESUME VIEWER MODAL 🚨 */}
@@ -1284,6 +1614,56 @@ export default function FeedPage() {
                   {isBoosting ? 'Boosting...' : 'Yes, Boost It'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODALS */}
+      {isMessageModalOpen && selectedPostForMessage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsMessageModalOpen(false)}></div>
+          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl relative z-10 overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-200">
+            <div className="bg-slate-50 border-b border-slate-100 p-6 flex justify-between items-center relative overflow-hidden">
+              <div className="relative z-10 flex items-center gap-4">
+                <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm border border-slate-200">
+                  <Mail className="w-6 h-6 text-blue-600" />
+                </div>
+                <div>
+                  <h3 className="font-black text-xl text-slate-900">Contact Athlete</h3>
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-0.5">Secure Direct Message</p>
+                </div>
+              </div>
+              <button onClick={() => setIsMessageModalOpen(false)} className="relative z-10 p-2 text-slate-400 hover:bg-white rounded-full transition-colors"><X className="w-6 h-6" /></button>
+            </div>
+            
+            <div className="p-6">
+              {sendSuccess ? (
+                <div className="text-center py-8">
+                  <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <CheckCircle2 className="w-8 h-8 text-green-500" />
+                  </div>
+                  <h4 className="text-2xl font-black text-slate-900 mb-2">Pitch Delivered</h4>
+                  <p className="text-slate-500 font-medium">Your message has been sent to {selectedPostForMessage.athletes.first_name}'s secure inbox.</p>
+                </div>
+              ) : (
+                <form onSubmit={handleSendMessage} className="space-y-4">
+                  <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-4">
+                    <p className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-1 flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5" /> Privacy Protected</p>
+                    <p className="text-sm text-blue-800 font-medium leading-relaxed">Your contact information is safely verified. Your message will be sent directly to the athlete's internal inbox.</p>
+                  </div>
+                  <textarea 
+                    required
+                    value={messageContent}
+                    onChange={e => setMessageContent(e.target.value)}
+                    placeholder={`Write your message to ${selectedPostForMessage.athletes.first_name}...`}
+                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl p-4 h-32 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                  />
+                  <button type="submit" disabled={isSending || !messageContent.trim()} className="w-full bg-slate-900 hover:bg-black text-white font-black py-4 rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg">
+                    {isSending ? 'Sending securely...' : <><Send className="w-5 h-5" /> Send Direct Message</>}
+                  </button>
+                </form>
+              )}
             </div>
           </div>
         </div>

@@ -14,6 +14,7 @@
     "@vercel/analytics": "^1.6.1",
     "browser-image-compression": "^2.0.2",
     "cheerio": "^1.2.0",
+    "html2canvas": "^1.4.1",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.575.0",
     "next": "16.1.6",

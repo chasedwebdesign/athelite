@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
-import { Crown, Rocket, FileText, BarChart3, Sparkles, CheckCircle2, ChevronLeft, ShieldCheck, Trophy, Mail, Zap, ArrowRight, Loader2 } from 'lucide-react';
+import { Crown, Rocket, FileText, BarChart3, Sparkles, CheckCircle2, ChevronLeft, ShieldCheck, Trophy, Mail, Zap, ArrowRight, Loader2, Tag, AlertCircle, Search } from 'lucide-react';
 import Link from 'next/link';
 
 export default function PremiumPage() {
@@ -13,6 +13,12 @@ export default function PremiumPage() {
   const [loading, setLoading] = useState(true);
   const [athleteId, setAthleteId] = useState<string | null>(null);
   const [isPremium, setIsPremium] = useState(false);
+  
+  // Promo Code State
+  const [promoCode, setPromoCode] = useState('');
+  const [isPromoApplied, setIsPromoApplied] = useState(false);
+  const [promoError, setPromoError] = useState('');
+  
   const [isClaiming, setIsClaiming] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   
@@ -31,7 +37,7 @@ export default function PremiumPage() {
       // Check if it's a coach (redirect them, this is for athletes right now)
       const { data: cData } = await supabase.from('coaches').select('id').eq('id', session.user.id).maybeSingle();
       if (cData) {
-        router.push('/dashboard');
+        router.push('/dashboard/coach');
         return;
       }
 
@@ -52,9 +58,28 @@ export default function PremiumPage() {
     loadUser();
   }, [supabase, router]);
 
+  const handleApplyPromo = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPromoError('');
+    
+    // HARDCODED PROMO CODE LOGIC
+    if (promoCode.toUpperCase() === 'FOUNDER100') {
+      setIsPromoApplied(true);
+    } else {
+      setPromoError('Invalid or expired promo code.');
+      setIsPromoApplied(false);
+    }
+  };
+
   const handleClaimPremium = async () => {
     if (!athleteId) {
       router.push('/login'); 
+      return;
+    }
+
+    // Block unless promo is applied (until Stripe is ready)
+    if (!isPromoApplied && process.env.NODE_ENV !== 'development') {
+      setPromoError('Stripe billing is not active yet. Please use a Founder code.');
       return;
     }
 
@@ -72,12 +97,13 @@ export default function PremiumPage() {
 
       const currentBoosts = currentData?.boosts_available || 0;
 
-      // 2. Safely add 1 to the current balance
+      // 2. Safely add 5 boosts, set premium, and flag as a lifetime founder
       const { error: updateError } = await supabase
         .from('athletes')
         .update({ 
           is_premium: true,
-          boosts_available: currentBoosts + 1 
+          is_founder: true, // Permanent lifetime marker! (Make sure to add this column to the athletes table)
+          boosts_available: currentBoosts + 5 
         })
         .eq('id', athleteId);
 
@@ -96,7 +122,7 @@ export default function PremiumPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <Loader2 className="w-12 h-12 text-amber-400 animate-spin" />
+        <div className="w-12 h-12 border-4 border-amber-900 border-t-amber-400 rounded-full animate-spin"></div>
       </div>
     );
   }
@@ -189,6 +215,17 @@ export default function PremiumPage() {
                   <p className="text-slate-400 text-sm font-medium">Stop guessing. See exactly how many D1, D2, and D3 coaches have viewed your profile and read your pitches.</p>
                 </div>
 
+                {/* Feature 5 */}
+                <div className="sm:col-span-2 bg-slate-900/50 border border-slate-800 rounded-[2rem] p-6 backdrop-blur-sm hover:bg-slate-900 transition-colors flex flex-col sm:flex-row items-center gap-6 text-center sm:text-left">
+                  <div className="w-14 h-14 bg-indigo-500/10 rounded-2xl flex items-center justify-center border border-indigo-500/20 shrink-0">
+                    <Search className="w-7 h-7 text-indigo-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-black text-white mb-2">URL Scouter Access</h3>
+                    <p className="text-slate-400 text-sm font-medium">Paste any athlete's Athletic.net link into your dashboard to instantly generate a recruiting score and see how you stack up against the competition.</p>
+                  </div>
+                </div>
+
               </div>
 
               {/* The "Boost" Showcase */}
@@ -198,9 +235,9 @@ export default function PremiumPage() {
                     <Rocket className="w-8 h-8 text-amber-400" />
                   </div>
                   <div>
-                    <h3 className="text-2xl font-black text-white mb-2">Includes 1 Monthly Feed Boost</h3>
+                    <h3 className="text-2xl font-black text-white mb-2">Includes 5 Monthly Feed Boosts</h3>
                     <p className="text-slate-400 font-medium">
-                      Every month, you get a free Boost. Use it to instantly pin your pitch to the very top of the Recruiting Feed with a glowing golden border. Guarantee that every coach who logs in sees your name.
+                      Every month, you get 5 free Boosts. Use them to instantly pin your pitch to the very top of the Recruiting Feed with a glowing golden border. Guarantee that every coach who logs in sees your name.
                     </p>
                   </div>
                 </div>
@@ -215,7 +252,7 @@ export default function PremiumPage() {
                 <div className="bg-gradient-to-r from-amber-500 to-yellow-500 rounded-t-[2.5rem] p-4 text-center relative overflow-hidden shadow-2xl">
                   <div className="absolute inset-0 bg-white/20 skew-x-[45deg] animate-[shine_3s_ease-in-out_infinite]"></div>
                   <h3 className="text-amber-950 font-black text-lg uppercase tracking-widest relative z-10 flex items-center justify-center gap-2">
-                    <Zap className="w-5 h-5 fill-current" /> Lifetime Founder's Pass
+                    <Zap className="w-5 h-5 fill-current" /> Early Adopter Program
                   </h3>
                 </div>
 
@@ -224,38 +261,73 @@ export default function PremiumPage() {
                   {/* PRICING */}
                   <div className="text-center mb-8 pb-8 border-b border-slate-800">
                     <div className="flex items-center justify-center gap-3 mb-2">
-                      <span className="text-3xl text-slate-500 font-bold line-through decoration-red-500/50 decoration-4">$7.99/mo</span>
-                      <span className="text-6xl font-black text-white tracking-tighter">FREE</span>
+                      {isPromoApplied ? (
+                        <>
+                          <span className="text-3xl text-slate-500 font-bold line-through decoration-red-500/50 decoration-4">$7.99/mo</span>
+                          <span className="text-6xl font-black text-emerald-400 tracking-tighter">FREE</span>
+                        </>
+                      ) : (
+                        <span className="text-6xl font-black text-white tracking-tighter">$7.99<span className="text-3xl text-slate-400">/mo</span></span>
+                      )}
                     </div>
-                    <p className="text-emerald-400 font-bold text-sm bg-emerald-500/10 inline-block px-3 py-1 rounded-lg border border-emerald-500/20">
-                      You pay $0.00 forever.
-                    </p>
+                    {isPromoApplied ? (
+                       <p className="text-emerald-400 font-bold text-sm bg-emerald-500/10 inline-block px-3 py-1 rounded-lg border border-emerald-500/20 mt-2">
+                         Lifetime access unlocked!
+                       </p>
+                    ) : (
+                       <p className="text-amber-400 font-bold text-sm bg-amber-500/10 inline-block px-3 py-1 rounded-lg border border-amber-500/20 mt-2">
+                         Billed monthly. Cancel anytime.
+                       </p>
+                    )}
+                  </div>
+
+                  {/* PROMO CODE SYSTEM */}
+                  <div className="mb-6 bg-slate-950 p-4 rounded-2xl border border-slate-800">
+                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1.5"><Tag className="w-3.5 h-3.5" /> Have a Promo Code?</p>
+                     <form onSubmit={handleApplyPromo} className="flex gap-2">
+                       <input 
+                         type="text" 
+                         value={promoCode}
+                         onChange={(e) => setPromoCode(e.target.value)}
+                         disabled={isPromoApplied}
+                         placeholder="Enter code..." 
+                         className="flex-1 bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-2 focus:outline-none focus:border-amber-500 text-sm font-mono uppercase disabled:opacity-50"
+                       />
+                       <button 
+                         type="submit" 
+                         disabled={isPromoApplied || !promoCode.trim()}
+                         className={`px-4 py-2 rounded-xl font-bold text-sm transition-colors ${isPromoApplied ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/50' : 'bg-slate-800 text-white hover:bg-slate-700'}`}
+                       >
+                         {isPromoApplied ? 'Applied!' : 'Apply'}
+                       </button>
+                     </form>
+                     {promoError && <p className="text-xs text-red-400 font-bold mt-2 flex items-center gap-1"><AlertCircle className="w-3 h-3"/> {promoError}</p>}
+                     <p className="text-[10px] text-slate-500 mt-2 italic">Hint: Try typing 'FOUNDER100'</p>
                   </div>
 
                   {/* SCARCITY BAR */}
-                  <div className="mb-8 bg-slate-950 p-5 rounded-2xl border border-slate-800">
-                    <div className="flex justify-between items-end mb-3">
-                      <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Spots Claimed</span>
-                      <span className="text-sm font-black text-amber-400">{100 - spotsLeft} / 100</span>
+                  <div className="mb-8">
+                    <div className="flex justify-between items-end mb-2">
+                      <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Founder Spots Left</span>
+                      <span className="text-sm font-black text-amber-400">{spotsLeft} / 100</span>
                     </div>
-                    <div className="w-full bg-slate-800 rounded-full h-3 overflow-hidden shadow-inner">
+                    <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden shadow-inner">
                       <div 
-                        className="bg-gradient-to-r from-amber-600 to-yellow-400 h-full rounded-full transition-all duration-1000"
+                        className="bg-gradient-to-r from-amber-600 to-yellow-400 h-full rounded-full"
                         style={{ width: `${((100 - spotsLeft) / 100) * 100}%` }}
                       ></div>
                     </div>
-                    <p className="text-xs text-center text-slate-500 mt-4 font-medium">
-                      Only <strong className="text-white">{spotsLeft} spots left</strong> to claim lifetime access.
-                    </p>
                   </div>
 
                   {/* CTA BUTTON */}
                   <button 
                     onClick={handleClaimPremium}
-                    disabled={isClaiming}
-                    className="w-full bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-amber-950 font-black text-lg py-4 sm:py-5 rounded-2xl transition-all hover:scale-[1.02] active:scale-[0.98] shadow-[0_0_25px_rgba(245,158,11,0.3)] hover:shadow-[0_0_40px_rgba(245,158,11,0.6)] flex items-center justify-center gap-2"
+                    disabled={isClaiming || (!isPromoApplied && process.env.NODE_ENV !== 'development')} // Fake block unless promo is applied
+                    className={`w-full font-black text-lg py-4 sm:py-5 rounded-2xl transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg flex items-center justify-center gap-2 ${isPromoApplied ? 'bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-900 hover:shadow-[0_0_40px_rgba(16,185,129,0.4)]' : 'bg-gradient-to-r from-amber-500 to-yellow-400 text-amber-950 hover:shadow-[0_0_40px_rgba(245,158,11,0.4)]'}`}
                   >
-                    {isClaiming ? <Loader2 className="w-6 h-6 animate-spin" /> : <>Claim Free Lifetime Access <ArrowRight className="w-6 h-6" /></>}
+                    {isClaiming ? <Loader2 className="w-6 h-6 animate-spin" /> : <>
+                       {isPromoApplied ? 'Claim Free Access' : 'Upgrade to Pro'} <ArrowRight className="w-6 h-6" />
+                    </>}
                   </button>
                   <p className="text-center text-xs font-bold text-slate-500 mt-4 flex items-center justify-center gap-1.5">
                     <ShieldCheck className="w-3.5 h-3.5 text-slate-400" /> Account upgraded instantly.
@@ -284,11 +356,11 @@ export default function PremiumPage() {
             
             <h2 className="text-3xl font-black text-white mb-2">Welcome to Pro.</h2>
             <p className="text-slate-400 font-medium mb-8 text-lg">
-              You've officially secured your Lifetime Founder's Pass. 1 Free Boost has been deposited into your account!
+              You've officially secured your Lifetime Founder's Pass. 5 Free Boosts have been deposited into your account!
             </p>
 
-            <Link href="/feed" className="w-full inline-flex items-center justify-center gap-2 bg-white text-slate-900 font-black py-4 rounded-xl hover:bg-slate-200 transition-colors">
-              Go to the Feed <ArrowRight className="w-5 h-5" />
+            <Link href="/dashboard" className="w-full inline-flex items-center justify-center gap-2 bg-white text-slate-900 font-black py-4 rounded-xl hover:bg-slate-200 transition-colors">
+              Go to Dashboard <ArrowRight className="w-5 h-5" />
             </Link>
           </div>
         </div>

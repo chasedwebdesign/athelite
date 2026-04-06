@@ -19,9 +19,10 @@ export default function Navbar() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   
-  // --- ECONOMY STATE ---
+  // --- ECONOMY & ROLE STATE ---
   const [coins, setCoins] = useState(0);
   const [isAthlete, setIsAthlete] = useState(false);
+  const [viewerRole, setViewerRole] = useState<'guest' | 'athlete' | 'coach'>('guest');
   
   // --- UI STATE ---
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false); 
@@ -56,7 +57,7 @@ export default function Navbar() {
     }
   }, [isMobileMenuOpen]);
 
-  // Handle live search typing
+  // Handle live search typing & 🚨 LOG COACH SEARCH APPEARANCES 🚨
   useEffect(() => {
     const fetchSearch = async () => {
       if (searchQuery.length < 2) {
@@ -71,18 +72,25 @@ export default function Navbar() {
         .gt('trust_level', 0)
         .limit(5);
         
-      if (data) setSearchResults(data);
+      if (data) {
+        setSearchResults(data);
+        
+        // 🚨 IF A COACH SEARCHES, GIVE THE ATHLETES CREDIT FOR APPEARING 🚨
+        if (viewerRole === 'coach' && data.length > 0) {
+           const idsToUpdate = data.map(athlete => athlete.id);
+           // Fire and forget RPC
+           supabase.rpc('increment_search_appearances', { athlete_ids: idsToUpdate }).then();
+        }
+      }
       setIsSearching(false);
     };
 
     const delayDebounceFn = setTimeout(() => fetchSearch(), 300);
     return () => clearTimeout(delayDebounceFn);
-  }, [searchQuery, supabase]);
+  }, [searchQuery, supabase, viewerRole]);
 
   // Check auth and load avatar/messages/coins
   useEffect(() => {
-    let coinSubscription: any = null; // 🚨 Define subscription variable outside so we can clean it up
-
     async function loadNavData() {
       const { data: { session } } = await supabase.auth.getSession();
       setSession(session);
@@ -97,35 +105,19 @@ export default function Navbar() {
 
         if (athleteProfile) {
           setIsAthlete(true);
+          setViewerRole('athlete');
           setAvatarUrl(athleteProfile.avatar_url);
           setCoins(athleteProfile.coins || 0);
-
-          // 🚨 INSTANT REALTIME COIN UPDATES
-          // This listens to the specific athlete's row in the DB.
-          // If coins go up (bounty claim) or down (shop purchase), it updates instantly.
-          coinSubscription = supabase
-            .channel('public:athletes:coins')
-            .on('postgres_changes', { 
-                event: 'UPDATE', 
-                schema: 'public', 
-                table: 'athletes',
-                filter: `id=eq.${session.user.id}`
-            }, (payload) => {
-                if (payload.new && typeof payload.new.coins === 'number') {
-                    setCoins(payload.new.coins);
-                }
-            })
-            .subscribe();
-
         } else {
           // If not an athlete, check if they are a coach
           const { data: coachProfile } = await supabase
             .from('coaches')
-            .select('avatar_url')
+            .select('id, avatar_url')
             .eq('id', session.user.id)
             .maybeSingle();
             
           if (coachProfile) {
+            setViewerRole('coach');
             setAvatarUrl(coachProfile.avatar_url);
           }
         }
@@ -156,12 +148,34 @@ export default function Navbar() {
       if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') loadNavData();
     });
 
-    // 🚨 Cleanup function to prevent memory leaks when component unmounts
     return () => {
         subscription.unsubscribe();
-        if (coinSubscription) supabase.removeChannel(coinSubscription);
     };
   }, [pathname, supabase]);
+
+  // 🚨 NEW BULLETPROOF COIN TRACKER 🚨
+  // Constantly keeps the Navbar coins perfectly in sync without relying on complex DB real-time configs
+  useEffect(() => {
+    if (!session?.user?.id || !isAthlete) return;
+
+    const fetchLatestCoins = async () => {
+      const { data } = await supabase.from('athletes').select('coins').eq('id', session.user.id).maybeSingle();
+      if (data && typeof data.coins === 'number') {
+        setCoins(data.coins);
+      }
+    };
+
+    // Fast background poll every 3 seconds
+    const interval = setInterval(fetchLatestCoins, 3000);
+    
+    // Instantly fetch the second the user clicks back into the window or closes a modal
+    window.addEventListener('focus', fetchLatestCoins);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', fetchLatestCoins);
+    };
+  }, [session?.user?.id, isAthlete, supabase]);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -244,7 +258,6 @@ export default function Navbar() {
           <div className="hidden md:flex items-center space-x-6 shrink-0">
             <Link href="/feed" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors flex items-center"><Globe className="w-4 h-4 mr-1.5" /> Feed</Link>
             
-            {/* 🚨 NEW COMPETE LINK */}
             <Link href="/compete" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors flex items-center"><Target className="w-4 h-4 mr-1.5" /> Compete</Link>
             
             <Link href="/leaderboard" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors flex items-center"><Trophy className="w-4 h-4 mr-1.5" /> Ranks</Link>
@@ -348,7 +361,6 @@ export default function Navbar() {
             <div className="flex flex-col gap-2">
               <Link href="/feed" onClick={closeMobileMenu} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-50 text-slate-700 font-bold text-lg transition-colors"><Globe className="w-6 h-6 text-blue-500" /> The Feed</Link>
               
-              {/* 🚨 NEW COMPETE LINK MOBILE */}
               <Link href="/compete" onClick={closeMobileMenu} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-50 text-slate-700 font-bold text-lg transition-colors"><Target className="w-6 h-6 text-blue-500" /> Compete</Link>
 
               <Link href="/leaderboard" onClick={closeMobileMenu} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-50 text-slate-700 font-bold text-lg transition-colors"><Trophy className="w-6 h-6 text-blue-500" /> Leaderboards</Link>
@@ -358,7 +370,6 @@ export default function Navbar() {
                 <>
                   <div className="h-px bg-slate-100 my-2"></div>
                   <Link href="/dashboard" onClick={closeMobileMenu} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-50 text-slate-700 font-bold text-lg transition-colors"><LayoutDashboard className="w-6 h-6 text-purple-500" /> Dashboard</Link>
-                  {/* NEW MOBILE SHOP LINK */}
                   {isAthlete && (
                     <Link href="/shop" onClick={closeMobileMenu} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-50 text-slate-700 font-bold text-lg transition-colors">
                       <ShoppingCart className="w-6 h-6 text-blue-600" /> The Shop

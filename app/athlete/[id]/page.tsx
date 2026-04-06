@@ -1,12 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import { Medal, CheckCircle2, MapPin, Mail, X, Send, MessageSquare, Lock, Trophy, Calendar, Share2, ArrowLeft, Activity, Globe, School, UserCircle2, Clock, Star, Instagram, Check } from 'lucide-react';
 import Link from 'next/link';
 
-// 🚨 IMPORTED REUSABLE BORDER COMPONENT
 import { AvatarWithBorder } from '@/components/AnimatedBorders'; 
 
 interface AthleteProfile {
@@ -21,7 +20,8 @@ interface AthleteProfile {
   prs: { event: string; mark: string; date?: string; meet?: string }[];
   avatar_url?: string;
   equipped_border?: string | null;
-  equipped_title?: string | null; // Added to fetch their equipped rank
+  equipped_title?: string | null; 
+  profile_views?: number; 
 }
 
 interface AthletePost {
@@ -32,7 +32,6 @@ interface AthletePost {
   linked_pr_mark?: string | null;
 }
 
-// --- EARNED TITLES INVENTORY ---
 const EARNED_TITLES = [
   { id: 'legend', name: 'Legend', reqPercentile: 0.01, badgeClass: 'legend-badge', unlockText: 'Reach Top 1%' },
   { id: 'champion', name: 'Champion', reqPercentile: 0.05, badgeClass: 'champion-badge', unlockText: 'Reach Top 5%' },
@@ -52,10 +51,8 @@ export default function PublicAthleteProfile() {
   const [athlete, setAthlete] = useState<AthleteProfile | null>(null);
   const [posts, setPosts] = useState<AthletePost[]>([]); 
   const [loading, setLoading] = useState(true);
-  
   const [activeTab, setActiveTab] = useState<'accolades' | 'activity'>('accolades');
 
-  // USER STATE
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [currentUserEmail, setCurrentUserEmail] = useState<string>('');
   const [viewerRole, setViewerRole] = useState<'guest' | 'athlete' | 'coach'>('guest');
@@ -64,92 +61,73 @@ export default function PublicAthleteProfile() {
   const [isVerifiedAthlete, setIsVerifiedAthlete] = useState(false);
   const [isSelf, setIsSelf] = useState(false);
   
-  // WATCHLIST STATE
   const [isSaved, setIsSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // MESSAGING STATE
   const [isMessageModalOpen, setIsMessageModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'pitch' | 'chat'>('pitch');
-  
-  // Auto-filled sender info
   const [senderName, setSenderName] = useState('');
   const [senderSchool, setSenderSchool] = useState('');
   const [senderEmail, setSenderEmail] = useState('');
-  
   const [messageContent, setMessageContent] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [sendSuccess, setSendSuccess] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
 
+  // 🚨 STRICT MODE DOUBLE-FIRE LOCK (No Session Storage!) 🚨
+  const hasLoggedView = useRef(false);
+
   useEffect(() => {
     async function fetchProfileAndUser() {
-      // 1. Fetch the Profile being viewed
-      const { data: athleteData } = await supabase
-        .from('athletes')
-        .select('*')
-        .eq('id', athleteId)
-        .single();
+      const { data: athleteData } = await supabase.from('athletes').select('*').eq('id', athleteId).single();
+      if (athleteData) setAthlete(athleteData as AthleteProfile);
 
-      if (athleteData) {
-        setAthlete(athleteData as AthleteProfile);
-      }
+      const { data: postData } = await supabase.from('posts').select('*').eq('athlete_id', athleteId).order('created_at', { ascending: false });
+      if (postData) setPosts(postData as AthletePost[]);
 
-      // 2. Fetch their posts
-      const { data: postData } = await supabase
-        .from('posts')
-        .select('*')
-        .eq('athlete_id', athleteId)
-        .order('created_at', { ascending: false });
-
-      if (postData) {
-        setPosts(postData as AthletePost[]);
-      }
-
-      // 3. Fetch current logged-in user to see if they can interact
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session) {
         setCurrentUserId(session.user.id);
         setCurrentUserEmail(session.user.email || '');
 
-        if (session.user.id === athleteId) {
-          setIsSelf(true);
-        }
+        if (session.user.id === athleteId) setIsSelf(true);
 
-        const { data: cData } = await supabase
-          .from('coaches')
-          .select('first_name, last_name, school_name, coach_type')
-          .eq('id', session.user.id)
-          .maybeSingle();
+        const { data: cData } = await supabase.from('coaches').select('id, first_name, last_name, school_name, coach_type').eq('id', session.user.id).maybeSingle();
 
         if (cData) {
           setViewerRole('coach');
-          
           const hasCompleteProfile = !!(cData.first_name && cData.last_name && cData.school_name);
           setIsVerifiedCoach(hasCompleteProfile);
-          
           setCoachType(cData.coach_type);
           setSenderName(`${cData.first_name || 'Coach'} ${cData.last_name || ''}`.trim());
           setSenderSchool(cData.school_name || 'Unknown University');
           setSenderEmail(session.user.email || '');
 
-          const { data: savedData } = await supabase
-            .from('saved_recruits')
-            .select('id')
-            .eq('coach_id', session.user.id)
-            .eq('athlete_id', athleteId)
-            .maybeSingle();
-          
+          const { data: savedData } = await supabase.from('saved_recruits').select('id').eq('coach_id', session.user.id).eq('athlete_id', athleteId).maybeSingle();
           if (savedData) setIsSaved(true);
 
+          // 🚨 THE UNBLOCKED RPC TRACKER 🚨
+          if (athleteData && !hasLoggedView.current) {
+             hasLoggedView.current = true; // Lock it to prevent React Strict Mode from firing twice
+             
+             console.log("🚀 Firing RPC to log view for athlete:", athleteId);
+             
+             const { error: rpcError } = await supabase.rpc('log_profile_view', {
+                target_athlete_id: athleteId,
+                viewing_coach_id: session.user.id
+             });
+
+             if (rpcError) {
+                console.error("❌ RPC ERROR:", rpcError);
+                alert("Database Error: " + rpcError.message);
+             } else {
+                console.log("✅ RPC SUCCESS! Coach Click and Master Bump logged successfully.");
+             }
+          }
+
         } else {
-          const { data: aData } = await supabase
-            .from('athletes')
-            .select('id, trust_level, first_name, last_name, high_school')
-            .eq('id', session.user.id)
-            .maybeSingle();
-            
+          const { data: aData } = await supabase.from('athletes').select('id, trust_level, first_name, last_name, high_school').eq('id', session.user.id).maybeSingle();
           if (aData) {
             setViewerRole('athlete');
             setIsVerifiedAthlete(aData.trust_level > 0);
@@ -162,9 +140,7 @@ export default function PublicAthleteProfile() {
       setLoading(false);
     }
 
-    if (athleteId) {
-      fetchProfileAndUser();
-    }
+    if (athleteId) fetchProfileAndUser();
   }, [athleteId, supabase]);
 
   const handleToggleSave = async () => {
@@ -178,11 +154,7 @@ export default function PublicAthleteProfile() {
         await supabase.from('saved_recruits').insert({ coach_id: currentUserId, athlete_id: athleteId });
         setIsSaved(true);
       }
-    } catch (err: any) {
-      alert(`Failed to update watchlist: ${err.message}`);
-    } finally {
-      setIsSaving(false);
-    }
+    } catch (err: any) { alert(`Failed to update watchlist: ${err.message}`); } finally { setIsSaving(false); }
   };
 
   const handleContactClick = () => {
@@ -252,8 +224,6 @@ export default function PublicAthleteProfile() {
 
   const handleCopyLink = async () => {
     const url = window.location.href;
-    
-    // Attempt native share first for mobile users!
     if (navigator.share) {
       try {
         await navigator.share({
@@ -261,13 +231,9 @@ export default function PublicAthleteProfile() {
           text: `Check out my verified Track & Field stats and national rank on ChasedSports! 🏃💨`,
           url: url,
         });
-        return; // Exit if share was successful
-      } catch (err) {
-        console.log('Native share canceled or failed:', err);
-      }
+        return; 
+      } catch (err) { console.log('Native share canceled or failed:', err); }
     } 
-    
-    // Fallback for desktop or failed shares
     navigator.clipboard.writeText(url);
     setCopySuccess(true);
     setTimeout(() => setCopySuccess(false), 2000);
@@ -297,13 +263,11 @@ export default function PublicAthleteProfile() {
     );
   }
 
-  // Find the equipped title for styling
   const activeTitle = EARNED_TITLES.find(t => t.id === athlete.equipped_title) || EARNED_TITLES[6];
 
   return (
     <main className="min-h-screen bg-[#F8FAFC] font-sans pb-32">
       
-      {/* GLOBAL BADGE ANIMATION CLASSES */}
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes shimmerSlow { 0% { background-position: -200% center; } 100% { background-position: 200% center; } }
         .legend-badge { background: linear-gradient(90deg, #6b21a8 0%, #d946ef 20%, #6b21a8 40%, #d946ef 60%, #6b21a8 80%); background-size: 200% auto; animation: shimmerSlow 4s linear infinite; color: white; border: 1px solid #e879f9; box-shadow: 0 0 15px rgba(217, 70, 239, 0.5); font-weight: 900; }
@@ -313,20 +277,15 @@ export default function PublicAthleteProfile() {
 
       <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-10">
         
-        <button 
-          onClick={() => router.back()} 
-          className="inline-flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 mb-6 transition-colors"
-        >
+        <button onClick={() => router.back()} className="inline-flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 mb-6 transition-colors">
           <ArrowLeft className="w-4 h-4 mr-2" /> Back
         </button>
 
-        {/* HERO CARD */}
         <div className="bg-white rounded-[2.5rem] p-6 sm:p-8 md:p-12 border border-slate-200 shadow-xl relative overflow-hidden mb-6 transition-all duration-300">
           <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 blur-[80px] rounded-full pointer-events-none"></div>
           
           <div className="relative z-10 flex flex-col md:flex-row items-center md:items-start gap-6 md:gap-8">
             
-            {/* 🚨 REPLACED WITH AVATAR WITH BORDER COMPONENT */}
             <AvatarWithBorder 
                 avatarUrl={athlete.avatar_url || null} 
                 borderId={athlete.equipped_border} 
@@ -346,7 +305,6 @@ export default function PublicAthleteProfile() {
                 )}
               </div>
 
-              {/* 🚨 DISPLAY EQUIPPED TITLE */}
               <div className="mb-4">
                   <span className={`inline-block px-3 py-1 rounded-lg text-[10px] font-black tracking-widest uppercase text-white ${activeTitle.badgeClass}`}>
                     {activeTitle.name} Rank
@@ -378,7 +336,6 @@ export default function PublicAthleteProfile() {
                       </button>
                     )}
 
-                    {/* COACH WATCHLIST BUTTON */}
                     {viewerRole === 'coach' && (
                       <button 
                         onClick={handleToggleSave} 
@@ -396,7 +353,6 @@ export default function PublicAthleteProfile() {
                   </>
                 )}
                 
-                {/* ENHANCED SHARE BUTTON */}
                 <button onClick={handleCopyLink} className="w-full sm:w-auto bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 hover:border-blue-300 text-blue-700 font-black py-3.5 px-6 rounded-xl transition-colors flex items-center justify-center gap-2 shadow-sm">
                   {copySuccess ? <><CheckCircle2 className="w-5 h-5 text-green-500" /> Copied!</> : <><Share2 className="w-5 h-5" /> Share Profile</>}
                 </button>
@@ -405,7 +361,6 @@ export default function PublicAthleteProfile() {
           </div>
         </div>
 
-        {/* TABS */}
         <div className="flex border-b border-slate-200 mb-6 sm:mb-8 overflow-x-auto hide-scrollbar">
           <button 
             onClick={() => setActiveTab('accolades')}
@@ -421,7 +376,6 @@ export default function PublicAthleteProfile() {
           </button>
         </div>
 
-        {/* ACCOLADES */}
         {activeTab === 'accolades' && (
           <div className="animate-in fade-in duration-300">
             {athlete.prs && athlete.prs.length > 0 ? (
@@ -458,7 +412,6 @@ export default function PublicAthleteProfile() {
           </div>
         )}
 
-        {/* ACTIVITY */}
         {activeTab === 'activity' && (
           <div className="animate-in fade-in duration-300 space-y-4">
             {posts.length > 0 ? (
@@ -467,7 +420,6 @@ export default function PublicAthleteProfile() {
                   <div className="flex justify-between items-start mb-4">
                     <div className="flex items-center gap-3">
                       
-                      {/* 🚨 REPLACED FEED POST AVATAR */}
                       <AvatarWithBorder 
                         avatarUrl={athlete.avatar_url || null} 
                         borderId={athlete.equipped_border} 
@@ -502,7 +454,6 @@ export default function PublicAthleteProfile() {
 
       </div>
 
-      {/* --- SIMPLIFIED MESSAGING MODAL --- */}
       {isMessageModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">

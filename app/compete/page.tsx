@@ -79,64 +79,93 @@ const BOUNTY_TIERS = [
   { percent: 5, reward: 1000, color: 'text-fuchsia-400', bg: 'bg-fuchsia-500/10', border: 'border-fuchsia-500/30', isMax: true },
 ];
 
-const RECRUITING_STANDARDS: Record<string, Record<string, { t1: number, t2: number, t3: number, t4: number, t5: number, isField?: boolean }>> = {
+const RECRUITING_STANDARDS: Record<string, Record<string, { t1: number, t2: number, t3: number, t4: number, t5: number, t6: number, t7: number, isField?: boolean }>> = {
   'Boys': {
-    '100 Meters': { t1: 10.5, t2: 10.8, t3: 11.0, t4: 11.3, t5: 11.6 },
-    '200 Meters': { t1: 21.2, t2: 21.8, t3: 22.2, t4: 22.8, t5: 23.5 },
-    '400 Meters': { t1: 47.5, t2: 49.0, t3: 50.0, t4: 51.5, t5: 53.0 },
-    '800 Meters': { t1: 112, t2: 115, t3: 117, t4: 120, t5: 125 }, 
-    '1500 Meters': { t1: 231, t2: 239, t3: 244, t4: 250, t5: 264 },
-    '1600 Meters': { t1: 250, t2: 258, t3: 264, t4: 270, t5: 285 }, 
-    '3000 Meters': { t1: 500, t2: 518, t3: 532, t4: 546, t5: 574 },
-    '3200 Meters': { t1: 540, t2: 560, t3: 575, t4: 590, t5: 620 }, 
-    'Long Jump': { t1: 288, t2: 270, t3: 260, t4: 252, t5: 240, isField: true }, 
-    'Shot Put': { t1: 720, t2: 660, t3: 600, t4: 540, t5: 480, isField: true }, 
-    'High Jump': { t1: 82, t2: 78, t3: 76, t4: 74, t5: 70, isField: true }, 
+    '60 Meters': { t1: 6.75, t2: 6.90, t3: 7.05, t4: 7.20, t5: 7.40, t6: 7.60, t7: 8.00 },
+    '100 Meters': { t1: 10.5, t2: 10.8, t3: 11.0, t4: 11.3, t5: 11.6, t6: 11.9, t7: 12.6 },
+    '200 Meters': { t1: 21.2, t2: 21.8, t3: 22.2, t4: 22.8, t5: 23.5, t6: 24.5, t7: 26.0 },
+    '400 Meters': { t1: 47.5, t2: 49.0, t3: 50.0, t4: 51.5, t5: 53.0, t6: 55.0, t7: 58.0 },
+    '800 Meters': { t1: 112, t2: 115, t3: 117, t4: 120, t5: 125, t6: 130, t7: 140 }, 
+    '1500 Meters': { t1: 231, t2: 239, t3: 244, t4: 250, t5: 264, t6: 275, t7: 300 },
+    '1600 Meters': { t1: 250, t2: 258, t3: 264, t4: 270, t5: 285, t6: 295, t7: 320 }, 
+    '3000 Meters': { t1: 500, t2: 518, t3: 532, t4: 546, t5: 574, t6: 600, t7: 660 },
+    '3200 Meters': { t1: 540, t2: 560, t3: 575, t4: 590, t5: 620, t6: 650, t7: 720 }, 
+    '110m Hurdles': { t1: 13.8, t2: 14.2, t3: 14.6, t4: 15.0, t5: 15.5, t6: 16.5, t7: 18.5 },
+    '200m Hurdles': { t1: 24.5, t2: 25.5, t3: 26.5, t4: 27.5, t5: 29.0, t6: 30.5, t7: 33.0 },
+    '300m Hurdles': { t1: 37.0, t2: 38.5, t3: 39.5, t4: 41.0, t5: 42.5, t6: 44.5, t7: 48.0 },
+    '400m Hurdles': { t1: 52.0, t2: 54.0, t3: 56.0, t4: 58.0, t5: 60.0, t6: 63.0, t7: 68.0 },
+    'Long Jump': { t1: 288, t2: 270, t3: 260, t4: 252, t5: 240, t6: 228, t7: 204, isField: true }, 
+    'Triple Jump': { t1: 588, t2: 564, t3: 540, t4: 516, t5: 492, t6: 468, t7: 420, isField: true }, 
+    'High Jump': { t1: 82, t2: 78, t3: 76, t4: 74, t5: 70, t6: 66, t7: 60, isField: true }, 
+    'Pole Vault': { t1: 198, t2: 186, t3: 174, t4: 162, t5: 150, t6: 132, t7: 108, isField: true },
+    'Shot Put': { t1: 720, t2: 660, t3: 600, t4: 540, t5: 480, t6: 444, t7: 360, isField: true }, 
+    'Discus': { t1: 2220, t2: 2040, t3: 1860, t4: 1740, t5: 1620, t6: 1440, t7: 1080, isField: true },
+    'Javelin': { t1: 2340, t2: 2160, t3: 2040, t4: 1920, t5: 1800, t6: 1620, t7: 1200, isField: true },
+    'Hammer': { t1: 2400, t2: 2160, t3: 1920, t4: 1740, t5: 1560, t6: 1320, t7: 960, isField: true }
   },
   'Girls': {
-    '100 Meters': { t1: 11.7, t2: 12.1, t3: 12.4, t4: 12.8, t5: 13.2 },
-    '200 Meters': { t1: 24.2, t2: 24.8, t3: 25.5, t4: 26.2, t5: 27.0 },
-    '400 Meters': { t1: 54.5, t2: 57.0, t3: 58.5, t4: 60.5, t5: 63.0 },
-    '800 Meters': { t1: 130, t2: 135, t3: 140, t4: 145, t5: 152 }, 
-    '1500 Meters': { t1: 268, t2: 282, t3: 291, t4: 300, t5: 314 },
-    '1600 Meters': { t1: 290, t2: 305, t3: 315, t4: 325, t5: 340 }, 
-    '3000 Meters': { t1: 583, t2: 611, t3: 638, t4: 666, t5: 694 },
-    '3200 Meters': { t1: 630, t2: 660, t3: 690, t4: 720, t5: 750 }, 
-    'Long Jump': { t1: 234, t2: 222, t3: 210, t4: 198, t5: 186, isField: true }, 
-    'Shot Put': { t1: 540, t2: 480, t3: 432, t4: 396, t5: 360, isField: true }, 
-    'High Jump': { t1: 68, t2: 64, t3: 62, t4: 60, t5: 58, isField: true }, 
+    '60 Meters': { t1: 7.45, t2: 7.65, t3: 7.85, t4: 8.05, t5: 8.30, t6: 8.60, t7: 9.20 },
+    '100 Meters': { t1: 11.7, t2: 12.1, t3: 12.4, t4: 12.8, t5: 13.2, t6: 13.6, t7: 14.5 },
+    '200 Meters': { t1: 24.2, t2: 24.8, t3: 25.5, t4: 26.2, t5: 27.0, t6: 28.5, t7: 31.0 },
+    '400 Meters': { t1: 54.5, t2: 57.0, t3: 58.5, t4: 60.5, t5: 63.0, t6: 66.0, t7: 72.0 },
+    '800 Meters': { t1: 130, t2: 135, t3: 140, t4: 145, t5: 152, t6: 160, t7: 175 }, 
+    '1500 Meters': { t1: 268, t2: 282, t3: 291, t4: 300, t5: 314, t6: 330, t7: 375 },
+    '1600 Meters': { t1: 290, t2: 305, t3: 315, t4: 325, t5: 340, t6: 360, t7: 400 }, 
+    '3000 Meters': { t1: 583, t2: 611, t3: 638, t4: 666, t5: 694, t6: 730, t7: 840 },
+    '3200 Meters': { t1: 630, t2: 660, t3: 690, t4: 720, t5: 750, t6: 800, t7: 900 }, 
+    '100m Hurdles': { t1: 13.8, t2: 14.3, t3: 14.8, t4: 15.5, t5: 16.5, t6: 17.8, t7: 20.0 },
+    '200m Hurdles': { t1: 28.0, t2: 29.0, t3: 30.5, t4: 32.0, t5: 34.0, t6: 36.0, t7: 40.0 },
+    '300m Hurdles': { t1: 42.5, t2: 44.5, t3: 46.5, t4: 48.5, t5: 51.0, t6: 54.0, t7: 59.0 },
+    '400m Hurdles': { t1: 60.0, t2: 63.0, t3: 66.0, t4: 69.0, t5: 72.0, t6: 76.0, t7: 85.0 },
+    'Long Jump': { t1: 234, t2: 222, t3: 210, t4: 198, t5: 186, t6: 174, t7: 150, isField: true }, 
+    'Triple Jump': { t1: 480, t2: 456, t3: 432, t4: 408, t5: 384, t6: 360, t7: 312, isField: true },
+    'High Jump': { t1: 68, t2: 64, t3: 62, t4: 60, t5: 58, t6: 54, t7: 50, isField: true }, 
+    'Pole Vault': { t1: 156, t2: 144, t3: 132, t4: 120, t5: 108, t6: 90, t7: 72, isField: true },
+    'Shot Put': { t1: 540, t2: 480, t3: 432, t4: 396, t5: 360, t6: 324, t7: 264, isField: true }, 
+    'Discus': { t1: 1800, t2: 1620, t3: 1500, t4: 1380, t5: 1260, t6: 1080, t7: 840, isField: true },
+    'Javelin': { t1: 1740, t2: 1560, t3: 1440, t4: 1320, t5: 1200, t6: 1020, t7: 780, isField: true },
+    'Hammer': { t1: 1920, t2: 1680, t3: 1500, t4: 1320, t5: 1140, t6: 960, t7: 720, isField: true }
   }
 };
 
+// 🚨 FIXED PARSEMARKTONUMBER ARGUMENT
 const getEventScore = (markStr: string, event: string, gender: string): number => {
-  const standards = RECRUITING_STANDARDS[gender];
-  if (!standards || !standards[event]) return 40;
-  const eventStds = standards[event];
+  const standards = RECRUITING_STANDARDS[gender] || RECRUITING_STANDARDS['Boys'];
+  
+  const normalizedEvent = event
+    .replace(/Meter\b/i, 'Meters')
+    .replace('100 Meter Hurdles', '100m Hurdles')
+    .replace('110 Meter Hurdles', '110m Hurdles')
+    .replace('200 Meter Hurdles', '200m Hurdles')
+    .replace('300 Meter Hurdles', '300m Hurdles')
+    .replace('400 Meter Hurdles', '400m Hurdles');
+
+  const eventStds = standards[normalizedEvent] || standards[event];
+  if (!eventStds) return 5;
+
   const val = parseMarkToNumber(markStr, event);
   
-  let score = 40;
+  let score = 5;
   if (eventStds.isField) {
     if (val >= eventStds.t1) score = 95 + Math.min(4, ((val - eventStds.t1) / (eventStds.t1 * 0.05)) * 4);
     else if (val >= eventStds.t2) score = 85 + ((val - eventStds.t2) / (eventStds.t1 - eventStds.t2)) * 10;
     else if (val >= eventStds.t3) score = 75 + ((val - eventStds.t3) / (eventStds.t2 - eventStds.t3)) * 10;
     else if (val >= eventStds.t4) score = 65 + ((val - eventStds.t4) / (eventStds.t3 - eventStds.t4)) * 10;
     else if (val >= eventStds.t5) score = 55 + ((val - eventStds.t5) / (eventStds.t4 - eventStds.t5)) * 10;
-    else {
-      const t6 = eventStds.t5 - (eventStds.t4 - eventStds.t5);
-      if (val >= t6) score = 40 + ((val - t6) / (eventStds.t5 - t6)) * 15;
-    }
+    else if (val >= eventStds.t6) score = 40 + ((val - eventStds.t6) / (eventStds.t5 - eventStds.t6)) * 14;
+    else if (val >= eventStds.t7) score = 20 + ((val - eventStds.t7) / (eventStds.t6 - eventStds.t7)) * 19;
+    else { const t8 = eventStds.t7 * 0.85; if (val >= t8) { score = 5 + ((val - t8) / (eventStds.t7 - t8)) * 14; } else { score = 5; } }
   } else {
     if (val <= eventStds.t1) score = 95 + Math.min(4, ((eventStds.t1 - val) / (eventStds.t1 * 0.05)) * 4);
     else if (val <= eventStds.t2) score = 85 + ((eventStds.t2 - val) / (eventStds.t2 - eventStds.t1)) * 10;
     else if (val <= eventStds.t3) score = 75 + ((eventStds.t3 - val) / (eventStds.t3 - eventStds.t2)) * 10;
     else if (val <= eventStds.t4) score = 65 + ((eventStds.t4 - val) / (eventStds.t4 - eventStds.t3)) * 10;
     else if (val <= eventStds.t5) score = 55 + ((eventStds.t5 - val) / (eventStds.t5 - eventStds.t4)) * 10;
-    else {
-      const t6 = eventStds.t5 + (eventStds.t5 - eventStds.t4);
-      if (val <= t6) score = 40 + ((t6 - val) / (t6 - eventStds.t5)) * 15;
-    }
+    else if (val <= eventStds.t6) score = 40 + ((eventStds.t6 - val) / (eventStds.t6 - eventStds.t5)) * 14;
+    else if (val <= eventStds.t7) score = 20 + ((eventStds.t7 - val) / (eventStds.t7 - eventStds.t6)) * 19;
+    else { const t8 = eventStds.t7 * 1.15; if (val <= t8) { score = 5 + ((t8 - val) / (t8 - eventStds.t7)) * 14; } else { score = 5; } }
   }
-  return Math.min(99, Math.max(40, Math.round(score)));
+  return Math.min(99, Math.max(5, Math.round(score)));
 };
 
 interface LeaderboardEntry {
@@ -452,7 +481,6 @@ export default function CompetePage() {
 
   const handleAddRival = async (newRival: AthleteProfile) => {
     if (!currentUser) return;
-    // 🚨 INCREASED LIMIT TO 5 RIVALS 🚨
     if (activeRivals.length >= 5) {
       showToast('You can only have 5 active rivals at a time.', 'error');
       return;
@@ -470,7 +498,6 @@ export default function CompetePage() {
           const rVal = parseMarkToNumber(rivalPr.mark, myPr.event);
           const amIWinning = isField ? myVal > rVal : myVal < rVal && myVal > 0;
           
-          // ONLY generate a bounty contract if we are losing! Otherwise it's just a friendly/tracking rival.
           if (!amIWinning) {
             newContracts.push({
               type: 'rival_hunt',

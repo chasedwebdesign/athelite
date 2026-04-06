@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
-import { Search, Mail, MailOpen, School, Send, Clock, ChevronLeft, UserCircle2, CheckCircle2, AlertCircle, Ban, Bell, MessageSquare, Archive, SendHorizontal, GraduationCap, Users } from 'lucide-react';
+import { Search, Mail, MailOpen, School, Send, Clock, ChevronLeft, UserCircle2, CheckCircle2, AlertCircle, Ban, Bell, MessageSquare, Archive, SendHorizontal, GraduationCap, Users, ShieldAlert } from 'lucide-react';
 import Link from 'next/link';
 
 interface ChatMessage {
@@ -22,11 +22,12 @@ interface Message {
   is_read: boolean;
   created_at: string;
   chat_history: ChatMessage[] | null;
-  status: 'pending' | 'active' | 'ended'; 
+  status: 'pending' | 'active' | 'ended' | 'delivered'; 
   athletes?: {
     first_name: string;
     last_name: string;
     avatar_url: string | null;
+    grad_year?: number | null;
   };
 }
 
@@ -43,7 +44,6 @@ export default function InboxPage() {
   const [replyText, setReplyText] = useState('');
   const [isSending, setIsSending] = useState(false);
 
-  // 🚨 NEW INBOX FOLDER STATE
   const [activeFolder, setActiveFolder] = useState<'inbox' | 'recruiting' | 'chats' | 'archived'>('inbox');
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -56,7 +56,33 @@ export default function InboxPage() {
     scrollToBottom();
   }, [selectedMessage?.chat_history, selectedMessage]);
 
+  // 🚨 DYNAMIC TIMESTAMP SORTER (Fixes the buried message glitch)
+  const getLatestTimestamp = (msg: Message) => {
+    if (msg.chat_history && msg.chat_history.length > 0) {
+      return new Date(msg.chat_history[msg.chat_history.length - 1].created_at).getTime();
+    }
+    return new Date(msg.created_at).getTime();
+  };
+
+  // 🚨 NCAA COMPLIANCE ENGINE
+  const canMessageAthlete = (gradYear: number | null | undefined) => {
+    if (viewerRole !== 'coach') return true; 
+    if (!gradYear) return true; 
+    
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const isPastJune15 = today.getMonth() > 5 || (today.getMonth() === 5 && today.getDate() >= 15);
+    
+    const sophomoreYear = gradYear - 2;
+    if (currentYear > sophomoreYear || (currentYear === sophomoreYear && isPastJune15)) {
+      return true;
+    }
+    return false;
+  };
+
   useEffect(() => {
+    let channel: any;
+
     async function loadMessages() {
       const { data: { session } } = await supabase.auth.getSession();
       
@@ -71,19 +97,47 @@ export default function InboxPage() {
       const { data: cData } = await supabase.from('coaches').select('id').eq('id', session.user.id).maybeSingle();
       if (cData) setViewerRole('coach');
 
+      // Fetch all messages matching the user's ID or email
       const { data, error } = await supabase
         .from('messages')
-        .select('*, athletes(first_name, last_name, avatar_url)')
-        .or(`athlete_id.eq.${session.user.id},sender_email.eq.${session.user.email}`)
-        .order('created_at', { ascending: false });
+        .select('*, athletes(first_name, last_name, avatar_url, grad_year)')
+        .or(`athlete_id.eq.${session.user.id},sender_email.eq.${session.user.email}`);
 
       if (data) {
-        setMessages(data as Message[]);
+        // Sort explicitly by the most recent chat activity, NOT just initial created_at
+        const sortedData = (data as Message[]).sort((a, b) => getLatestTimestamp(b) - getLatestTimestamp(a));
+        setMessages(sortedData);
+        
+        // If a message is currently open, smoothly update it with the new data
+        setSelectedMessage(prev => {
+           if (!prev) return null;
+           const updated = sortedData.find(m => m.id === prev.id);
+           return updated || prev;
+        });
       }
       setLoading(false);
+
+      // 🚨 REALTIME SUBSCRIPTION: Auto-refreshes inbox when someone replies!
+      if (!channel) {
+        channel = supabase
+          .channel('realtime_messages')
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'messages' },
+            () => {
+               // When a database change is detected, silently reload the inbox
+               loadMessages();
+            }
+          )
+          .subscribe();
+      }
     }
 
     loadMessages();
+
+    return () => {
+      if (channel) supabase.removeChannel(channel);
+    };
   }, [supabase, router]);
 
   const isUnreadForMe = (msg: Message) => {
@@ -96,7 +150,7 @@ export default function InboxPage() {
   };
 
   const isExpired = (msg: Message) => {
-    if (msg.status !== 'pending') return false;
+    if (msg.status !== 'pending' && msg.status !== 'delivered') return false;
     const oneWeek = 7 * 24 * 60 * 60 * 1000;
     return new Date().getTime() - new Date(msg.created_at).getTime() > oneWeek;
   };
@@ -105,14 +159,13 @@ export default function InboxPage() {
     if (msg.athlete_id === currentUserId) {
       return msg.sender_school ? `${msg.sender_school} (${msg.sender_name})` : msg.sender_name;
     } else {
-      return msg.athletes ? `${msg.athletes.first_name} ${msg.athletes.last_name}` : 'Athlete';
+      const athleteData = Array.isArray(msg.athletes) ? msg.athletes[0] : msg.athletes;
+      return athleteData ? `${athleteData.first_name} ${athleteData.last_name}` : 'Athlete';
     }
   };
 
-  // 🚨 DETECT IF IT IS A RECRUITING PITCH
   const isRecruitingMessage = (msg: Message) => {
     if (viewerRole === 'coach') return true; 
-    // If the sender has a school listed or "Coach" in their name, it's a college pitch
     return !!msg.sender_school || msg.sender_name.toLowerCase().includes('coach');
   };
 
@@ -138,13 +191,13 @@ export default function InboxPage() {
     try {
       const { error } = await supabase
         .from('messages')
-        .update({ status: newStatus })
+        .update({ status: newStatus, is_read: true })
         .eq('id', selectedMessage.id);
 
       if (error) throw error;
 
-      setMessages(prev => prev.map(m => m.id === selectedMessage.id ? { ...m, status: newStatus } : m));
-      setSelectedMessage(prev => prev ? { ...prev, status: newStatus } : null);
+      setMessages(prev => prev.map(m => m.id === selectedMessage.id ? { ...m, status: newStatus, is_read: true } : m));
+      setSelectedMessage(prev => prev ? { ...prev, status: newStatus, is_read: true } : null);
     } catch (err: any) {
       alert("Failed to update chat status: " + err.message);
     }
@@ -172,7 +225,12 @@ export default function InboxPage() {
 
       if (error) throw error;
 
-      setMessages(prev => prev.map(m => m.id === selectedMessage.id ? { ...m, chat_history: updatedHistory, is_read: false } : m));
+      // Optimistically update UI so the user doesn't have to wait for the realtime reload
+      setMessages(prev => {
+        const updated = prev.map(m => m.id === selectedMessage.id ? { ...m, chat_history: updatedHistory, is_read: false } : m);
+        return updated.sort((a, b) => getLatestTimestamp(b) - getLatestTimestamp(a));
+      });
+      
       setSelectedMessage(prev => prev ? { ...prev, chat_history: updatedHistory, is_read: false } : null);
       setReplyText('');
     } catch (err: any) {
@@ -196,12 +254,9 @@ export default function InboxPage() {
     );
   }
 
-  // --- FILTER MESSAGES BY FOLDER ---
   const activeMessages = messages.filter(m => m.status !== 'ended' && !isExpired(m));
   
-  // 🚨 FIX: Explicitly type displayedMessages as Message[]
   let displayedMessages: Message[] = [];
-  
   if (activeFolder === 'inbox') {
     displayedMessages = activeMessages;
   } else if (activeFolder === 'recruiting') {
@@ -215,11 +270,13 @@ export default function InboxPage() {
   const unreadCount = messages.filter(m => isUnreadForMe(m)).length;
   const unreadRecruiting = activeMessages.filter(m => isUnreadForMe(m) && isRecruitingMessage(m)).length;
 
-  // --- REUSABLE SIDEBAR CARD COMPONENT ---
   const renderSidebarItem = (message: Message) => {
     const unread = isUnreadForMe(message);
     const isSelected = selectedMessage?.id === message.id;
     const isRecruit = isRecruitingMessage(message);
+    
+    // Display the date of the latest activity, not the original created_at
+    const latestTime = getLatestTimestamp(message);
     
     return (
       <button
@@ -239,14 +296,14 @@ export default function InboxPage() {
             </span>
           </div>
           <span className="text-[10px] font-bold text-slate-400 whitespace-nowrap mt-0.5 shrink-0">
-            {new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(message.created_at))}
+            {new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(latestTime))}
           </span>
         </div>
         
         <div className="flex items-center gap-2 w-full pl-0.5">
           {unread && <div className="w-2 h-2 bg-blue-600 rounded-full shrink-0 shadow-sm shadow-blue-500/50"></div>}
           <div className={`text-xs truncate ${unread ? 'font-bold text-slate-800' : 'font-medium text-slate-500'}`}>
-            {message.status === 'pending' && message.athlete_id === currentUserId && <span className="text-amber-500 font-bold mr-1">Action Needed:</span>}
+            {(message.status === 'pending' || message.status === 'delivered') && message.athlete_id === currentUserId && <span className="text-amber-500 font-bold mr-1">Action Needed:</span>}
             {message.chat_history && message.chat_history.length > 0 
               ? message.chat_history[message.chat_history.length - 1].content 
               : message.content}
@@ -256,6 +313,9 @@ export default function InboxPage() {
     );
   };
 
+  const selectedAthleteData = Array.isArray(selectedMessage?.athletes) ? selectedMessage?.athletes[0] : selectedMessage?.athletes;
+  const isNCAARestricted = viewerRole === 'coach' && selectedAthleteData?.grad_year && !canMessageAthlete(selectedAthleteData.grad_year);
+
   return (
     <main className="min-h-screen bg-[#F8FAFC] font-sans pb-10">
       
@@ -264,7 +324,7 @@ export default function InboxPage() {
         {/* HEADER */}
         <div className="mb-6 flex items-center justify-between shrink-0">
           <div>
-            <Link href="/dashboard" className="inline-flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 mb-2 transition-colors">
+            <Link href={viewerRole === 'coach' ? "/dashboard/coach" : "/dashboard"} className="inline-flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 mb-2 transition-colors">
               <ChevronLeft className="w-4 h-4 mr-1" /> Back to Dashboard
             </Link>
             <h1 className="text-3xl font-black text-slate-900 tracking-tight">Message Center</h1>
@@ -336,7 +396,7 @@ export default function InboxPage() {
                     <div>
                       <h2 className="text-base font-black text-slate-900 leading-tight">{getConversationTitle(selectedMessage)}</h2>
                       <p className="text-[11px] font-bold text-slate-400 mt-0.5 uppercase tracking-wider flex items-center gap-1">
-                        {selectedMessage.status === 'pending' ? <span className="text-amber-500">Pending Request</span> : selectedMessage.status === 'ended' ? 'Archived' : 'Active Connection'}
+                        {(selectedMessage.status === 'pending' || selectedMessage.status === 'delivered') ? <span className="text-amber-500">Pending Request</span> : selectedMessage.status === 'ended' ? 'Archived' : 'Active Connection'}
                         {isRecruitingMessage(selectedMessage) && <span className="bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-[4px] ml-1">RECRUITING</span>}
                       </p>
                     </div>
@@ -350,10 +410,23 @@ export default function InboxPage() {
                   )}
                 </div>
 
+                {/* 🚨 NCAA COMPLIANCE WARNING BANNER 🚨 */}
+                {isNCAARestricted && selectedMessage.status === 'active' && (
+                  <div className="bg-red-50 border-b border-red-200 p-4 flex items-start gap-3 shadow-inner shrink-0">
+                    <ShieldAlert className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="text-sm font-black text-red-800">NCAA Compliance Notice</h4>
+                      <p className="text-xs font-bold text-red-600 mt-0.5 leading-relaxed">
+                        This athlete is prior to June 15th of their Sophomore year. If you are a Division I or II program, NCAA rules strictly prohibit you from returning contact or replying to this message at this time.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 {/* Chat Bubbles Area */}
                 <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 bg-slate-50">
                   
-                  {/* 🚨 Initial Pitch Card 🚨 */}
+                  {/* Initial Pitch Card */}
                   <div className="flex flex-col w-full items-center mb-4">
                     <div className="w-full max-w-lg bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
                       <div className="flex items-center gap-2 mb-3 pb-3 border-b border-slate-100">
@@ -391,7 +464,7 @@ export default function InboxPage() {
                     <div className="p-5 flex items-center justify-center text-slate-400 font-bold gap-2 text-sm">
                       <Ban className="w-4 h-4" /> This conversation has been ended.
                     </div>
-                  ) : selectedMessage.status === 'pending' ? (
+                  ) : (selectedMessage.status === 'pending' || selectedMessage.status === 'delivered') ? (
                     selectedMessage.athlete_id === currentUserId ? (
                       // RECEIVER SEES: Accept / Decline
                       <div className="p-6 flex flex-col items-center justify-center gap-3">

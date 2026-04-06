@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
-import { Activity, ShieldCheck, Link as LinkIcon, Trophy, LogOut, Medal, Timer, TrendingUp, CheckCircle2, Search, AlertCircle, Zap, Calendar, MapPin, Camera, Mail, RefreshCw, School, Lock, AlertTriangle, ExternalLink, ChevronRight, Check, Clock, Edit2, MousePointer2, Flame, Bookmark, Share2, Instagram, X, Users, Gift, Paintbrush, ArrowDown, HelpCircle, Globe, UserCircle2, Eye, BarChart3, Rocket, FileText, Save, Crown, Target, Swords, ArrowRight } from 'lucide-react';
+import { Activity, ShieldCheck, Link as LinkIcon, Trophy, BookOpen, LogOut, Medal, Timer, TrendingUp, CheckCircle2, Search, AlertCircle, Zap, Calendar, MapPin, Camera, Mail, RefreshCw, School, Lock, AlertTriangle, ExternalLink, ChevronRight, Check, Clock, Edit2, MousePointer2, Flame, Bookmark, Share2, Instagram, X, Users, Gift, Paintbrush, ArrowDown, HelpCircle, Globe, UserCircle2, Eye, BarChart3, Rocket, FileText, Save, Crown, Target, Swords, ArrowRight, Trash2, Download, ChevronDown, ChevronUp } from 'lucide-react';
 import Link from 'next/link';
 import imageCompression from 'browser-image-compression';
 
@@ -44,6 +44,39 @@ interface AthleteProfile {
   rival_ids: string[] | null;
 }
 
+interface ScoutedAthlete {
+  id: string;
+  first_name: string;
+  last_name: string;
+  high_school: string;
+  athletic_net_url: string;
+  gender: string;
+  prs: any[];
+  calculated_score: number;
+  calculated_tier: string;
+  created_at: string;
+}
+
+interface ProjectionResult {
+  overallScore: number;
+  overallLabel: string;
+  overallDesc: string;
+  color: string;
+  bg: string;
+  border: string;
+  bestEvent: string;
+  eventBreakdowns: {
+    event: string;
+    mark: string;
+    score: number;
+    currentTier: string;
+    nextTier: string;
+    targetMarkFormatted: string;
+    deltaFormatted: string;
+    isField: boolean;
+  }[];
+}
+
 const FIELD_EVENTS = ['Shot Put', 'Discus', 'Javelin', 'Hammer', 'High Jump', 'Pole Vault', 'Long Jump', 'Triple Jump'];
 
 const EARNED_TITLES = [
@@ -56,39 +89,191 @@ const EARNED_TITLES = [
   { id: 'prospect', name: 'Prospect', reqPercentile: 1.0, badgeClass: 'bg-slate-100 text-slate-600 border border-slate-300', unlockText: 'Standard Rank' },
 ];
 
-const RECRUITING_STANDARDS: Record<string, Record<string, { t1: number, t2: number, t3: number, t4: number, t5: number, isField?: boolean }>> = {
+const RECRUITING_STANDARDS: Record<string, Record<string, { t1: number, t2: number, t3: number, t4: number, t5: number, t6: number, t7: number, isField?: boolean }>> = {
   'Boys': {
-    '100 Meters': { t1: 10.5, t2: 10.8, t3: 11.0, t4: 11.3, t5: 11.6 },
-    '200 Meters': { t1: 21.2, t2: 21.8, t3: 22.2, t4: 22.8, t5: 23.5 },
-    '400 Meters': { t1: 47.5, t2: 49.0, t3: 50.0, t4: 51.5, t5: 53.0 },
-    '800 Meters': { t1: 112, t2: 115, t3: 117, t4: 120, t5: 125 }, 
-    '1500 Meters': { t1: 231, t2: 239, t3: 244, t4: 250, t5: 264 },
-    '1600 Meters': { t1: 250, t2: 258, t3: 264, t4: 270, t5: 285 }, 
-    '3000 Meters': { t1: 500, t2: 518, t3: 532, t4: 546, t5: 574 },
-    '3200 Meters': { t1: 540, t2: 560, t3: 575, t4: 590, t5: 620 }, 
-    'Long Jump': { t1: 288, t2: 270, t3: 260, t4: 252, t5: 240, isField: true }, 
-    'Shot Put': { t1: 720, t2: 660, t3: 600, t4: 540, t5: 480, isField: true }, 
-    'High Jump': { t1: 82, t2: 78, t3: 76, t4: 74, t5: 70, isField: true }, 
+    '60 Meters': { t1: 6.75, t2: 6.90, t3: 7.05, t4: 7.20, t5: 7.40, t6: 7.60, t7: 8.00 },
+    '100 Meters': { t1: 10.5, t2: 10.8, t3: 11.0, t4: 11.3, t5: 11.6, t6: 11.9, t7: 12.6 },
+    '200 Meters': { t1: 21.2, t2: 21.8, t3: 22.2, t4: 22.8, t5: 23.5, t6: 24.5, t7: 26.0 },
+    '400 Meters': { t1: 47.5, t2: 49.0, t3: 50.0, t4: 51.5, t5: 53.0, t6: 55.0, t7: 58.0 },
+    '800 Meters': { t1: 112, t2: 115, t3: 117, t4: 120, t5: 125, t6: 130, t7: 140 }, 
+    '1500 Meters': { t1: 231, t2: 239, t3: 244, t4: 250, t5: 264, t6: 275, t7: 300 },
+    '1600 Meters': { t1: 250, t2: 258, t3: 264, t4: 270, t5: 285, t6: 295, t7: 320 }, 
+    '3000 Meters': { t1: 500, t2: 518, t3: 532, t4: 546, t5: 574, t6: 600, t7: 660 },
+    '3200 Meters': { t1: 540, t2: 560, t3: 575, t4: 590, t5: 620, t6: 650, t7: 720 }, 
+    '110m Hurdles': { t1: 13.8, t2: 14.2, t3: 14.6, t4: 15.0, t5: 15.5, t6: 16.5, t7: 18.5 },
+    '200m Hurdles': { t1: 24.5, t2: 25.5, t3: 26.5, t4: 27.5, t5: 29.0, t6: 30.5, t7: 33.0 },
+    '300m Hurdles': { t1: 37.0, t2: 38.5, t3: 39.5, t4: 41.0, t5: 42.5, t6: 44.5, t7: 48.0 },
+    '400m Hurdles': { t1: 52.0, t2: 54.0, t3: 56.0, t4: 58.0, t5: 60.0, t6: 63.0, t7: 68.0 },
+    'Long Jump': { t1: 288, t2: 270, t3: 260, t4: 252, t5: 240, t6: 228, t7: 204, isField: true }, 
+    'Triple Jump': { t1: 588, t2: 564, t3: 540, t4: 516, t5: 492, t6: 468, t7: 420, isField: true }, 
+    'High Jump': { t1: 82, t2: 78, t3: 76, t4: 74, t5: 70, t6: 66, t7: 60, isField: true }, 
+    'Pole Vault': { t1: 198, t2: 186, t3: 174, t4: 162, t5: 150, t6: 132, t7: 108, isField: true },
+    'Shot Put': { t1: 720, t2: 660, t3: 600, t4: 540, t5: 480, t6: 444, t7: 360, isField: true }, 
+    'Discus': { t1: 2220, t2: 2040, t3: 1860, t4: 1740, t5: 1620, t6: 1440, t7: 1080, isField: true },
+    'Javelin': { t1: 2340, t2: 2160, t3: 2040, t4: 1920, t5: 1800, t6: 1620, t7: 1200, isField: true },
+    'Hammer': { t1: 2400, t2: 2160, t3: 1920, t4: 1740, t5: 1560, t6: 1320, t7: 960, isField: true }
   },
   'Girls': {
-    '100 Meters': { t1: 11.7, t2: 12.1, t3: 12.4, t4: 12.8, t5: 13.2 },
-    '200 Meters': { t1: 24.2, t2: 24.8, t3: 25.5, t4: 26.2, t5: 27.0 },
-    '400 Meters': { t1: 54.5, t2: 57.0, t3: 58.5, t4: 60.5, t5: 63.0 },
-    '800 Meters': { t1: 130, t2: 135, t3: 140, t4: 145, t5: 152 }, 
-    '1500 Meters': { t1: 268, t2: 282, t3: 291, t4: 300, t5: 314 },
-    '1600 Meters': { t1: 290, t2: 305, t3: 315, t4: 325, t5: 340 }, 
-    '3000 Meters': { t1: 583, t2: 611, t3: 638, t4: 666, t5: 694 },
-    '3200 Meters': { t1: 630, t2: 660, t3: 690, t4: 720, t5: 750 }, 
-    'Long Jump': { t1: 234, t2: 222, t3: 210, t4: 198, t5: 186, isField: true }, 
-    'Shot Put': { t1: 540, t2: 480, t3: 432, t4: 396, t5: 360, isField: true }, 
-    'High Jump': { t1: 68, t2: 64, t3: 62, t4: 60, t5: 58, isField: true }, 
+    '60 Meters': { t1: 7.45, t2: 7.65, t3: 7.85, t4: 8.05, t5: 8.30, t6: 8.60, t7: 9.20 },
+    '100 Meters': { t1: 11.7, t2: 12.1, t3: 12.4, t4: 12.8, t5: 13.2, t6: 13.6, t7: 14.5 },
+    '200 Meters': { t1: 24.2, t2: 24.8, t3: 25.5, t4: 26.2, t5: 27.0, t6: 28.5, t7: 31.0 },
+    '400 Meters': { t1: 54.5, t2: 57.0, t3: 58.5, t4: 60.5, t5: 63.0, t6: 66.0, t7: 72.0 },
+    '800 Meters': { t1: 130, t2: 135, t3: 140, t4: 145, t5: 152, t6: 160, t7: 175 }, 
+    '1500 Meters': { t1: 268, t2: 282, t3: 291, t4: 300, t5: 314, t6: 330, t7: 375 },
+    '1600 Meters': { t1: 290, t2: 305, t3: 315, t4: 325, t5: 340, t6: 360, t7: 400 }, 
+    '3000 Meters': { t1: 583, t2: 611, t3: 638, t4: 666, t5: 694, t6: 730, t7: 840 },
+    '3200 Meters': { t1: 630, t2: 660, t3: 690, t4: 720, t5: 750, t6: 800, t7: 900 }, 
+    '100m Hurdles': { t1: 13.8, t2: 14.3, t3: 14.8, t4: 15.5, t5: 16.5, t6: 17.8, t7: 20.0 },
+    '200m Hurdles': { t1: 28.0, t2: 29.0, t3: 30.5, t4: 32.0, t5: 34.0, t6: 36.0, t7: 40.0 },
+    '300m Hurdles': { t1: 42.5, t2: 44.5, t3: 46.5, t4: 48.5, t5: 51.0, t6: 54.0, t7: 59.0 },
+    '400m Hurdles': { t1: 60.0, t2: 63.0, t3: 66.0, t4: 69.0, t5: 72.0, t6: 76.0, t7: 85.0 },
+    'Long Jump': { t1: 234, t2: 222, t3: 210, t4: 198, t5: 186, t6: 174, t7: 150, isField: true }, 
+    'Triple Jump': { t1: 480, t2: 456, t3: 432, t4: 408, t5: 384, t6: 360, t7: 312, isField: true },
+    'High Jump': { t1: 68, t2: 64, t3: 62, t4: 60, t5: 58, t6: 54, t7: 50, isField: true }, 
+    'Pole Vault': { t1: 156, t2: 144, t3: 132, t4: 120, t5: 108, t6: 90, t7: 72, isField: true },
+    'Shot Put': { t1: 540, t2: 480, t3: 432, t4: 396, t5: 360, t6: 324, t7: 264, isField: true }, 
+    'Discus': { t1: 1800, t2: 1620, t3: 1500, t4: 1380, t5: 1260, t6: 1080, t7: 840, isField: true },
+    'Javelin': { t1: 1740, t2: 1560, t3: 1440, t4: 1320, t5: 1200, t6: 1020, t7: 780, isField: true },
+    'Hammer': { t1: 1920, t2: 1680, t3: 1500, t4: 1320, t5: 1140, t6: 960, t7: 720, isField: true }
   }
+};
+
+const convertMarkToNumber = (markStr: string, isField: boolean): number => {
+  if (isField) {
+    const clean = markStr.replace(/[^0-9.]/g, ' ').trim().split(/\s+/);
+    const feet = parseFloat(clean[0]) || 0;
+    const inches = parseFloat(clean[1]) || 0;
+    return (feet * 12) + inches;
+  } else {
+    if (markStr.includes(':')) {
+      const parts = markStr.split(':');
+      return (parseFloat(parts[0]) * 60) + parseFloat(parts[1]);
+    }
+    return parseFloat(markStr.replace(/[a-zA-Z]/g, '').trim()) || 99999;
+  }
+};
+
+const formatMarkFromNumber = (val: number, isField: boolean): string => {
+  if (isField) {
+    const feet = Math.floor(val / 12);
+    const inches = val % 12;
+    if (feet > 0) return `${feet}' ${inches.toFixed(1).replace(/\.0$/, '')}"`;
+    return `${inches.toFixed(1).replace(/\.0$/, '')}"`;
+  } else {
+    if (val >= 60) {
+      const minutes = Math.floor(val / 60);
+      const seconds = (val % 60).toFixed(2).padStart(5, '0');
+      return `${minutes}:${seconds}`;
+    }
+    return val.toFixed(2);
+  }
+};
+
+const parseMarkForSorting = (mark: string, event: string): number => {
+  const isField = FIELD_EVENTS.includes(event);
+  const val = convertMarkToNumber(mark, isField);
+  return isField ? -val : val;
+};
+
+const getAthleteProjection = (prs: any[], gender: string): ProjectionResult => {
+  if (!prs || !Array.isArray(prs) || prs.length === 0) {
+    return { overallScore: 0, overallLabel: '', overallDesc: '', color: '', bg: '', border: '', bestEvent: 'N/A', eventBreakdowns: [] };
+  }
+
+  const standards = RECRUITING_STANDARDS[gender] || RECRUITING_STANDARDS['Boys'];
+  let allBreakdowns: any[] = [];
+
+  prs.forEach((pr) => {
+    if (!pr.event || !pr.mark) return;
+    
+    const normalizedEvent = pr.event
+      .replace(/Meter\b/i, 'Meters')
+      .replace('100 Meter Hurdles', '100m Hurdles')
+      .replace('110 Meter Hurdles', '110m Hurdles')
+      .replace('200 Meter Hurdles', '200m Hurdles')
+      .replace('300 Meter Hurdles', '300m Hurdles')
+      .replace('400 Meter Hurdles', '400m Hurdles');
+
+    const eventStds = standards[normalizedEvent] || standards[pr.event];
+
+    if (eventStds) {
+      const val = convertMarkToNumber(pr.mark, !!eventStds.isField);
+      let score = 5;
+      let currentTier = 'JV Standard';
+      let nextTier = 'Varsity';
+      let targetMarkNum = eventStds.t7;
+      let delta = 0;
+
+      if (eventStds.isField) {
+        if (val >= eventStds.t1) { score = 95 + Math.min(4, ((val - eventStds.t1) / (eventStds.t1 * 0.05)) * 4); currentTier = 'Power 4 D1'; nextTier = 'Elite'; targetMarkNum = eventStds.t1 * 1.05; }
+        else if (val >= eventStds.t2) { score = 85 + ((val - eventStds.t2) / (eventStds.t1 - eventStds.t2)) * 10; currentTier = 'Mid-Major D1'; nextTier = 'Power 4 D1'; targetMarkNum = eventStds.t1; }
+        else if (val >= eventStds.t3) { score = 75 + ((val - eventStds.t3) / (eventStds.t2 - eventStds.t3)) * 10; currentTier = 'Top D2 / Walk-on'; nextTier = 'Mid-Major D1'; targetMarkNum = eventStds.t2; }
+        else if (val >= eventStds.t4) { score = 65 + ((val - eventStds.t4) / (eventStds.t3 - eventStds.t4)) * 10; currentTier = 'Solid D2 / High D3'; nextTier = 'Top D2'; targetMarkNum = eventStds.t3; }
+        else if (val >= eventStds.t5) { score = 55 + ((val - eventStds.t5) / (eventStds.t4 - eventStds.t5)) * 10; currentTier = 'D3 / NAIA'; nextTier = 'Solid D2'; targetMarkNum = eventStds.t4; }
+        else if (val >= eventStds.t6) { score = 40 + ((val - eventStds.t6) / (eventStds.t5 - eventStds.t6)) * 14; currentTier = 'Strong Varsity'; nextTier = 'D3 / NAIA'; targetMarkNum = eventStds.t5; }
+        else if (val >= eventStds.t7) { score = 20 + ((val - eventStds.t7) / (eventStds.t6 - eventStds.t7)) * 19; currentTier = 'Varsity Standard'; nextTier = 'Strong Varsity'; targetMarkNum = eventStds.t6; }
+        else { const t8 = eventStds.t7 * 0.85; if (val >= t8) { score = 5 + ((val - t8) / (eventStds.t7 - t8)) * 14; } else { score = 5; }; currentTier = 'JV Standard'; nextTier = 'Varsity Standard'; targetMarkNum = eventStds.t7; }
+        delta = targetMarkNum - val;
+      } else {
+        if (val <= eventStds.t1) { score = 95 + Math.min(4, ((eventStds.t1 - val) / (eventStds.t1 * 0.05)) * 4); currentTier = 'Power 4 D1'; nextTier = 'Elite'; targetMarkNum = eventStds.t1 * 0.95; }
+        else if (val <= eventStds.t2) { score = 85 + ((eventStds.t2 - val) / (eventStds.t2 - eventStds.t1)) * 10; currentTier = 'Mid-Major D1'; nextTier = 'Power 4 D1'; targetMarkNum = eventStds.t1; }
+        else if (val <= eventStds.t3) { score = 75 + ((eventStds.t3 - val) / (eventStds.t3 - eventStds.t2)) * 10; currentTier = 'Top D2 / Walk-on'; nextTier = 'Mid-Major D1'; targetMarkNum = eventStds.t2; }
+        else if (val <= eventStds.t4) { score = 65 + ((eventStds.t4 - val) / (eventStds.t4 - eventStds.t3)) * 10; currentTier = 'Solid D2 / High D3'; nextTier = 'Top D2'; targetMarkNum = eventStds.t3; }
+        else if (val <= eventStds.t5) { score = 55 + ((eventStds.t5 - val) / (eventStds.t5 - eventStds.t4)) * 10; currentTier = 'D3 / NAIA'; nextTier = 'Solid D2'; targetMarkNum = eventStds.t4; }
+        else if (val <= eventStds.t6) { score = 40 + ((eventStds.t6 - val) / (eventStds.t6 - eventStds.t5)) * 14; currentTier = 'Strong Varsity'; nextTier = 'D3 / NAIA'; targetMarkNum = eventStds.t5; }
+        else if (val <= eventStds.t7) { score = 20 + ((eventStds.t7 - val) / (eventStds.t7 - eventStds.t6)) * 19; currentTier = 'Varsity Standard'; nextTier = 'Strong Varsity'; targetMarkNum = eventStds.t6; }
+        else { const t8 = eventStds.t7 * 1.15; if (val <= t8) { score = 5 + ((t8 - val) / (t8 - eventStds.t7)) * 14; } else { score = 5; }; currentTier = 'JV Standard'; nextTier = 'Varsity Standard'; targetMarkNum = eventStds.t7; }
+        delta = val - targetMarkNum; 
+      }
+
+      score = Math.min(99, Math.max(5, Math.round(score)));
+
+      allBreakdowns.push({
+        event: normalizedEvent,
+        mark: pr.mark,
+        score,
+        currentTier,
+        nextTier,
+        targetMarkFormatted: formatMarkFromNumber(targetMarkNum, !!eventStds.isField),
+        deltaFormatted: !!eventStds.isField ? `+${formatMarkFromNumber(delta, true)}` : `-${delta.toFixed(2)}s`,
+        isField: !!eventStds.isField
+      });
+    }
+  });
+
+  if (allBreakdowns.length === 0) {
+    return { overallScore: 0, overallLabel: '', overallDesc: '', color: '', bg: '', border: '', bestEvent: 'N/A', eventBreakdowns: [] };
+  }
+
+  allBreakdowns.sort((a, b) => b.score - a.score);
+  const best = allBreakdowns[0];
+
+  let label = ''; let desc = ''; let color = ''; let bg = ''; let border = '';
+  
+  if (best.score >= 95) { label = 'Power 4 D1 Recruit'; desc = 'You are a priority target for top-tier Division 1 programs. Coaches will find you.'; color = 'text-fuchsia-600'; bg = 'bg-fuchsia-50'; border = 'border-fuchsia-200'; }
+  else if (best.score >= 85) { label = 'Mid-Major D1 / Elite D2'; desc = 'You hold marks that command athletic scholarship money. Start taking official visits.'; color = 'text-purple-600'; bg = 'bg-purple-50'; border = 'border-purple-200'; }
+  else if (best.score >= 75) { label = 'D1 Walk-On / Top D2'; desc = 'D1 programs will let you walk on, and D2 programs will heavily recruit you. Great spot to be in.'; color = 'text-blue-600'; bg = 'bg-blue-50'; border = 'border-blue-200'; }
+  else if (best.score >= 65) { label = 'Solid D2 / High-End D3'; desc = 'Great priority recruit for D2 or D3 programs. You can absolutely compete at the next level.'; color = 'text-emerald-600'; bg = 'bg-emerald-50'; border = 'border-emerald-200'; }
+  else if (best.score >= 55) { label = 'D3 / NAIA Prospect'; desc = 'Solid prospect for Division 3 or NAIA. Focus on reaching out to programs that fit your academics.'; color = 'text-amber-600'; bg = 'bg-amber-50'; border = 'border-amber-200'; }
+  else if (best.score >= 40) { label = 'Strong Varsity'; desc = 'Great high school competitor. Keep grinding to hit collegiate recruiting standards!'; color = 'text-slate-600'; bg = 'bg-slate-100'; border = 'border-slate-300'; }
+  else if (best.score >= 20) { label = 'Varsity Standard'; desc = 'Solid high school competitor. Keep pushing to hit developmental marks.'; color = 'text-slate-500'; bg = 'bg-slate-50'; border = 'border-slate-200'; }
+  else { label = 'JV Standard'; desc = 'Keep working hard in practice! Every rep brings you closer to varsity standard.'; color = 'text-slate-400'; bg = 'bg-slate-50'; border = 'border-slate-100'; }
+
+  return { 
+    overallScore: best.score, 
+    overallLabel: label, 
+    overallDesc: desc, 
+    color, bg, border, 
+    bestEvent: best.event,
+    eventBreakdowns: allBreakdowns 
+  };
 };
 
 export default function DashboardPage() {
   const supabase = createClient();
   const router = useRouter();
   const [athleteProfile, setAthleteProfile] = useState<AthleteProfile | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<'athlete' | 'coach' | null>(null);
   const [loading, setLoading] = useState(true);
   
@@ -106,9 +291,7 @@ export default function DashboardPage() {
   const [equippedTitle, setEquippedTitle] = useState<string>('prospect');
   const [equippedBorder, setEquippedBorder] = useState<string>('none');
   const [isEquipping, setIsEquipping] = useState(false);
-  
-  const [canSync, setCanSync] = useState(true);
-  const [syncTimeLeft, setSyncTimeLeft] = useState('');
+  const [isTitleDropdownOpen, setIsTitleDropdownOpen] = useState(false);
   
   const [streak, setStreak] = useState(0);
   const [savedColleges, setSavedColleges] = useState<any[]>([]);
@@ -120,66 +303,67 @@ export default function DashboardPage() {
 
   const [resumeText, setResumeText] = useState('');
   const [isSavingResume, setIsSavingResume] = useState(false);
+  
+  const [scoutUrl, setScoutUrl] = useState('');
+  const [isScouting, setIsScouting] = useState(false);
+  const [scoutsRemaining, setScoutsRemaining] = useState(10);
+  const [scoutedAthletes, setScoutedAthletes] = useState<ScoutedAthlete[]>([]);
+
+  const [activeCardAthlete, setActiveCardAthlete] = useState<ScoutedAthlete | null>(null);
+  const [isExportingCard, setIsExportingCard] = useState(false);
+
+  const [dailyViews, setDailyViews] = useState(0);
+  const [monthlyViews, setMonthlyViews] = useState(0);
+  const [allRecentViewers, setAllRecentViewers] = useState<any[]>([]);
+  const [recentViewers, setRecentViewers] = useState<any[]>([]);
+  const [showAllViewersModal, setShowAllViewersModal] = useState(false);
+  const [showImpressionTooltip, setShowImpressionTooltip] = useState(false);
+
+  const [expandedEventIndex, setExpandedEventIndex] = useState<number | null>(null);
+
+  const [activeTab, setActiveTab] = useState<'stats' | 'recruiting' | 'scout' | 'rewards'>('stats');
 
   const [toast, setToast] = useState<{ message: string; type: 'error' | 'success' } | null>(null);
+
+  // 🚨 MANUAL ONBOARDING STATES 🚨
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [editFirstName, setEditFirstName] = useState('');
+  const [editLastName, setEditLastName] = useState('');
+  const [showLinkModal, setShowLinkModal] = useState(false);
 
   const showToast = (message: string, type: 'error' | 'success' = 'error') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 4000);
   };
 
-  const convertMarkToNumber = (markStr: string, isField: boolean): number => {
-    if (isField) {
-      const clean = markStr.replace(/[^0-9.]/g, ' ').trim().split(/\s+/);
-      const feet = parseFloat(clean[0]) || 0;
-      const inches = parseFloat(clean[1]) || 0;
-      return (feet * 12) + inches;
-    } else {
-      if (markStr.includes(':')) {
-        const parts = markStr.split(':');
-        return (parseFloat(parts[0]) * 60) + parseFloat(parts[1]);
-      }
-      return parseFloat(markStr.replace(/[a-zA-Z]/g, '').trim()) || 99999;
+  const handleContactCoach = (coachEmail: string | null) => {
+    if (!coachEmail) {
+      showToast("This coach has not made their contact information public.", "error");
+      return;
+    }
+    window.location.href = `mailto:${coachEmail}?subject=Recruiting Inquiry from ChasedSports Profile`;
+  };
+
+  const handleRemoveCollege = async (savedId: string) => {
+    try {
+      const { error } = await supabase.from('saved_colleges').delete().eq('id', savedId);
+      if (error) throw error;
+      setSavedColleges(prev => prev.filter(c => c.id !== savedId));
+      showToast("School removed from target list.", "success");
+    } catch (err: any) {
+      showToast(err.message, 'error');
     }
   };
 
-  const formatMarkFromNumber = (val: number, isField: boolean): string => {
-    if (isField) {
-      const feet = Math.floor(val / 12);
-      const inches = val % 12;
-      if (feet > 0) return `${feet}' ${inches.toFixed(1).replace(/\.0$/, '')}"`;
-      return `${inches.toFixed(1).replace(/\.0$/, '')}"`;
-    } else {
-      if (val >= 60) {
-        const minutes = Math.floor(val / 60);
-        const seconds = (val % 60).toFixed(2).padStart(5, '0');
-        return `${minutes}:${seconds}`;
-      }
-      return val.toFixed(2);
-    }
-  };
-
-  const parseMarkForSorting = (mark: string, event: string): number => {
-    const isField = FIELD_EVENTS.includes(event);
-    const val = convertMarkToNumber(mark, isField);
-    return isField ? -val : val;
+  const toggleEventExpansion = (index: number) => {
+    setExpandedEventIndex(prev => prev === index ? null : index);
   };
 
   useEffect(() => {
-    const lastSyncStr = localStorage.getItem('last_sync_time');
-    if (lastSyncStr) {
-      const lastSyncTime = parseInt(lastSyncStr, 10);
-      const timePassed = new Date().getTime() - lastSyncTime;
-      const oneDay = 24 * 60 * 60 * 1000;
-      if (timePassed < oneDay) {
-        setCanSync(false);
-        setSyncTimeLeft(`${Math.ceil((oneDay - timePassed) / (1000 * 60 * 60))}h`);
-      }
-    }
-
     async function loadDashboardData() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { router.push('/login'); return; }
+      setCurrentUserId(session.user.id);
 
       const { data: cData } = await supabase.from('coaches').select('id').eq('id', session.user.id).maybeSingle();
       if (cData) { router.push('/dashboard/coach'); return; }
@@ -208,6 +392,19 @@ export default function DashboardPage() {
         if (savedCollegesData) setSavedColleges(savedCollegesData);
       } catch (e) {}
 
+      const { data: scoutedData } = await supabase
+        .from('scouted_athletes')
+        .select('*')
+        .eq('scouted_by', session.user.id)
+        .order('created_at', { ascending: false });
+        
+      if (scoutedData) {
+        setScoutedAthletes(scoutedData);
+        const todayStr = new Date().toLocaleDateString('en-US');
+        const scoutsToday = scoutedData.filter((s: any) => new Date(s.created_at).toLocaleDateString('en-US') === todayStr).length;
+        setScoutsRemaining(Math.max(0, 10 - scoutsToday));
+      }
+
       const { data: aData } = await supabase.from('athletes').select('*').eq('id', session.user.id).maybeSingle();
       
       if (aData) {
@@ -216,6 +413,43 @@ export default function DashboardPage() {
         setEquippedBorder(aData.equipped_border || 'none');
         setResumeText(aData.saved_resume || '');
         
+        try {
+           const today = new Date();
+           today.setHours(0, 0, 0, 0);
+           const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+
+           const { data: viewLogs } = await supabase
+             .from('profile_view_logs')
+             .select('created_at, coaches(first_name, last_name, school_name, avatar_url, email)')
+             .eq('athlete_id', session.user.id)
+             .order('created_at', { ascending: false });
+
+           if (viewLogs) {
+              const daily = viewLogs.filter(log => new Date(log.created_at) >= today).length;
+              const monthly = viewLogs.filter(log => new Date(log.created_at) >= firstOfMonth).length;
+
+              const uniqueCoaches: any[] = [];
+              const seenIds = new Set();
+              
+              for (const log of viewLogs) {
+                 const coachData = Array.isArray((log as any).coaches) ? (log as any).coaches[0] : (log as any).coaches;
+                 const cId = coachData ? (coachData as any).school_name : null; 
+                 
+                 if (cId && !seenIds.has(cId) && coachData) {
+                     seenIds.add(cId);
+                     uniqueCoaches.push(coachData);
+                 }
+              }
+
+              setDailyViews(daily);
+              setMonthlyViews(monthly);
+              setAllRecentViewers(uniqueCoaches);
+              setRecentViewers(uniqueCoaches.slice(0, 3)); 
+           }
+        } catch (e) {
+           console.log("Could not load advanced view logs. Using basic stats.");
+        }
+
         if (aData.rival_ids && aData.rival_ids.length > 0) {
           const { data: rData } = await supabase
             .from('athletes')
@@ -388,49 +622,19 @@ export default function DashboardPage() {
       if (!verifyRes.ok || !verifyData.success) throw new Error(verifyData.error || "Code not found on profile. Did you save it to your username?");
 
       if (athleteProfile.referred_by && athleteProfile.trust_level === 0) {
-        const { data: referrer } = await supabase
-          .from('athletes')
-          .select('boosts_available, verified_referrals, unlocked_borders')
-          .eq('id', athleteProfile.referred_by)
-          .maybeSingle();
+        
+        // 1. Give the referrer their reward securely via RPC
+        const { error: rpcError } = await supabase.rpc('reward_referrer', { referrer_id: athleteProfile.referred_by });
+        if (rpcError) console.error("RPC Error:", rpcError);
 
-        if (referrer) {
-          // Reward Referrer
-          const newReferralCount = (referrer.verified_referrals || 0) + 1; 
-          let newUnlocked = referrer.unlocked_borders || ['none'];
-          let newBoosts = referrer.boosts_available || 0;
+        // 2. Give the current newly verified user their reward (+1 Boost ONLY)
+        let myBoosts = (athleteProfile.boosts_available || 0) + 1; // +1 Boost for accepting an invite
 
-          if (newReferralCount >= 5 && !newUnlocked.includes('plasma-surge')) {
-            newUnlocked = [...newUnlocked, 'plasma-surge'];
-          }
-          if (newReferralCount % 12 === 0) newBoosts += 4;
-          else if (newReferralCount % 3 === 0) newBoosts += 1;
+        await supabase.from('athletes').update({
+          trust_level: 1,
+          boosts_available: myBoosts
+        }).eq('id', athleteProfile.id);
 
-          await supabase.from('athletes').update({
-            boosts_available: newBoosts,
-            verified_referrals: newReferralCount,
-            unlocked_borders: newUnlocked
-          }).eq('id', athleteProfile.referred_by);
-
-          // 🚨 Reward Current User (Jumpstart Bonus) 🚨
-          const myNewCount = (athleteProfile.verified_referrals || 0) + 1;
-          let myUnlocked = athleteProfile.unlocked_borders || ['none'];
-          let myBoosts = athleteProfile.boosts_available || 0;
-
-          if (myNewCount >= 5 && !myUnlocked.includes('plasma-surge')) myUnlocked = [...myUnlocked, 'plasma-surge'];
-          if (myNewCount % 12 === 0) myBoosts += 4;
-          else if (myNewCount % 3 === 0) myBoosts += 1;
-
-          await supabase.from('athletes').update({ 
-            trust_level: 1,
-            verified_referrals: myNewCount,
-            boosts_available: myBoosts,
-            unlocked_borders: myUnlocked
-          }).eq('id', athleteProfile.id);
-
-        } else {
-          await supabase.from('athletes').update({ trust_level: 1 }).eq('id', athleteProfile.id);
-        }
       } else {
         await supabase.from('athletes').update({ trust_level: 1 }).eq('id', athleteProfile.id);
       }
@@ -445,10 +649,30 @@ export default function DashboardPage() {
     }
   };
 
-  const handleReSync = async () => {
-    if (!athleteProfile?.athletic_net_url) return;
+  // 🚨 MANUAL ONBOARDING SAVE (Only names) 🚨
+  const handleManualSave = async (e: React.FormEvent) => {
+    e.preventDefault();
     setIsSyncing(true);
-    setErrorMessage('');
+    try {
+      const { error } = await supabase.from('athletes').update({
+        first_name: editFirstName,
+        last_name: editLastName,
+        athletic_net_url: 'skipped', // Flags the account to bypass forced sync
+        trust_level: 0 // Prevents messaging/posting until they actually sync
+      }).eq('id', athleteProfile?.id);
+
+      if (error) throw error;
+      window.location.reload();
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleReSync = async () => {
+    if (!athleteProfile?.athletic_net_url || athleteProfile.athletic_net_url === 'skipped') return;
+    setIsSyncing(true);
     
     try {
       const response = await fetch('/api/sync', { 
@@ -469,10 +693,9 @@ export default function DashboardPage() {
         grad_year: result.data.gradYear       
       }).eq('id', athleteProfile.id);
       
-      localStorage.setItem('last_sync_time', new Date().getTime().toString());
       window.location.reload(); 
     } catch (err: any) { 
-      setErrorMessage(err.message); 
+      showToast(err.message, "error");
     } finally { 
       setIsSyncing(false); 
     }
@@ -502,6 +725,7 @@ export default function DashboardPage() {
     try {
       await supabase.from('athletes').update({ equipped_title: titleId }).eq('id', athleteProfile.id);
       setEquippedTitle(titleId);
+      setIsTitleDropdownOpen(false); 
       showToast(`Successfully equipped ${titleId} title!`, 'success');
     } catch (err: any) { showToast(`Failed to equip title: ${err.message}`); } finally { setIsEquipping(false); }
   };
@@ -526,7 +750,6 @@ export default function DashboardPage() {
     }
   };
 
-  // 🚨 FORGIVING INVITE SCANNER + JUMPSTART BONUS LOGIC 🚨
   const handleSubmitInviteCode = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!athleteProfile || !inviteCodeInput.trim()) return;
@@ -548,44 +771,24 @@ export default function DashboardPage() {
         if (referrer.id === athleteProfile.id) throw new Error("You cannot use your own invite code.");
         
         if (athleteProfile.trust_level > 0) {
-            // 1. Reward the Referrer
-            const referrerNewCount = (referrer.verified_referrals || 0) + 1; 
-            let referrerUnlocked = referrer.unlocked_borders || ['none'];
-            let referrerBoosts = referrer.boosts_available || 0;
+            // Both users are verified, grant mutual rewards instantly
+            const { error: rpcError } = await supabase.rpc('reward_referrer', { referrer_id: referrer.id });
+            if (rpcError) throw new Error("Failed to process referrer reward.");
 
-            if (referrerNewCount >= 5 && !referrerUnlocked.includes('plasma-surge')) referrerUnlocked = [...referrerUnlocked, 'plasma-surge'];
-            if (referrerNewCount % 12 === 0) referrerBoosts += 4;
-            else if (referrerNewCount % 3 === 0) referrerBoosts += 1;
-
-            await supabase.from('athletes').update({ boosts_available: referrerBoosts, verified_referrals: referrerNewCount, unlocked_borders: referrerUnlocked }).eq('id', referrer.id);
-
-            // 2. Reward Current User (Jumpstart Bonus)
-            const myNewCount = (athleteProfile.verified_referrals || 0) + 1;
-            let myUnlocked = athleteProfile.unlocked_borders || ['none'];
-            let myBoosts = athleteProfile.boosts_available || 0;
-
-            if (myNewCount >= 5 && !myUnlocked.includes('plasma-surge')) myUnlocked = [...myUnlocked, 'plasma-surge'];
-            if (myNewCount % 12 === 0) myBoosts += 4;
-            else if (myNewCount % 3 === 0) myBoosts += 1;
+            let myBoosts = (athleteProfile.boosts_available || 0) + 1; // Give referee +1 Boost
 
             await supabase.from('athletes').update({ 
               referred_by: referrer.id,
-              verified_referrals: myNewCount,
-              boosts_available: myBoosts,
-              unlocked_borders: myUnlocked
+              boosts_available: myBoosts
             }).eq('id', athleteProfile.id);
 
-            // Update local state instantly so the progress bar moves
             setAthleteProfile({ 
               ...athleteProfile, 
               referred_by: referrer.id,
-              verified_referrals: myNewCount,
-              boosts_available: myBoosts,
-              unlocked_borders: myUnlocked
+              boosts_available: myBoosts
             });
         } else {
-            // If they haven't verified yet, just lock in the referred_by. 
-            // They will get the jumpstart bonus during confirmVerification()
+            // Current user is unverified, save for later
             await supabase.from('athletes').update({ referred_by: referrer.id }).eq('id', athleteProfile.id);
             setAthleteProfile({ ...athleteProfile, referred_by: referrer.id });
         }
@@ -621,83 +824,95 @@ export default function DashboardPage() {
     }
   };
 
-  // 🚨 100% FIXED SCOUTING ENGINE 🚨
-  const generateScoutingReport = () => {
-    if (!athleteProfile || !athleteProfile.prs || athleteProfile.prs.length === 0) {
-      return { overallScore: 0, overallLabel: '', overallDesc: '', color: '', bg: '', border: '', eventBreakdowns: [] };
+  const handleScoutCompetitor = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!athleteProfile?.is_premium) {
+      return showToast("Pro Scout is a premium feature.", "error");
     }
-
-    const gender = athleteProfile.gender || 'Boys';
-    const standards = RECRUITING_STANDARDS[gender];
+    if (scoutsRemaining <= 0) {
+      return showToast("Daily scout limit reached (10/10). Try again tomorrow.", "error");
+    }
     
-    let allBreakdowns: any[] = [];
+    const validationError = validateAthleticUrl(scoutUrl);
+    if (validationError) return showToast(validationError, "error");
 
-    athleteProfile.prs.forEach((pr) => {
-      const eventStds = standards[pr.event];
-      if (eventStds) {
-        const val = convertMarkToNumber(pr.mark, !!eventStds.isField);
-        let score = 40;
-        let currentTier = 'Developmental';
-        let nextTier = 'D3 / NAIA';
-        let targetMarkNum = eventStds.t5;
-        let delta = 0;
+    setIsScouting(true);
+    try {
+      const response = await fetch('/api/sync', { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ url: scoutUrl }) 
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Failed to fetch athlete data.");
 
-        if (eventStds.isField) {
-          if (val >= eventStds.t1) { score = 95 + Math.min(4, ((val - eventStds.t1) / (eventStds.t1 * 0.05)) * 4); currentTier = 'Power 4 D1'; nextTier = 'Elite'; targetMarkNum = eventStds.t1 * 1.05; }
-          else if (val >= eventStds.t2) { score = 85 + ((val - eventStds.t2) / (eventStds.t1 - eventStds.t2)) * 10; currentTier = 'Mid-Major D1'; nextTier = 'Power 4 D1'; targetMarkNum = eventStds.t1; }
-          else if (val >= eventStds.t3) { score = 75 + ((val - eventStds.t3) / (eventStds.t2 - eventStds.t3)) * 10; currentTier = 'Top D2 / Walk-on'; nextTier = 'Mid-Major D1'; targetMarkNum = eventStds.t2; }
-          else if (val >= eventStds.t4) { score = 65 + ((val - eventStds.t4) / (eventStds.t3 - eventStds.t4)) * 10; currentTier = 'Solid D2 / High D3'; nextTier = 'Top D2'; targetMarkNum = eventStds.t3; }
-          else if (val >= eventStds.t5) { score = 55 + ((val - eventStds.t5) / (eventStds.t4 - eventStds.t5)) * 10; currentTier = 'D3 / NAIA'; nextTier = 'Solid D2'; targetMarkNum = eventStds.t4; }
-          else { const t6 = eventStds.t5 - (eventStds.t4 - eventStds.t5); if (val >= t6) score = 40 + ((val - t6) / (eventStds.t5 - t6)) * 15; currentTier = 'Developmental'; nextTier = 'D3 / NAIA'; targetMarkNum = eventStds.t5; }
-          delta = targetMarkNum - val;
-        } else {
-          if (val <= eventStds.t1) { score = 95 + Math.min(4, ((eventStds.t1 - val) / (eventStds.t1 * 0.05)) * 4); currentTier = 'Power 4 D1'; nextTier = 'Elite'; targetMarkNum = eventStds.t1 * 0.95; }
-          else if (val <= eventStds.t2) { score = 85 + ((eventStds.t2 - val) / (eventStds.t2 - eventStds.t1)) * 10; currentTier = 'Mid-Major D1'; nextTier = 'Power 4 D1'; targetMarkNum = eventStds.t1; }
-          else if (val <= eventStds.t3) { score = 75 + ((eventStds.t3 - val) / (eventStds.t3 - eventStds.t2)) * 10; currentTier = 'Top D2 / Walk-on'; nextTier = 'Mid-Major D1'; targetMarkNum = eventStds.t2; }
-          else if (val <= eventStds.t4) { score = 65 + ((eventStds.t4 - val) / (eventStds.t4 - eventStds.t3)) * 10; currentTier = 'Solid D2 / High D3'; nextTier = 'Top D2'; targetMarkNum = eventStds.t3; }
-          else if (val <= eventStds.t5) { score = 55 + ((eventStds.t5 - val) / (eventStds.t5 - eventStds.t4)) * 10; currentTier = 'D3 / NAIA'; nextTier = 'Solid D2'; targetMarkNum = eventStds.t4; }
-          else { const t6 = eventStds.t5 + (eventStds.t5 - eventStds.t4); if (val <= t6) score = 40 + ((t6 - val) / (t6 - eventStds.t5)) * 15; currentTier = 'Developmental'; nextTier = 'D3 / NAIA'; targetMarkNum = eventStds.t5; }
-          delta = val - targetMarkNum; 
+      const scoutedGender = result.data.gender || 'Boys';
+      const scoutedProj = getAthleteProjection(result.data.prs || [], scoutedGender);
+
+      if (currentUserId) {
+        const { data: newScout, error: insertError } = await supabase.from('scouted_athletes').insert({
+          scouted_by: currentUserId,
+          first_name: result.data.firstName,
+          last_name: result.data.lastName,
+          high_school: result.data.schoolName,
+          athletic_net_url: result.data.url,
+          prs: result.data.prs,
+          gender: scoutedGender,
+          calculated_score: scoutedProj.overallScore,
+          calculated_tier: scoutedProj.overallLabel
+        }).select().single();
+
+        if (newScout && !insertError) {
+          setScoutedAthletes(prev => [newScout, ...prev]);
         }
-
-        score = Math.min(99, Math.max(40, Math.round(score)));
-
-        allBreakdowns.push({
-          event: pr.event,
-          mark: pr.mark,
-          score,
-          currentTier,
-          nextTier,
-          targetMarkFormatted: formatMarkFromNumber(targetMarkNum, !!eventStds.isField),
-          deltaFormatted: !!eventStds.isField ? `+${formatMarkFromNumber(delta, true)}` : `-${delta.toFixed(2)}s`,
-          isField: !!eventStds.isField
-        });
       }
-    });
 
-    if (allBreakdowns.length === 0) {
-      return { overallScore: 0, overallLabel: '', overallDesc: '', color: '', bg: '', border: '', eventBreakdowns: [] };
+      setScoutsRemaining(prev => prev - 1);
+      setScoutUrl('');
+      showToast("Scouting report generated successfully!", "success");
+    } catch (err: any) {
+      showToast(err.message, "error");
+    } finally {
+      setIsScouting(false);
     }
+  };
 
-    allBreakdowns.sort((a, b) => b.score - a.score);
-    const best = allBreakdowns[0];
+  const handleRemoveScouted = async (id: string) => {
+    try {
+      await supabase.from('scouted_athletes').delete().eq('id', id);
+      setScoutedAthletes(prev => prev.filter(a => a.id !== id));
+      showToast("Scout report removed.", "success");
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    }
+  };
 
-    let label = ''; let desc = ''; let color = ''; let bg = ''; let border = '';
-    
-    if (best.score >= 95) { label = 'Power 4 D1 Recruit'; desc = 'You are a priority target for top-tier Division 1 programs. Coaches will find you.'; color = 'text-fuchsia-600'; bg = 'bg-fuchsia-50'; border = 'border-fuchsia-200'; }
-    else if (best.score >= 85) { label = 'Mid-Major D1 / Elite D2'; desc = 'You hold marks that command athletic scholarship money. Start taking official visits.'; color = 'text-purple-600'; bg = 'bg-purple-50'; border = 'border-purple-200'; }
-    else if (best.score >= 75) { label = 'D1 Walk-On / Top D2'; desc = 'D1 programs will let you walk on, and D2 programs will heavily recruit you. Great spot to be in.'; color = 'text-blue-600'; bg = 'bg-blue-50'; border = 'border-blue-200'; }
-    else if (best.score >= 65) { label = 'Solid D2 / High-End D3'; desc = 'Great priority recruit for D2 or D3 programs. You can absolutely compete at the next level.'; color = 'text-emerald-600'; bg = 'bg-emerald-50'; border = 'border-emerald-200'; }
-    else if (best.score >= 55) { label = 'D3 / NAIA Prospect'; desc = 'Solid prospect for Division 3 or NAIA. Focus on reaching out to programs that fit your academics.'; color = 'text-amber-600'; bg = 'bg-amber-50'; border = 'border-amber-200'; }
-    else { label = 'Developmental Prospect'; desc = 'Keep grinding! Focus on hitting standard walk-on marks or exploring Junior College (JUCO) routes.'; color = 'text-slate-600'; bg = 'bg-slate-100'; border = 'border-slate-300'; }
-
-    return { 
-      overallScore: best.score, 
-      overallLabel: label, 
-      overallDesc: desc, 
-      color, bg, border, 
-      eventBreakdowns: allBreakdowns.slice(0, 3) 
-    };
+  const handleDownloadCard = async () => {
+    if (!activeCardAthlete) return;
+    setIsExportingCard(true);
+    try {
+      const html2canvas = (await import('html2canvas')).default;
+      const element = document.getElementById('scout-card-export');
+      if (!element) throw new Error("Card element not found.");
+      
+      const canvas = await html2canvas(element, { 
+        backgroundColor: null, 
+        scale: 2, 
+        useCORS: true 
+      });
+      const dataUrl = canvas.toDataURL('image/png');
+      
+      const link = document.createElement('a');
+      link.download = `${activeCardAthlete.first_name}_ScoutCard.png`;
+      link.href = dataUrl;
+      link.click();
+      showToast("Scout Card exported successfully!", "success");
+    } catch (err) {
+      console.error(err);
+      showToast("Failed to export card. Ensure you ran: npm install html2canvas", "error");
+    } finally {
+      setIsExportingCard(false);
+    }
   };
 
   const getStreakStyle = () => {
@@ -721,19 +936,19 @@ export default function DashboardPage() {
     return <div className="text-center p-20 font-black text-2xl">Redirecting to Coach Dashboard...</div>;
   }
 
-  const projection = generateScoutingReport();
-  // 🚨 BULLETPROOF REFERRAL GENERATOR 🚨
-  const myReferralCode = athleteProfile?.athletic_net_url?.match(/\d{5,}/)?.[0] || null;
-  
-  const showCodeEntry = daysSinceJoin <= 7 && !athleteProfile?.referred_by;
-  const isUnverified = athleteProfile?.trust_level === 0 && !!athleteProfile?.athletic_net_url;
+  const isSkipped = athleteProfile?.athletic_net_url === 'skipped';
   const noProfileLinked = !athleteProfile?.athletic_net_url;
+  const isUnverified = athleteProfile?.trust_level === 0 && !!athleteProfile?.athletic_net_url && !isSkipped;
+
+  const projection = getAthleteProjection(athleteProfile?.prs || [], athleteProfile?.gender || 'Boys');
+  const myReferralCode = athleteProfile?.athletic_net_url?.match(/\d{5,}/)?.[0] || null;
+  const showCodeEntry = daysSinceJoin <= 7 && !athleteProfile?.referred_by && !isSkipped;
   const streakTheme = getStreakStyle();
-  const badge = getTrustBadge(athleteProfile?.trust_level || 0);
   const hasPRs = athleteProfile?.prs && athleteProfile.prs.length > 0;
   const activeTitle = EARNED_TITLES.find(t => t.id === equippedTitle) || EARNED_TITLES[6];
 
-  function getTrustBadge(level: number) {
+  function getTrustBadge(level: number, skipped: boolean) {
+    if (skipped && level === 0) return { icon: UserCircle2, color: 'text-slate-500', bg: 'bg-slate-100 border-slate-200', text: 'Unverified Profile' };
     switch(level) {
       case 1: return { icon: CheckCircle2, color: 'text-green-500', bg: 'bg-green-50 border-green-200', text: 'Results Verified' };
       case 2: return { icon: Trophy, color: 'text-blue-500', bg: 'bg-blue-50 border-blue-200', text: 'Community Verified' };
@@ -742,20 +957,39 @@ export default function DashboardPage() {
     }
   }
 
-  // 🚨 MILESTONE BAR CALCS 🚨
+  const badge = getTrustBadge(athleteProfile?.trust_level || 0, isSkipped);
+
+  const cardProjection = activeCardAthlete ? getAthleteProjection(activeCardAthlete.prs, activeCardAthlete.gender) : null;
+  let cardAccentColor = 'from-slate-700 to-slate-900 border-slate-500';
+  let cardGlowColor = 'bg-slate-500/30';
+  if (cardProjection) {
+    if (cardProjection.overallScore >= 95) { cardAccentColor = 'from-fuchsia-600 to-purple-900 border-fuchsia-400'; cardGlowColor = 'bg-fuchsia-500/40'; }
+    else if (cardProjection.overallScore >= 85) { cardAccentColor = 'from-purple-600 to-indigo-900 border-purple-400'; cardGlowColor = 'bg-purple-500/40'; }
+    else if (cardProjection.overallScore >= 75) { cardAccentColor = 'from-blue-500 to-indigo-900 border-blue-400'; cardGlowColor = 'bg-blue-500/40'; }
+    else if (cardProjection.overallScore >= 65) { cardAccentColor = 'from-emerald-500 to-teal-900 border-emerald-400'; cardGlowColor = 'bg-emerald-500/40'; }
+    else if (cardProjection.overallScore >= 55) { cardAccentColor = 'from-amber-500 to-orange-900 border-amber-400'; cardGlowColor = 'bg-amber-500/40'; }
+  }
+
   const currentRefs = athleteProfile?.verified_referrals || 0;
-  const cycle = Math.floor(currentRefs / 12);
-  const base = cycle * 12;
+  const cycle = Math.floor(currentRefs / 5);
+  const base = cycle * 5;
   const progressInCycle = currentRefs - base;
-  const progressPct = Math.min(100, (progressInCycle / 12) * 100);
+  const progressPct = Math.min(100, (progressInCycle / 5) * 100);
 
   const milestones = [
+    { count: base + 1, label: '+1 Boost', icon: Rocket, color: 'text-blue-400', bg: 'bg-blue-500', isMajor: false },
+    { count: base + 2, label: '+1 Boost', icon: Rocket, color: 'text-blue-400', bg: 'bg-blue-500', isMajor: false },
     { count: base + 3, label: '+1 Boost', icon: Rocket, color: 'text-blue-400', bg: 'bg-blue-500', isMajor: false },
-    ...(cycle === 0 ? [{ count: 5, label: 'Plasma', icon: Crown, color: 'text-fuchsia-400', bg: 'bg-fuchsia-500', isMajor: false }] : []),
-    { count: base + 6, label: '+1 Boost', icon: Rocket, color: 'text-blue-400', bg: 'bg-blue-500', isMajor: false },
-    { count: base + 9, label: '+1 Boost', icon: Rocket, color: 'text-blue-400', bg: 'bg-blue-500', isMajor: false },
-    { count: base + 12, label: '+4 Boosts!', icon: Flame, color: 'text-amber-400', bg: 'bg-amber-500', isMajor: true },
+    { count: base + 4, label: '+1 Boost', icon: Rocket, color: 'text-blue-400', bg: 'bg-blue-500', isMajor: false },
+    { count: base + 5, label: 'Plasma Border', icon: Crown, color: 'text-fuchsia-400', bg: 'bg-fuchsia-500', isMajor: true },
   ];
+
+  const TABS = [
+    { id: 'stats', label: 'My Stats', icon: Activity },
+    { id: 'recruiting', label: 'Recruiting', icon: Target },
+    { id: 'scout', label: 'Pro Scout', icon: Search },
+    { id: 'rewards', label: 'Rewards', icon: Gift },
+  ] as const;
 
   return (
     <main className="min-h-screen bg-[#F8FAFC] font-sans pb-32">
@@ -770,6 +1004,132 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* 🚨 MODAL: SYNC ATHLETIC.NET LATER 🚨 */}
+      {showLinkModal && (
+        <div className="fixed inset-0 z-[500] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-[2rem] p-8 max-w-md w-full shadow-2xl relative">
+            <button onClick={() => setShowLinkModal(false)} className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors"><X className="w-5 h-5"/></button>
+            <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mb-4 border border-blue-100">
+              <LinkIcon className="w-6 h-6" />
+            </div>
+            <h3 className="text-2xl font-black text-slate-900 mb-2">Link Profile</h3>
+            <p className="text-sm font-medium text-slate-500 mb-6">Paste your Athletic.net link below to verify your stats and unlock full platform features (Messaging, Feed).</p>
+            
+            {errorMessage && <p className="text-xs font-bold text-red-500 mb-4 bg-red-50 p-2 rounded-lg border border-red-100">{errorMessage}</p>}
+
+            <form onSubmit={handleInitialScrape} className="flex flex-col gap-3">
+              <input 
+                type="url" 
+                required 
+                placeholder="https://www.athletic.net/athlete/..." 
+                value={syncUrl} 
+                onChange={e=>setSyncUrl(e.target.value)} 
+                className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium" 
+              />
+              <button type="submit" disabled={isSyncing} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-3 rounded-xl shadow-md transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+                {isSyncing ? <><RefreshCw className="w-4 h-4 animate-spin"/> Fetching...</> : 'Fetch Stats'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* VIEW ALL COACHES MODAL */}
+      {showAllViewersModal && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-[2rem] w-full max-w-md overflow-hidden shadow-2xl relative flex flex-col max-h-[80vh]">
+            <div className="p-6 border-b border-slate-100 bg-slate-50 flex items-center justify-between shrink-0">
+              <div>
+                <h3 className="text-xl font-black text-slate-900">Coach Views</h3>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Last 30 Days</p>
+              </div>
+              <button onClick={() => setShowAllViewersModal(false)} className="p-2 hover:bg-slate-200 rounded-full transition-colors"><X className="w-5 h-5 text-slate-500" /></button>
+            </div>
+            <div className="p-2 overflow-y-auto flex-1 custom-scrollbar">
+              {allRecentViewers.map((coach, idx) => (
+                <div key={idx} className="flex items-center justify-between p-4 border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors group">
+                  <div className="flex items-center gap-4">
+                    <AvatarWithBorder avatarUrl={coach.avatar_url} borderId="none" sizeClasses="w-12 h-12" userRole="coach" />
+                    <div>
+                      <p className="font-black text-slate-900">Coach {coach.last_name}</p>
+                      <p className="text-xs font-bold text-slate-500">{coach.school_name}</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => { setShowAllViewersModal(false); handleContactCoach(coach.email); }} 
+                    className="w-10 h-10 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+                    title="Message Coach"
+                  >
+                    <Mail className="w-5 h-5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SCOUT CARD MODAL */}
+      {activeCardAthlete && cardProjection && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="flex flex-col items-center max-w-md w-full">
+            
+            <div className="flex justify-between items-center w-full mb-4">
+              <h3 className="text-white font-black text-xl">Scout Card</h3>
+              <button onClick={() => setActiveCardAthlete(null)} className="p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors">
+                <X className="w-5 h-5 text-white" />
+              </button>
+            </div>
+
+            <div id="scout-card-export" className={`relative w-[340px] aspect-[4/5] rounded-3xl overflow-hidden shadow-2xl bg-gradient-to-b ${cardAccentColor} border-4 flex flex-col p-6`}>
+               <div className={`absolute -top-10 -right-10 w-48 h-48 rounded-full blur-[60px] ${cardGlowColor}`}></div>
+               <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
+
+               <div className="flex justify-between items-start z-10">
+                  <div className="flex flex-col items-center bg-black/30 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/10 shadow-lg">
+                     <span className="text-5xl font-black text-white leading-none tracking-tighter">{cardProjection.overallScore}</span>
+                     <span className="text-[10px] font-black text-white/80 uppercase tracking-widest mt-1">OVR</span>
+                  </div>
+                  <ShieldCheck className="w-10 h-10 text-white/50" />
+               </div>
+
+               <div className="text-center mt-auto z-10">
+                  <h2 className="text-3xl font-black text-white uppercase italic tracking-tight drop-shadow-md">
+                    {activeCardAthlete.first_name} {activeCardAthlete.last_name}
+                  </h2>
+                  <p className="text-sm text-white/80 font-bold tracking-widest uppercase mt-1">{activeCardAthlete.high_school}</p>
+                  <div className="inline-block px-3 py-1 rounded-md bg-black/30 border border-white/10 mt-3">
+                    <p className="text-[10px] font-black text-white uppercase tracking-widest">{cardProjection.overallLabel}</p>
+                  </div>
+               </div>
+
+               <div className="w-full h-px bg-gradient-to-r from-transparent via-white/40 to-transparent my-6 z-10"></div>
+
+               <div className="flex justify-around z-10 text-white mb-2">
+                  {activeCardAthlete.prs.slice(0,3).map((ev: any, idx: number) => (
+                    <div key={idx} className="flex flex-col items-center">
+                       <span className="text-xl font-black">{ev.mark}</span>
+                       <span className="text-[9px] font-bold uppercase text-white/60 tracking-widest mt-1 text-center max-w-[80px] truncate">{ev.event}</span>
+                    </div>
+                  ))}
+               </div>
+
+               <div className="absolute bottom-3 left-0 right-0 text-center z-10">
+                  <span className="text-[8px] font-bold uppercase tracking-widest text-white/30">Verified by ChasedSports</span>
+               </div>
+            </div>
+
+            <button 
+              onClick={handleDownloadCard} 
+              disabled={isExportingCard}
+              className="mt-8 w-full max-w-[340px] bg-white text-slate-900 font-black py-4 rounded-xl shadow-xl hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-2"
+            >
+              {isExportingCard ? <RefreshCw className="w-5 h-5 animate-spin" /> : <><Download className="w-5 h-5" /> Download Scout Card</>}
+            </button>
+          </div>
+        </div>
+      )}
+
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes liquidPan { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
         @keyframes shimmerSlow { 0% { background-position: -200% center; } 100% { background-position: 200% center; } }
@@ -777,8 +1137,13 @@ export default function DashboardPage() {
         .legend-badge { background: linear-gradient(90deg, #6b21a8 0%, #d946ef 20%, #6b21a8 40%, #d946ef 60%, #6b21a8 80%); background-size: 200% auto; animation: shimmerSlow 4s linear infinite; color: white; border: 1px solid #e879f9; box-shadow: 0 0 15px rgba(217, 70, 239, 0.5); font-weight: 900; }
         .champion-badge { background: linear-gradient(90deg, #991b1b 0%, #ef4444 20%, #991b1b 40%, #ef4444 60%, #991b1b 80%); background-size: 200% auto; animation: shimmerSlow 4s linear infinite; color: white; border: 1px solid #f87171; box-shadow: 0 0 15px rgba(239, 68, 68, 0.5); font-weight: 900; }
         .elite-badge { background: linear-gradient(90deg, #0f172a 0%, #475569 20%, #0f172a 40%, #475569 60%, #0f172a 80%); background-size: 200% auto; animation: shimmerSlow 4s linear infinite; color: white; border: 1px solid #94a3b8; box-shadow: 0 0 15px rgba(148, 163, 184, 0.3); font-weight: 900; }
+        
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 10px; }
       `}} />
 
+      {/* HERO SECTION */}
       <div className="bg-slate-900 text-white pt-16 pb-24 px-6 relative overflow-hidden">
         {athleteProfile?.is_premium && (
           <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/20 blur-[100px] rounded-full pointer-events-none"></div>
@@ -794,7 +1159,7 @@ export default function DashboardPage() {
               )}
             </div>
             {!isUnverified && (
-              <label className="absolute inset-0 bg-black/40 rounded-full flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+              <label className="absolute inset-0 bg-black/40 rounded-full flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer z-30">
                 <Camera className="w-6 h-6 text-white mb-1" />
                 <span className="text-[10px] text-white font-bold uppercase tracking-wider text-center px-2">Update</span>
                 <input type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} disabled={isUploadingAvatar} />
@@ -803,13 +1168,22 @@ export default function DashboardPage() {
           </div>
 
           <div className="text-center md:text-left flex-1 w-full">
-            <div className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold tracking-widest uppercase mb-3 border ${athleteProfile?.is_premium ? 'bg-amber-500/20 border-amber-400/30 text-amber-400' : 'bg-blue-500/20 border-blue-400/30 text-blue-300'}`}>
-              {athleteProfile?.is_premium ? <><Crown className="w-3.5 h-3.5 mr-1.5" /> ChasedPro Athlete</> : 'Athlete Command Center'}
+            
+            {/* 🚨 VISIBLE TOP-LEVEL RANK DISPLAY */}
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 mb-3">
+              <div className={`inline-flex items-center px-3 py-1 rounded-full text-[10px] sm:text-xs font-black tracking-widest uppercase border shadow-sm ${activeTitle.badgeClass}`}>
+                <Trophy className="w-3.5 h-3.5 mr-1.5" /> {activeTitle.name} Rank
+              </div>
+              {athleteProfile?.is_premium && (
+                <div className={`inline-flex items-center px-3 py-1 rounded-full text-[10px] sm:text-xs font-black tracking-widest uppercase border bg-amber-500/20 border-amber-400/30 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.2)]`}>
+                  <Crown className="w-3.5 h-3.5 mr-1.5" /> Pro Member
+                </div>
+              )}
             </div>
             
             <div className="group relative w-fit mx-auto md:mx-0">
               <h1 className="text-4xl font-black mb-2 flex flex-col md:flex-row md:items-center justify-center md:justify-start gap-2">
-                {athleteProfile?.first_name} {athleteProfile?.last_name}
+                {athleteProfile?.first_name ? `${athleteProfile.first_name} ${athleteProfile.last_name}` : 'Welcome, Athlete'}
                 {athleteProfile?.trust_level! > 0 && (
                   <span title="Verified Athlete" className="flex items-center shrink-0">
                     <CheckCircle2 className="w-6 h-6 text-green-400" />
@@ -817,7 +1191,7 @@ export default function DashboardPage() {
                 )}
               </h1>
               <p className="text-lg text-slate-400 font-medium flex items-center justify-center md:justify-start gap-2">
-                <MapPin className="w-4 h-4 opacity-70" /> {athleteProfile?.high_school}
+                <MapPin className="w-4 h-4 opacity-70" /> {athleteProfile?.high_school || 'Set up your profile'}
               </p>
             </div>
           </div>
@@ -826,628 +1200,166 @@ export default function DashboardPage() {
 
       <div className="max-w-7xl mx-auto px-6 -mt-12 relative z-20">
         
-        {/* 🚨 PRO ANALYTICS HUB */}
-        {athleteProfile && !noProfileLinked && !isUnverified && (
-          <div className="bg-white rounded-[2rem] p-8 shadow-sm border border-slate-200 mb-8 relative overflow-hidden">
-            <div className="flex items-center justify-between mb-8 pb-6 border-b border-slate-100">
-              <div>
-                <h2 className="text-2xl font-black text-slate-900 flex items-center">
-                  <BarChart3 className="w-6 h-6 mr-3 text-indigo-500" /> Scouting Analytics
-                </h2>
-                <p className="text-slate-500 font-medium mt-1">See how much traction your profile is getting with college coaches.</p>
-              </div>
-            </div>
-
-            <div className={`grid grid-cols-1 md:grid-cols-2 gap-6 relative ${!athleteProfile?.is_premium ? 'min-h-[280px]' : ''}`}>
-              
-              {!athleteProfile?.is_premium && (
-                <div className="absolute inset-0 z-10 bg-white/60 backdrop-blur-md rounded-3xl flex flex-col items-center justify-center border border-white/50 shadow-sm p-6 text-center">
-                  <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4 border border-slate-200 shadow-inner">
-                    <Lock className="w-8 h-8 text-slate-400" />
-                  </div>
-                  <h3 className="text-2xl font-black text-slate-900 mb-2">Analytics are Locked</h3>
-                  <p className="text-slate-500 font-medium mb-6 text-center max-w-md">Upgrade to Pro to see exactly how many college coaches are viewing your profile and searches.</p>
-                  <Link href="/pro" className="bg-gradient-to-r from-amber-400 to-amber-500 text-amber-950 font-black px-8 py-3 rounded-xl shadow-lg hover:scale-105 transition-transform flex items-center gap-2">
-                    <Crown className="w-5 h-5" /> Unlock Pro Analytics
-                  </Link>
-                </div>
-              )}
-
-              <div className={`bg-slate-50 rounded-2xl p-6 border border-slate-100 flex items-center justify-between ${!athleteProfile?.is_premium ? 'opacity-30 select-none' : ''}`}>
-                <div>
-                  <p className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-1">Profile Views</p>
-                  <h3 className="text-4xl font-black text-slate-900">{athleteProfile?.is_premium ? athleteProfile.profile_views || 0 : '14'}</h3>
-                  <p className="text-xs font-bold text-emerald-500 mt-2 flex items-center gap-1"><Activity className="w-3 h-3" /> Coach impressions</p>
-                </div>
-                <div className="w-14 h-14 bg-indigo-100 rounded-full flex items-center justify-center">
-                  <Eye className="w-7 h-7 text-indigo-600" />
-                </div>
-              </div>
-
-              <div className={`bg-slate-50 rounded-2xl p-6 border border-slate-100 flex items-center justify-between ${!athleteProfile?.is_premium ? 'opacity-30 select-none' : ''}`}>
-                <div>
-                  <p className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-1">Search Appearances</p>
-                  <h3 className="text-4xl font-black text-slate-900">{athleteProfile?.is_premium ? athleteProfile.search_appearances || 0 : '89'}</h3>
-                  <p className="text-xs font-bold text-slate-400 mt-2">Times you appeared in Coach searches</p>
-                </div>
-                <div className="w-14 h-14 bg-blue-100 rounded-full flex items-center justify-center">
-                  <Search className="w-7 h-7 text-blue-600" />
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* SETUP GUIDE */}
+        {/* 🚨 UNVERIFIED WARNINGS (FULL WIDTH AT TOP) 🚨 */}
         {noProfileLinked && (
-          <div className="bg-gradient-to-br from-blue-900 via-indigo-950 to-slate-900 rounded-[2.5rem] p-8 md:p-12 border border-blue-800 shadow-2xl relative overflow-hidden mb-10 max-w-5xl mx-auto">
+          <div className="bg-gradient-to-br from-blue-900 via-indigo-950 to-slate-900 rounded-[2.5rem] p-8 md:p-12 border border-blue-800 shadow-2xl relative overflow-hidden mb-10 mx-auto">
             <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/20 blur-[100px] rounded-full pointer-events-none"></div>
             
-            <div className="relative z-10">
-              <div className="text-center mb-12">
-                <div className="w-16 h-16 bg-blue-500/20 border border-blue-400/30 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                  <Search className="w-8 h-8 text-blue-300" />
-                </div>
-                <h2 className="text-3xl md:text-5xl font-black text-white tracking-tight mb-3">Claim Your Profile</h2>
-                <p className="text-blue-200/80 font-medium text-lg max-w-2xl mx-auto">
-                  Import your stats directly from Athletic.net. No login required for this step.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-                <div className="bg-white/5 border border-white/10 rounded-2xl p-6 relative">
-                  <div className="absolute -top-4 -left-4 w-8 h-8 bg-blue-500 text-white font-black rounded-full flex items-center justify-center border-4 border-slate-900">1</div>
-                  <Globe className="w-6 h-6 text-blue-400 mb-3" />
-                  <h4 className="text-white font-bold text-lg mb-1">Search Your Name</h4>
-                  <p className="text-blue-200/70 text-sm">Open a new tab and search for your name on Athletic.net.</p>
-                </div>
-
-                <div className="bg-white/5 border border-white/10 rounded-2xl p-6 relative">
-                  <div className="absolute -top-4 -left-4 w-8 h-8 bg-blue-500 text-white font-black rounded-full flex items-center justify-center border-4 border-slate-900">2</div>
-                  <UserCircle2 className="w-6 h-6 text-blue-400 mb-3" />
-                  <h4 className="text-white font-bold text-lg mb-1">Click Track & Field Bio</h4>
-                  <p className="text-blue-200/70 text-sm">Ensure you click on your Track bio, not your cross country or team page.</p>
-                </div>
-
-                <div className="bg-white/5 border border-white/10 rounded-2xl p-6 relative">
-                  <div className="absolute -top-4 -left-4 w-8 h-8 bg-blue-500 text-white font-black rounded-full flex items-center justify-center border-4 border-slate-900">3</div>
-                  <LinkIcon className="w-6 h-6 text-blue-400 mb-3" />
-                  <h4 className="text-white font-bold text-lg mb-1">Copy The URL</h4>
-                  <p className="text-blue-200/70 text-sm">Copy the link at the top of your browser and paste it below!</p>
-                  
-                  <div className="mt-4 bg-black/50 border border-white/10 rounded overflow-hidden flex items-center text-[10px] text-slate-400 p-1.5 shadow-inner">
-                    <Lock className="w-3 h-3 mr-1 text-green-400" />
-                    <span className="truncate">athletic.net/athlete/</span>
-                    <span className="text-blue-400 font-bold bg-blue-500/20 px-1 rounded animate-pulse">1234567</span>
-                    <span className="truncate">/track-and-field</span>
-                  </div>
-                </div>
-              </div>
-
-              {errorMessage && (
-                <div className="bg-red-500/20 border border-red-500/50 text-red-200 p-4 rounded-xl mb-8 text-sm font-bold flex items-center justify-center gap-3 animate-in fade-in slide-in-from-top-4 max-w-2xl mx-auto">
-                  <AlertCircle className="w-5 h-5 shrink-0 text-red-400" />
-                  <p>{errorMessage}</p>
-                </div>
-              )}
-
-              <form onSubmit={handleInitialScrape} className="flex flex-col sm:flex-row gap-3 max-w-3xl mx-auto bg-white/5 p-2 rounded-[1.5rem] border border-white/10 shadow-xl">
-                <input 
-                  type="url" 
-                  required 
-                  placeholder="Paste your link here..." 
-                  value={syncUrl} 
-                  onChange={(e) => setSyncUrl(e.target.value)} 
-                  className="w-full flex-grow bg-transparent text-white rounded-xl pl-6 pr-4 py-4 focus:outline-none focus:bg-white/5 font-semibold placeholder:text-blue-300/30 text-lg transition-colors" 
-                />
-                <button type="submit" disabled={isSyncing} className="bg-blue-500 hover:bg-blue-400 text-white px-10 py-4 rounded-xl font-black disabled:opacity-50 transition-transform hover:scale-[1.02] active:scale-[0.98] shadow-lg flex items-center justify-center text-lg shrink-0">
-                  {isSyncing ? <><RefreshCw className="w-5 h-5 mr-2 animate-spin" /> Finding...</> : 'Fetch Stats'}
-                </button>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* VERIFICATION WARNING */}
-        {isUnverified && (
-          <div className="bg-gradient-to-r from-amber-500 to-orange-600 rounded-[2rem] p-8 md:p-10 border border-orange-400 shadow-2xl relative overflow-hidden mb-8 text-white">
-            <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
-              
-              {!showVerificationStep ? (
-                <>
-                  <div>
-                    <h2 className="text-3xl font-black tracking-tight mb-2 flex items-center">
-                      <AlertTriangle className="w-8 h-8 mr-3 text-orange-200" /> Verify Ownership
-                    </h2>
-                    <p className="text-orange-100 font-medium text-lg mb-2">We found your profile! To protect athlete data, you must prove you own this profile before you can appear on leaderboards or message coaches.</p>
-                  </div>
-                  <button onClick={beginVerification} className="w-full md:w-auto bg-slate-900 hover:bg-black text-white px-8 py-4 rounded-xl font-black transition-transform hover:scale-105 shadow-xl shrink-0 text-lg flex items-center justify-center">
-                    Verify Profile <ArrowDown className="w-5 h-5 ml-2 animate-bounce" />
-                  </button>
-                </>
-              ) : (
-                <div className="w-full">
-                  <div className="flex justify-between items-start mb-6">
-                    <div>
-                      <h3 className="text-2xl font-black flex items-center">
-                        <ShieldCheck className="w-6 h-6 mr-2" /> Paste Your Secret Code
-                      </h3>
-                      <p className="text-orange-100 font-medium text-sm mt-1 flex items-center gap-1.5 bg-black/10 px-3 py-1.5 rounded-lg inline-block">
-                        <Lock className="w-3.5 h-3.5 inline" /> You must be logged into Athletic.net on a web browser.
-                      </p>
-                    </div>
-                    <button onClick={() => { setShowVerificationStep(false); setErrorMessage(''); }} className="p-2 hover:bg-white/10 rounded-full transition-colors"><X className="w-6 h-6" /></button>
-                  </div>
-                  
-                  {errorMessage && (
-                    <div className="bg-red-900/50 border border-red-400/50 text-white p-4 rounded-xl mb-6 text-sm font-bold flex items-center gap-3 animate-pulse shadow-inner">
-                      <AlertCircle className="w-5 h-5 shrink-0 text-red-400" /> {errorMessage}
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 items-stretch">
-                    <div className="lg:col-span-3 space-y-4 text-orange-50 font-medium bg-black/20 p-6 rounded-2xl border border-white/10 shadow-inner">
-                      <div className="flex gap-3">
-                        <span className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center font-black text-sm shrink-0">1</span>
-                        <p>Sign into Athletic.net on your computer or phone browser.</p>
-                      </div>
-                      <div className="flex gap-3">
-                        <span className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center font-black text-sm shrink-0">2</span>
-                        <p>Go to your profile and click the <strong className="text-white">Pencil Icon</strong> next to your name.</p>
-                      </div>
-                      <div className="flex gap-3">
-                        <span className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center font-black text-sm shrink-0">3</span>
-                        <p>Paste the code below exactly into your <strong className="text-white underline decoration-wavy">Username</strong> or First Name field and click Save.</p>
-                      </div>
-                      
-                      <div className="bg-slate-900/90 py-5 rounded-xl mt-6 border border-white/20 flex flex-col items-center justify-center shadow-2xl relative overflow-hidden">
-                        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10 pointer-events-none"></div>
-                        <span className="text-[10px] text-orange-400 uppercase tracking-widest font-bold mb-1 relative z-10">Your Code</span>
-                        <span className="text-5xl font-mono font-black tracking-widest text-emerald-400 relative z-10">{verificationCode}</span>
-                      </div>
-                    </div>
-
-                    <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-xl border border-slate-200 text-slate-800 relative transform rotate-1 hover:rotate-0 transition-transform flex flex-col justify-center">
-                      <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-4 border-b pb-2 flex items-center gap-1.5"><HelpCircle className="w-3.5 h-3.5" /> What to look for</div>
-                      <div className="flex items-center gap-4">
-                        <div className="w-14 h-14 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-black text-xl shadow-inner border border-blue-200 shrink-0">LS</div>
-                        <div>
-                          <h4 className="text-xl font-bold text-slate-900 tracking-tight">Luke Skywalker</h4>
-                          <div className="flex items-center gap-2 mt-1">
-                            <span className="text-slate-500 font-medium text-xs border-r pr-2">South Albany HS</span>
-                            <div className="relative">
-                              <div className="p-1.5 bg-slate-100 border border-slate-200 rounded hover:bg-slate-200 flex items-center justify-center relative z-10 shadow-sm cursor-pointer">
-                                <Edit2 className="w-3 h-3 text-slate-600" />
-                              </div>
-                              <span className="absolute inset-0 rounded bg-orange-400 animate-ping opacity-75"></span>
-                              <div className="absolute -right-8 -top-8 animate-bounce text-orange-500 flex flex-col items-center pointer-events-none">
-                                <span className="bg-orange-500 text-white text-[9px] font-black px-2 py-0.5 rounded shadow-md mb-1 whitespace-nowrap">Click This!</span>
-                                <MousePointer2 className="w-4 h-4 fill-current" />
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <div className="mt-4 pt-4 border-t border-slate-100 border-dashed">
-                         <div className="bg-slate-50 border border-slate-200 p-2 rounded text-xs font-mono text-slate-400 flex items-center">
-                            <span className="w-16">Username:</span>
-                            <span className="text-emerald-600 font-bold ml-2 bg-emerald-50 px-1 rounded">{verificationCode}</span>
-                         </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mt-8 text-center">
-                    <button onClick={confirmVerification} disabled={isVerifying} className="w-full sm:w-auto bg-slate-900 hover:bg-black text-white px-10 py-4 rounded-xl font-black disabled:opacity-50 transition-transform hover:scale-[1.02] active:scale-[0.98] shadow-2xl flex justify-center items-center text-lg mx-auto">
-                      {isVerifying ? <><RefreshCw className="w-5 h-5 mr-2 animate-spin text-emerald-400" /> Checking Athletic.net...</> : 'I Saved It - Check My Profile!'}
-                    </button>
-                    <p className="text-xs text-orange-200 font-medium mt-3 opacity-80">You can safely delete the code from your Athletic.net profile right after we verify you.</p>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {athleteProfile && (
-          <div className={`grid grid-cols-1 lg:grid-cols-3 gap-8 ${isUnverified ? 'opacity-80 grayscale-[20%]' : ''}`}>
-            
-            {/* LEFT COLUMN */}
-            <div className="lg:col-span-1 space-y-6">
-              
-              <div className="bg-white rounded-[2rem] p-8 border border-slate-200 shadow-sm relative flex flex-col mb-6">
-                <div className="relative w-28 h-28 mb-6 group mx-auto md:mx-0">
-                  <AvatarWithBorder 
-                      avatarUrl={athleteProfile?.avatar_url ?? null} 
-                      borderId={equippedBorder ?? null} 
-                      sizeClasses="w-28 h-28"
-                  />
-                  {!isUnverified && (
-                    <label className="absolute inset-0 bg-black/40 rounded-full flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer z-30">
-                      <Camera className="w-6 h-6 text-white mb-1" />
-                      <span className="text-[10px] text-white font-bold uppercase tracking-wider">Upload</span>
-                      <input type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} disabled={isUploadingAvatar} />
-                    </label>
-                  )}
-                </div>
-
-                <div className="flex flex-wrap items-center gap-3 mb-1">
-                  <h1 className="text-2xl font-black text-slate-900">{athleteProfile.first_name} {athleteProfile.last_name}</h1>
-                  {streak > 0 && (
-                    <div className={`flex items-center px-2.5 py-1 rounded-lg border text-[10px] font-black tracking-widest uppercase ${streakTheme.bg}`}>
-                      <Flame className={`w-3.5 h-3.5 mr-1 ${streakTheme.icon}`} />
-                      <span className={streakTheme.text}>{streak} Day Login Streak</span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="mb-4">
-                  <span className={`inline-block px-3 py-1 rounded-lg text-[10px] font-black tracking-widest uppercase text-white ${activeTitle.badgeClass}`}>
-                    {activeTitle.name} Rank
-                  </span>
-                </div>
-                
-                <p className="text-slate-500 font-medium leading-relaxed mb-6">
-                  {athleteProfile.high_school} 
-                  {athleteProfile.grad_year && ` • Class of ${athleteProfile.grad_year}`}
-                  {athleteProfile.state && ` • ${athleteProfile.state}`}
-                  {athleteProfile.school_size && ` • ${athleteProfile.school_size}`}
-                  {athleteProfile.conference && ` • ${athleteProfile.conference}`}
-                </p>
-                
-                <div className="border-t border-slate-100 pt-6 mt-auto">
-                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Trust Level</span>
-                  <div className={`flex items-center px-4 py-3 rounded-xl border ${badge.bg}`}>
-                    <badge.icon className={`w-5 h-5 mr-3 ${badge.color}`} />
-                    <span className={`text-sm font-bold ${badge.color}`}>{badge.text}</span>
-                  </div>
-                </div>
-
-                <div className="border-t border-slate-100 pt-6 mt-6">
-                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Division</span>
-                  <div className="flex items-center px-4 py-3 rounded-xl border bg-slate-50 border-slate-200">
-                    <CheckCircle2 className="w-4 h-4 mr-3 text-slate-400" />
-                    <span className="text-sm font-bold text-slate-700">{athleteProfile.gender || 'Boys'}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* ACTIVE RIVALS DASHBOARD WIDGET */}
-              <div className="bg-white rounded-[2rem] p-8 shadow-sm border border-slate-200 relative overflow-hidden flex flex-col mb-6">
-                {isUnverified && (
-                  <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px] z-20 rounded-[2rem] flex items-center justify-center flex-col text-center px-6">
-                    <Lock className="w-8 h-8 text-slate-400 mb-2" />
-                    <p className="text-sm font-bold text-slate-600">Verify to view your Rivals</p>
-                  </div>
-                )}
-                
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 border-b border-slate-100 pb-6 gap-4">
-                  <div>
-                    <h3 className="text-2xl font-black text-slate-900 tracking-tight flex items-center">
-                      <Swords className="w-6 h-6 mr-3 text-red-500" /> Active Rivals
-                    </h3>
-                    <p className="text-slate-500 font-medium mt-1 text-sm">Athletes you are currently hunting in the Arena.</p>
-                  </div>
-                  <div className="bg-slate-100 text-slate-600 font-bold px-3 py-1.5 rounded-lg text-xs shrink-0">
-                    {activeRivals.length} / 5 Tracked
-                  </div>
-                </div>
-
-                {activeRivals.length > 0 ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-                    {activeRivals.map((rival) => (
-                      <div key={rival.id} className="flex items-center gap-4 p-4 rounded-2xl border border-slate-200 bg-slate-50 hover:border-red-300 hover:bg-red-50 transition-colors group relative">
-                        <Link href={`/athlete/${rival.id}`} className="absolute inset-0 z-10" aria-label={`View ${rival.first_name}`}></Link>
-                        <AvatarWithBorder avatarUrl={rival.avatar_url ?? null} borderId={rival.equipped_border ?? null} sizeClasses="w-12 h-12 shrink-0" />
-                        <div className="flex-1 truncate relative z-0">
-                          <h4 className="font-bold text-slate-900 truncate group-hover:text-red-600 transition-colors">{rival.first_name} {rival.last_name}</h4>
-                          <p className="text-xs font-medium text-slate-500 flex items-center mt-0.5">
-                            <MapPin className="w-3 h-3 mr-1 shrink-0" /> <span className="truncate">{rival.high_school}</span>
-                          </p>
-                        </div>
-                        <button onClick={() => handleRemoveRival(rival.id)} className="text-xs font-bold text-slate-400 hover:text-red-500 transition-colors flex items-center gap-1.5 bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm hover:shadow-md shrink-0 z-20 relative">
-                          Drop Target <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-8 bg-slate-50 rounded-2xl border border-slate-200 border-dashed mb-6">
-                    <Swords className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-                    <h4 className="text-lg font-bold text-slate-900 mb-1">No rivals acquired</h4>
-                    <p className="text-sm text-slate-500 font-medium max-w-sm mx-auto">Head to the Arena to declare rivals and earn bounties.</p>
-                  </div>
-                )}
-                
-                <Link href="/compete" className="w-full bg-slate-900 hover:bg-black text-white font-black py-3.5 rounded-xl transition-all shadow-md flex items-center justify-center gap-2 mt-auto z-10 relative">
-                  Enter The Arena <ArrowRight className="w-4 h-4" />
-                </Link>
-              </div>
-
-              <div className="bg-slate-900 rounded-[2rem] p-8 shadow-lg border border-slate-800 text-white relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 blur-[40px] rounded-full pointer-events-none"></div>
+            {!isEditingProfile ? (
+              <>
                 <div className="relative z-10">
-                  <div className="w-12 h-12 bg-amber-500/20 rounded-2xl flex items-center justify-center mb-6 border border-amber-500/30">
-                    <Rocket className="w-6 h-6 text-amber-400" />
-                  </div>
-                  <p className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-1">Boost Wallet</p>
-                  <div className="flex items-end gap-2 mb-6">
-                    <h3 className="text-5xl font-black text-white leading-none">{athleteProfile?.boosts_available || 0}</h3>
-                    <span className="text-slate-400 font-medium mb-1">Available</span>
-                  </div>
-                  {athleteProfile?.is_premium ? (
-                    <Link href="/feed" className="w-full bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-amber-950 font-black py-3 rounded-xl flex items-center justify-center transition-colors shadow-lg shadow-amber-500/20">
-                      Use Boost on Feed
-                    </Link>
-                  ) : (
-                    <Link href="/pro" className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-black py-3 rounded-xl flex items-center justify-center transition-colors border border-slate-700">
-                      <Lock className="w-4 h-4 mr-2" /> Upgrade to Get Boosts
-                    </Link>
-                  )}
-                </div>
-              </div>
-              
-              <div className="bg-white rounded-[2rem] p-8 border border-slate-200 shadow-sm relative">
-                {isUnverified && (
-                  <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px] z-20 rounded-[2rem] flex items-center justify-center flex-col text-center px-6">
-                    <Lock className="w-8 h-8 text-slate-400 mb-2" />
-                    <p className="text-sm font-bold text-slate-600">Verify to unlock Title Management</p>
-                  </div>
-                )}
-                <div className="flex items-center justify-between mb-6">
-                  <div>
-                    <h3 className="text-xl font-black text-slate-900 tracking-tight">Rank Titles</h3>
-                    <p className="text-xs text-slate-500 font-medium mt-1">Equip your highest earned rank.</p>
-                  </div>
-                  <Trophy className="w-6 h-6 text-slate-300" />
-                </div>
-
-                <div className="space-y-3 mb-6">
-                  {EARNED_TITLES.map((title) => {
-                    const isUnlocked = highestPercentile <= title.reqPercentile;
-                    const isEquipped = equippedTitle === title.id;
-
-                    return (
-                      <button 
-                        key={title.id}
-                        disabled={!isUnlocked || isEquipping || isUnverified}
-                        onClick={() => handleEquipTitle(title.id)}
-                        className={`w-full flex items-center justify-between p-3.5 rounded-2xl border transition-all text-left ${
-                          isEquipped 
-                            ? 'bg-blue-50 border-blue-300 shadow-sm' 
-                            : isUnlocked 
-                              ? 'bg-slate-50 border-slate-200 hover:border-slate-300 hover:bg-slate-100 hover:-translate-y-0.5' 
-                              : 'bg-slate-50/50 border-slate-100 opacity-60 cursor-not-allowed'
-                        }`}
-                      >
-                        <div className="flex items-center gap-4">
-                          <div className={`px-3 py-1.5 rounded-lg text-[10px] font-black tracking-widest uppercase text-white ${isUnlocked ? title.badgeClass : 'bg-slate-200 text-slate-400 border border-slate-300'}`}>
-                            {title.name}
-                          </div>
-                          <div>
-                            {!isUnlocked && <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider"><Lock className="w-3 h-3 inline mr-1 -mt-0.5" />{title.unlockText}</span>}
-                            {isUnlocked && !isEquipped && <span className="block text-[10px] font-bold text-emerald-500 uppercase tracking-wider">Unlocked</span>}
-                          </div>
-                        </div>
-                        {isEquipped && <CheckCircle2 className="w-5 h-5 text-blue-500" />}
-                      </button>
-                    )
-                  })}
-                </div>
-
-                <Link href="/dashboard/customize" className={`w-full flex items-center justify-center py-4 rounded-xl font-black transition-all ${isUnverified ? 'bg-slate-100 text-slate-400 pointer-events-none' : 'bg-slate-900 text-white hover:bg-slate-800 hover:-translate-y-0.5 shadow-md'}`}>
-                  <Paintbrush className="w-5 h-5 mr-2" /> Customize Profile
-                </Link>
-              </div>
-            </div>
-
-            {/* RIGHT COLUMN */}
-            <div className="lg:col-span-2 space-y-6">
-              
-              <div className="bg-gradient-to-r from-purple-900 to-indigo-900 rounded-[2rem] p-8 border border-purple-700 shadow-xl relative overflow-hidden flex flex-col sm:flex-row items-center justify-between gap-6">
-                {isUnverified && (
-                  <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-[2px] z-20 flex items-center justify-center flex-col text-center px-6">
-                    <Lock className="w-8 h-8 text-white/50 mb-2" />
-                    <p className="text-sm font-bold text-white/80">Verify profile to access Inbox</p>
-                  </div>
-                )}
-                <div className="absolute top-0 right-0 w-64 h-64 bg-purple-500/20 blur-[80px] rounded-full pointer-events-none"></div>
-                <div className="relative z-10 flex items-center gap-6 text-center sm:text-left">
-                  <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center border border-white/20 shrink-0 mx-auto sm:mx-0">
-                    <Mail className="w-8 h-8 text-purple-200" />
-                  </div>
-                  <div>
-                    <h3 className="text-2xl font-black text-white tracking-tight mb-1">Recruiting Inbox</h3>
-                    <p className="text-purple-200/80 font-medium text-sm">
-                      {unreadCount > 0 
-                        ? `You have ${unreadCount} unread pitches from college coaches!` 
-                        : "Coaches use the Discovery Engine to send you direct pitches."}
+                  <div className="text-center mb-12">
+                    <div className="w-16 h-16 bg-blue-500/20 border border-blue-400/30 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                      <Search className="w-8 h-8 text-blue-300" />
+                    </div>
+                    <h2 className="text-3xl md:text-5xl font-black text-white tracking-tight mb-3">Claim Your Profile</h2>
+                    <p className="text-blue-200/80 font-medium text-lg max-w-2xl mx-auto">
+                      Import your stats directly from Athletic.net. No login required for this step.
                     </p>
                   </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+                    <div className="bg-white/5 border border-white/10 rounded-2xl p-6 relative">
+                      <div className="absolute -top-4 -left-4 w-8 h-8 bg-blue-500 text-white font-black rounded-full flex items-center justify-center border-4 border-slate-900">1</div>
+                      <Globe className="w-6 h-6 text-blue-400 mb-3" />
+                      <h4 className="text-white font-bold text-lg mb-1">Search Your Name</h4>
+                      <p className="text-blue-200/70 text-sm">Open a new tab and search for your name on Athletic.net.</p>
+                    </div>
+
+                    <div className="bg-white/5 border border-white/10 rounded-2xl p-6 relative">
+                      <div className="absolute -top-4 -left-4 w-8 h-8 bg-blue-500 text-white font-black rounded-full flex items-center justify-center border-4 border-slate-900">2</div>
+                      <UserCircle2 className="w-6 h-6 text-blue-400 mb-3" />
+                      <h4 className="text-white font-bold text-lg mb-1">Click Track & Field Bio</h4>
+                      <p className="text-blue-200/70 text-sm">Ensure you click on your Track bio, not your cross country or team page.</p>
+                    </div>
+
+                    <div className="bg-white/5 border border-white/10 rounded-2xl p-6 relative">
+                      <div className="absolute -top-4 -left-4 w-8 h-8 bg-blue-500 text-white font-black rounded-full flex items-center justify-center border-4 border-slate-900">3</div>
+                      <LinkIcon className="w-6 h-6 text-blue-400 mb-3" />
+                      <h4 className="text-white font-bold text-lg mb-1">Copy The URL</h4>
+                      <p className="text-blue-200/70 text-sm">Copy the link at the top of your browser and paste it below!</p>
+                      
+                      <div className="mt-4 bg-black/50 border border-white/10 rounded overflow-hidden flex items-center text-[10px] text-slate-400 p-1.5 shadow-inner">
+                        <Lock className="w-3 h-3 mr-1 text-green-400" />
+                        <span className="truncate">athletic.net/athlete/</span>
+                        <span className="text-blue-400 font-bold bg-blue-500/20 px-1 rounded animate-pulse">1234567</span>
+                        <span className="truncate">/track-and-field</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {errorMessage && (
+                    <div className="bg-red-500/20 border border-red-500/50 text-red-200 p-4 rounded-xl mb-8 text-sm font-bold flex items-center justify-center gap-3 animate-in fade-in slide-in-from-top-4 max-w-2xl mx-auto">
+                      <AlertCircle className="w-5 h-5 shrink-0 text-red-400" />
+                      <p>{errorMessage}</p>
+                    </div>
+                  )}
+
+                  <form onSubmit={handleInitialScrape} className="flex flex-col sm:flex-row gap-3 max-w-3xl mx-auto bg-white/5 p-2 rounded-[1.5rem] border border-white/10 shadow-xl">
+                    <input 
+                      type="url" 
+                      required 
+                      placeholder="Paste your link here..." 
+                      value={syncUrl} 
+                      onChange={(e) => setSyncUrl(e.target.value)} 
+                      className="w-full flex-grow bg-transparent text-white rounded-xl pl-6 pr-4 py-4 focus:outline-none focus:bg-white/5 font-semibold placeholder:text-blue-300/30 text-lg transition-colors" 
+                    />
+                    <button type="submit" disabled={isSyncing} className="bg-blue-500 hover:bg-blue-400 text-white px-10 py-4 rounded-xl font-black disabled:opacity-50 transition-transform hover:scale-[1.02] active:scale-[0.98] shadow-lg flex items-center justify-center text-lg shrink-0">
+                      {isSyncing ? <><RefreshCw className="w-5 h-5 mr-2 animate-spin" /> Finding...</> : 'Fetch Stats'}
+                    </button>
+                  </form>
+                  
+                  <div className="mt-8 flex flex-col items-center relative z-10">
+                    <div className="relative flex py-5 items-center w-full max-w-md">
+                        <div className="flex-grow border-t border-white/20"></div>
+                        <span className="flex-shrink-0 mx-4 text-white/50 text-sm font-bold">OR</span>
+                        <div className="flex-grow border-t border-white/20"></div>
+                    </div>
+                    <button 
+                      onClick={() => setIsEditingProfile(true)} 
+                      className="bg-white/10 hover:bg-white/20 border border-white/20 text-white px-8 py-4 rounded-xl font-black transition-all shadow-lg flex items-center justify-center text-base w-full max-w-md"
+                    >
+                      <UserCircle2 className="w-5 h-5 mr-2" /> Create a General Profile
+                    </button>
+                    <p className="text-xs text-blue-200/50 mt-3 font-medium text-center max-w-sm">Not a Track & Field athlete? You can still use our College Finder and Resume Builder tools.</p>
+                  </div>
                 </div>
-                <div className="relative z-10 w-full sm:w-auto shrink-0">
-                  <Link href="/dashboard/messages" className="block w-full text-center bg-white text-purple-900 hover:bg-purple-50 font-black px-8 py-4 rounded-xl shadow-lg transition-colors">
-                    View Messages {unreadCount > 0 && <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full ml-2">{unreadCount}</span>}
-                  </Link>
+              </>
+            ) : (
+              <div className="max-w-md mx-auto bg-slate-900/50 backdrop-blur-md p-8 rounded-[2rem] border border-white/10 shadow-2xl relative z-10 animate-in fade-in zoom-in-95 text-center">
+                <div className="w-16 h-16 bg-blue-500/20 border border-blue-500/30 rounded-full flex items-center justify-center mx-auto mb-4 shadow-inner">
+                  <UserCircle2 className="w-8 h-8 text-blue-400" />
+                </div>
+                <h3 className="text-2xl font-black text-white mb-2">Manual Profile Setup</h3>
+                <p className="text-blue-200/80 font-medium text-sm mb-8 px-4">Enter your name to access the College Target List and Academic Resume Builder.</p>
+                
+                <form onSubmit={handleManualSave} className="space-y-4 text-left">
+                  <div>
+                    <label className="text-[10px] font-bold text-blue-300 uppercase tracking-widest ml-1">First Name</label>
+                    <input required type="text" value={editFirstName} onChange={e=>setEditFirstName(e.target.value)} placeholder="e.g. John" className="w-full bg-slate-950 border border-slate-800 text-white rounded-xl px-4 py-3.5 mt-1 focus:outline-none focus:ring-1 focus:ring-blue-500 font-bold" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-blue-300 uppercase tracking-widest ml-1">Last Name</label>
+                    <input required type="text" value={editLastName} onChange={e=>setEditLastName(e.target.value)} placeholder="e.g. Doe" className="w-full bg-slate-950 border border-slate-800 text-white rounded-xl px-4 py-3.5 mt-1 focus:outline-none focus:ring-1 focus:ring-blue-500 font-bold" />
+                  </div>
+
+                  <div className="flex gap-3 mt-6 pt-6 border-t border-white/10">
+                    <button type="button" onClick={() => setIsEditingProfile(false)} className="px-6 bg-slate-800 hover:bg-slate-700 text-white font-bold py-3.5 rounded-xl transition-colors">Back</button>
+                    <button type="submit" disabled={isSyncing} className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-black py-3.5 rounded-xl transition-colors shadow-lg disabled:opacity-50 flex items-center justify-center">
+                      {isSyncing ? 'Saving...' : 'Enter Dashboard'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 🚨 EXCLUSIVE "SKIPPED / GENERAL ATHLETE" DASHBOARD 🚨 */}
+        {athleteProfile && isSkipped && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-8 animate-in fade-in slide-in-from-bottom-4">
+            
+            {/* LEFT COLUMN: BASIC PROFILE + UPSELL */}
+            <div className="lg:col-span-1 space-y-6">
+              <div className="bg-white rounded-[2rem] p-8 border border-slate-200 shadow-sm relative flex flex-col items-center text-center">
+                <div className="relative w-28 h-28 mb-4 group">
+                  <AvatarWithBorder avatarUrl={athleteProfile.avatar_url ?? null} borderId="none" sizeClasses="w-28 h-28" />
+                  <label className="absolute inset-0 bg-black/40 rounded-full flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer z-30">
+                    <Camera className="w-6 h-6 text-white mb-1" />
+                    <span className="text-[10px] text-white font-bold uppercase tracking-wider px-2">Upload</span>
+                    <input type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} disabled={isUploadingAvatar} />
+                  </label>
+                </div>
+                <h1 className="text-2xl font-black text-slate-900 mb-2">{athleteProfile.first_name} {athleteProfile.last_name}</h1>
+                <div className="inline-flex items-center px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-slate-600 text-xs font-bold tracking-widest uppercase shadow-sm">
+                  General Athlete
                 </div>
               </div>
 
-              {/* 🚨 IN-DEPTH COLLEGE PROJECTION SCORER 🚨 */}
-              <div className="bg-white rounded-[2rem] p-8 md:p-10 shadow-sm border border-slate-200 relative overflow-hidden flex flex-col mb-6">
-                {isUnverified && (
-                  <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px] z-20 rounded-[2rem] flex items-center justify-center flex-col text-center px-6">
-                    <Lock className="w-8 h-8 text-slate-400 mb-2" />
-                    <p className="text-sm font-bold text-slate-600">Verify to see your Recruiting Scouting Report</p>
+              <div className="bg-gradient-to-br from-blue-900 to-indigo-900 rounded-[2rem] p-8 shadow-xl border border-blue-700 text-white relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-48 h-48 bg-blue-500/20 blur-[60px] rounded-full pointer-events-none"></div>
+                <div className="relative z-10 text-center">
+                  <div className="w-14 h-14 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4 shadow-inner border border-white/20">
+                    <Medal className="w-6 h-6 text-blue-300" />
                   </div>
-                )}
-                
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 pb-8 border-b border-slate-100 gap-4">
+                  <h3 className="text-xl font-black mb-2">Are you a Track Athlete?</h3>
+                  <p className="text-blue-200/80 text-sm font-medium mb-6">Link your Athletic.net profile to instantly unlock the Recruiting Feed, Messaging, and Scouting Analytics.</p>
+                  <button onClick={() => setShowLinkModal(true)} className="w-full bg-white text-blue-900 hover:bg-blue-50 font-black py-3 rounded-xl shadow-lg transition-transform hover:scale-105 flex items-center justify-center gap-2 text-sm">
+                    <LinkIcon className="w-4 h-4" /> Link Profile
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* RIGHT COLUMN: CORE TOOLS */}
+            <div className="lg:col-span-2 space-y-6">
+              
+              {/* TARGET SCHOOLS */}
+              <div className="bg-white rounded-[2rem] p-8 md:p-10 shadow-sm border border-slate-200 relative overflow-hidden h-full flex flex-col">
+                <div className="flex items-center justify-between mb-8 border-b border-slate-100 pb-6">
                   <div>
                     <h3 className="text-2xl font-black text-slate-900 tracking-tight flex items-center">
-                      <Target className="w-6 h-6 mr-3 text-blue-500" /> Recruiting Scouting Report
-                    </h3>
-                    <p className="text-slate-500 font-medium mt-1 text-sm">An in-depth breakdown of where you stand against national college recruiting standards.</p>
-                  </div>
-                  <div className="bg-slate-900 text-white flex flex-col items-center justify-center px-6 py-4 rounded-2xl shadow-lg border border-slate-700 shrink-0 relative overflow-hidden">
-                    <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-blue-500 to-purple-500"></div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Overall Score</span>
-                    <span className="font-black text-3xl leading-none">{hasPRs && projection.overallScore > 0 ? projection.overallScore : '-'}</span>
-                  </div>
-                </div>
-
-                {hasPRs && projection.overallScore > 0 ? (
-                  <div className="space-y-6">
-                    
-                    <div className={`p-6 rounded-2xl border ${projection.bg} ${projection.border} relative overflow-hidden`}>
-                      <div className="absolute top-0 right-0 p-6 opacity-10 pointer-events-none"><BarChart3 className={`w-24 h-24 ${projection.color}`} /></div>
-                      <div className="relative z-10">
-                        <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Projected Tier</p>
-                        <h4 className={`text-2xl font-black mb-3 ${projection.color}`}>{projection.overallLabel}</h4>
-                        <p className="text-slate-700 font-medium text-sm leading-relaxed max-w-lg">{projection.overallDesc}</p>
-                      </div>
-                    </div>
-
-                    <div className="pt-4">
-                      <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                        <Activity className="w-3.5 h-3.5" /> Event-by-Event Breakdown
-                      </h4>
-                      
-                      <div className="space-y-4">
-                        {projection.eventBreakdowns.map((ev, i) => (
-                          <div key={i} className="bg-slate-50 border border-slate-200 rounded-2xl p-5 relative">
-                            
-                            <div className="flex justify-between items-start mb-3">
-                              <div>
-                                <span className="font-black text-lg text-slate-900">{ev.event}</span>
-                                <div className="flex items-center gap-2 mt-1">
-                                  <span className="text-xs font-bold text-slate-500">Current: {ev.mark}</span>
-                                  <span className="text-slate-300">•</span>
-                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider ${
-                                    ev.score >= 85 ? 'bg-fuchsia-100 text-fuchsia-700' :
-                                    ev.score >= 75 ? 'bg-blue-100 text-blue-700' :
-                                    ev.score >= 65 ? 'bg-emerald-100 text-emerald-700' :
-                                    'bg-slate-200 text-slate-600'
-                                  }`}>
-                                    {ev.currentTier}
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="text-right">
-                                <span className="text-2xl font-black text-slate-800">{ev.score}</span>
-                                <span className="text-[10px] font-bold text-slate-400 ml-1">/99</span>
-                              </div>
-                            </div>
-
-                            <div className="w-full bg-slate-200 rounded-full h-2 mb-4 overflow-hidden">
-                              <div 
-                                className="bg-blue-500 h-full rounded-full transition-all" 
-                                style={{ width: `${Math.max(5, ev.score)}%` }}
-                              ></div>
-                            </div>
-
-                            {ev.nextTier !== 'Elite' && (
-                              <div className="bg-white border border-slate-200 rounded-xl p-3 flex items-center justify-between shadow-sm">
-                                <div className="flex items-center gap-3">
-                                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${ev.isField ? 'bg-emerald-100 text-emerald-600' : 'bg-blue-100 text-blue-600'}`}>
-                                    {ev.isField ? <TrendingUp className="w-4 h-4" /> : <TrendingUp className="w-4 h-4 transform rotate-180" />}
-                                  </div>
-                                  <div>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Next Target</p>
-                                    <p className="text-sm font-black text-slate-700">{ev.targetMarkFormatted} <span className="font-medium text-slate-500">({ev.nextTier})</span></p>
-                                  </div>
-                                </div>
-                                <div className="text-right">
-                                  <span className={`text-sm font-black ${ev.isField ? 'text-emerald-600' : 'text-blue-600'}`}>{ev.deltaFormatted}</span>
-                                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Needed</p>
-                                </div>
-                              </div>
-                            )}
-                            {ev.nextTier === 'Elite' && (
-                              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center justify-center shadow-sm">
-                                <Crown className="w-4 h-4 text-amber-500 mr-2" />
-                                <span className="text-sm font-black text-amber-700">Elite Status Achieved - Maintain Dominance</span>
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="mt-6 pt-6 border-t border-slate-100 flex items-center justify-center gap-2">
-                       <Activity className="w-4 h-4 text-blue-400" />
-                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                         Powered by ChasedSports Scoring Algorithm v2.0
-                       </p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-center py-12 bg-slate-50 rounded-2xl border border-slate-200 border-dashed">
-                     <Activity className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                     <h4 className="text-lg font-black text-slate-900 mb-1">No data available</h4>
-                     <p className="text-sm text-slate-500 font-medium">Sync your Athletic.net profile to generate your scouting report.</p>
-                  </div>
-                )}
-              </div>
-
-              <div className="bg-white rounded-[2rem] p-8 md:p-10 shadow-sm border border-slate-200 h-auto flex flex-col relative overflow-hidden">
-                {!athleteProfile?.is_premium && (
-                  <div className="absolute inset-0 z-10 bg-white/70 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center">
-                    <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4 border border-slate-200 shadow-inner">
-                      <Lock className="w-8 h-8 text-slate-400" />
-                    </div>
-                    <h3 className="text-xl font-black text-slate-900 mb-2">Resume Builder is Locked</h3>
-                    <p className="text-slate-500 font-medium mb-6 max-w-sm">Upgrade to Pro to create a master athletic resume that you can attach to any recruiting pitch with one click.</p>
-                    <Link href="/pro" className="bg-gradient-to-r from-amber-400 to-amber-500 text-amber-950 font-black px-6 py-3 rounded-xl shadow-lg hover:scale-105 transition-transform flex items-center gap-2">
-                      <Crown className="w-4 h-4" /> Unlock Pro Features
-                    </Link>
-                  </div>
-                )}
-
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 pb-6 border-b border-slate-100 gap-4">
-                  <div>
-                    <h2 className="text-2xl font-black text-slate-900 flex items-center">
-                      <FileText className="w-6 h-6 mr-3 text-emerald-500" /> Master Resume
-                    </h2>
-                    <p className="text-slate-500 font-medium mt-1 text-sm">Save your academics and achievements. Attach this to any feed pitch instantly.</p>
-                  </div>
-                  
-                  {athleteProfile?.is_premium && (
-                    <button 
-                      onClick={handleSaveResume}
-                      disabled={isSavingResume}
-                      className="flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-white font-black px-5 py-2.5 rounded-xl text-sm transition-colors shadow-md disabled:opacity-50 shrink-0"
-                    >
-                      <Save className="w-4 h-4" /> {isSavingResume ? 'Saving...' : 'Save Resume'}
-                    </button>
-                  )}
-                </div>
-
-                <div className="flex-1 flex flex-col">
-                  <textarea 
-                    value={resumeText}
-                    onChange={(e) => setResumeText(e.target.value)}
-                    disabled={!athleteProfile?.is_premium}
-                    placeholder="Example:&#10;&#10;Academics:&#10;GPA: 3.9 (Unweighted)&#10;SAT: 1450&#10;Intended Major: Business Administration&#10;&#10;Athletic Highlights:&#10;• 2024 State Finalist (400m)&#10;• 3x Varsity Letterman&#10;• Team Captain (Junior & Senior Year)"
-                    className="flex-1 w-full bg-slate-50 border border-slate-200 rounded-2xl p-5 text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white resize-none min-h-[250px]"
-                  />
-                  <p className="text-xs font-bold text-slate-400 text-right mt-3">
-                    Markdown and line breaks are supported.
-                  </p>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-[2rem] p-8 md:p-10 border border-slate-200 shadow-sm relative overflow-hidden">
-                {isUnverified && (
-                  <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px] z-20 rounded-[2rem] flex items-center justify-center flex-col text-center px-6">
-                    <Lock className="w-8 h-8 text-slate-400 mb-2" />
-                    <p className="text-sm font-bold text-slate-600">Verify to view saved colleges</p>
-                  </div>
-                )}
-                <div className="flex items-center justify-between mb-6 border-b border-slate-100 pb-6">
-                  <div>
-                    <h3 className="text-xl font-black text-slate-900 tracking-tight flex items-center">
-                      <School className="w-6 h-6 mr-2 text-blue-600" /> Target Schools
+                      <School className="w-6 h-6 mr-3 text-blue-600" /> Target Schools
                     </h3>
                     <p className="text-slate-500 font-medium text-sm mt-1">Colleges you are actively interested in.</p>
                   </div>
@@ -1457,7 +1369,7 @@ export default function DashboardPage() {
                 </div>
                 
                 {savedColleges && savedColleges.length > 0 ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 flex-1">
                     {savedColleges.map((saved) => {
                       const college = saved.universities; 
                       if (!college) return null;
@@ -1477,219 +1389,1071 @@ export default function DashboardPage() {
                               {college.division || 'NCAA'} • {college.state || 'USA'}
                             </p>
                           </div>
-                          <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all relative z-0" />
+                          <button 
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleRemoveCollege(saved.id); }} 
+                              className="relative z-20 p-2 text-slate-400 hover:text-red-500 hover:bg-white rounded-lg transition-colors"
+                              title="Remove school"
+                          >
+                              <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
                       )
                     })}
                   </div>
                 ) : (
-                  <div className="text-center py-8 bg-slate-50 rounded-2xl border border-slate-200 border-dashed">
-                    <Bookmark className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-                    <h4 className="text-lg font-bold text-slate-900 mb-1">No schools saved yet</h4>
-                    <p className="text-sm text-slate-500 font-medium mb-4 max-w-sm mx-auto">Build your recruiting board by saving colleges that match your athletic and academic goals.</p>
-                    <Link href="/search" className="inline-flex items-center justify-center bg-white border border-slate-200 hover:border-blue-400 hover:text-blue-600 text-slate-700 font-bold px-6 py-2.5 rounded-xl transition-all shadow-sm">
+                  <div className="text-center py-12 bg-slate-50 rounded-2xl border border-slate-200 border-dashed flex-1 flex flex-col items-center justify-center">
+                    <Bookmark className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+                    <h4 className="text-xl font-black text-slate-900 mb-2">No schools saved yet</h4>
+                    <p className="text-sm text-slate-500 font-medium mb-6 max-w-sm mx-auto">Build your recruiting board by saving colleges that match your athletic and academic goals.</p>
+                    <Link href="/search" className="inline-flex items-center justify-center bg-blue-600 hover:bg-blue-500 text-white font-bold px-8 py-3 rounded-xl transition-all shadow-md">
                       Open College Finder
                     </Link>
                   </div>
                 )}
               </div>
 
-              <div className="bg-white rounded-[2rem] p-8 md:p-12 border border-slate-200 shadow-sm relative overflow-hidden">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+              {/* MASTER RESUME */}
+              <div className="bg-white rounded-[2rem] p-8 md:p-10 border border-slate-200 shadow-sm h-auto flex flex-col relative overflow-hidden">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 pb-6 border-b border-slate-100 gap-4">
                   <div>
-                    <h3 className="text-2xl font-black text-slate-900 tracking-tight">Verified PRs</h3>
-                    <p className="text-slate-500 font-medium">Your official meet results & national rank.</p>
+                    <h2 className="text-2xl font-black text-slate-900 flex items-center">
+                      <FileText className="w-6 h-6 mr-3 text-emerald-500" /> Master Resume
+                    </h2>
+                    <p className="text-slate-500 font-medium mt-1 text-sm">Save your academics and achievements for college coaches.</p>
                   </div>
                   
-                  <button onClick={handleReSync} disabled={isSyncing || !canSync || isUnverified} className="flex items-center justify-center bg-slate-900 hover:bg-blue-600 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-colors disabled:opacity-50 disabled:hover:bg-slate-900">
-                    {isSyncing ? (
-                      <><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Finding...</>
-                    ) : canSync ? (
-                      <><RefreshCw className="w-4 h-4 mr-2" /> Sync Latest PRs</>
-                    ) : (
-                      <><Clock className="w-4 h-4 mr-2" /> Available in {syncTimeLeft}</>
-                    )}
+                  <button 
+                    onClick={handleSaveResume}
+                    disabled={isSavingResume}
+                    className="flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-white font-black px-5 py-2.5 rounded-xl text-sm transition-colors shadow-md disabled:opacity-50 shrink-0"
+                  >
+                    <Save className="w-4 h-4" /> {isSavingResume ? 'Saving...' : 'Save Resume'}
                   </button>
                 </div>
 
-                {hasPRs ? (
-                  <div className="grid grid-cols-1 gap-4 relative">
-                    {isUnverified && (
-                      <div className="absolute -inset-4 bg-white/40 backdrop-blur-[1px] z-10 pointer-events-none rounded-xl"></div>
-                    )}
-                    {athleteProfile!.prs!.map((pr, index) => {
-                      const queryParams = new URLSearchParams({ event: pr.event, gender: athleteProfile.gender || 'Boys' });
-                      const leaderboardLink = `/leaderboard?${queryParams.toString()}#${athleteProfile.id}`;
-
-                      return (
-                        <div key={index} className={`flex flex-col sm:flex-row sm:items-center justify-between p-5 rounded-2xl border border-slate-200 bg-slate-50 gap-4 group ${!isUnverified ? 'hover:bg-blue-50 hover:border-blue-300 transition-colors cursor-pointer relative overflow-hidden' : ''}`}>
-                          {!isUnverified && (
-                            <Link href={leaderboardLink} className="absolute inset-0 z-10" aria-label={`View ${pr.event} Leaderboard`}></Link>
-                          )}
-                          <div className="flex-1 relative z-0">
-                            <span className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-widest group-hover:text-blue-500 transition-colors">Event</span>
-                            <span className="font-black text-xl text-slate-800">{pr.event}</span>
-                            {(pr.date || pr.meet) && (
-                              <div className="flex items-center gap-2 text-xs text-slate-500 font-medium mt-2">
-                                <span className="flex items-center"><Calendar className="w-3 h-3 mr-1 text-slate-400" /> {pr.date}</span>
-                                <span className="hidden sm:inline text-slate-300">•</span>
-                                <span className="flex items-center truncate pr-2"><MapPin className="w-3 h-3 mr-1 text-slate-400" /> {pr.meet}</span>
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-5 sm:border-l sm:border-slate-200 sm:pl-5 pr-4 relative z-0">
-                            <div className="flex flex-col items-start sm:items-end">
-                              <span className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-widest">Global Status</span>
-                              {pr.tier ? (
-                                <div className="flex items-center gap-2 mt-0.5">
-                                  <span className="text-sm font-black text-slate-400 group-hover:text-blue-500 transition-colors">#{pr.globalRank}</span>
-                                  <span className={`px-3 py-1 rounded-lg text-[10px] font-black tracking-widest uppercase text-white ${pr.tier.classes}`}>
-                                    {pr.tier.name}
-                                  </span>
-                                </div>
-                              ) : (
-                                <span className="px-3 py-1 rounded-lg text-[10px] font-black tracking-widest uppercase bg-slate-100 text-slate-400 border border-slate-200">UNRANKED</span>
-                              )}
-                            </div>
-                            <div className="text-right ml-auto sm:ml-0">
-                              <span className="block text-[10px] font-bold text-blue-400 mb-1 uppercase tracking-widest">Mark</span>
-                              <span className="font-black text-3xl text-blue-600">{pr.mark}</span>
-                            </div>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                ) : (
-                  <div className="text-center py-12 bg-slate-50 rounded-2xl border border-slate-200 border-dashed">
-                    <Activity className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                    <h4 className="text-lg font-black text-slate-900">No times found</h4>
-                    <p className="text-sm text-slate-500 font-medium mt-1">Sync your profile to populate this board.</p>
-                  </div>
-                )}
+                <div className="flex-1 flex flex-col">
+                  <textarea 
+                    value={resumeText}
+                    onChange={(e) => setResumeText(e.target.value)}
+                    placeholder="Example:&#10;&#10;Academics:&#10;GPA: 3.9 (Unweighted)&#10;SAT: 1450&#10;Intended Major: Business Administration&#10;&#10;Athletic Highlights:&#10;• 2024 State Finalist&#10;• 3x Varsity Letterman&#10;• Team Captain (Junior & Senior Year)"
+                    className="flex-1 w-full bg-slate-50 border border-slate-200 rounded-2xl p-5 text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white resize-none min-h-[300px]"
+                  />
+                  <p className="text-xs font-bold text-slate-400 text-right mt-3">
+                    Markdown and line breaks are supported.
+                  </p>
+                </div>
               </div>
+
             </div>
+          </div>
+        )}
+
+        {/* 🚨 MAIN DASHBOARD CONTENT (ONLY VISIBLE IF VERIFIED + TRACK) 🚨 */}
+        {athleteProfile && !isUnverified && !isSkipped && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-8 animate-in fade-in slide-in-from-bottom-4">
             
-            {/* REFERRAL PROGRAM WITH MILESTONES */}
-            <div className="lg:col-span-3 mt-4">
-              <div className="bg-slate-900 rounded-[2rem] p-8 md:p-12 border border-slate-800 shadow-xl relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 blur-[80px] rounded-full pointer-events-none"></div>
+            {/* ================= LEFT COLUMN: PERMANENT SIDEBAR ================= */}
+            <div className="lg:col-span-1 space-y-6">
+              
+              <div className="bg-white rounded-[2rem] p-8 border border-slate-200 shadow-sm relative flex flex-col">
+                <div className="relative w-28 h-28 mb-6 group mx-auto md:mx-0">
+                  <AvatarWithBorder 
+                      avatarUrl={athleteProfile?.avatar_url ?? null} 
+                      borderId={equippedBorder ?? null} 
+                      sizeClasses="w-28 h-28"
+                  />
+                  <label className="absolute inset-0 bg-black/40 rounded-full flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer z-30">
+                    <Camera className="w-6 h-6 text-white mb-1" />
+                    <span className="text-[10px] text-white font-bold uppercase tracking-wider">Upload</span>
+                    <input type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} disabled={isUploadingAvatar} />
+                  </label>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3 mb-1">
+                  <h1 className="text-2xl font-black text-slate-900">{athleteProfile.first_name} {athleteProfile.last_name}</h1>
+                  {streak > 0 && (
+                    <div className={`flex items-center px-2.5 py-1 rounded-lg border text-[10px] font-black tracking-widest uppercase ${streakTheme.bg}`}>
+                      <Flame className={`w-3.5 h-3.5 mr-1 ${streakTheme.icon}`} />
+                      <span className={streakTheme.text}>{streak} Day Login Streak</span>
+                    </div>
+                  )}
+                </div>
                 
-                <div className="flex flex-col md:flex-row items-start justify-between gap-12 relative z-10">
-                  <div className="flex-1 w-full">
-                    <h3 className="text-3xl font-black text-white tracking-tight mb-3 flex items-center gap-3">
-                      <Users className="w-8 h-8 text-emerald-400" /> Invite & Earn
+                <p className="text-slate-500 font-medium leading-relaxed mt-2 mb-6">
+                  {athleteProfile.high_school} 
+                  {athleteProfile.grad_year && ` • Class of ${athleteProfile.grad_year}`}
+                  {athleteProfile.state && ` • ${athleteProfile.state}`}
+                  {athleteProfile.school_size && ` • ${athleteProfile.school_size}`}
+                  {athleteProfile.conference && ` • ${athleteProfile.conference}`}
+                </p>
+                
+                <div className="border-t border-slate-100 pt-6 mt-auto grid grid-cols-2 gap-4">
+                  <div>
+                    <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Trust Level</span>
+                    <div className="flex items-center gap-1.5">
+                      <badge.icon className={`w-4 h-4 ${badge.color}`} />
+                      <span className={`text-xs font-bold ${badge.color}`}>{badge.text}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Division</span>
+                    <div className="flex items-center gap-1.5">
+                      <CheckCircle2 className="w-4 h-4 text-slate-400" />
+                      <span className="text-xs font-bold text-slate-700">{athleteProfile.gender || 'Boys'}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ACTIVE RIVALS DASHBOARD WIDGET */}
+              <div className="bg-white rounded-[2rem] p-8 shadow-sm border border-slate-200 relative overflow-hidden flex flex-col">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 border-b border-slate-100 pb-6 gap-4">
+                  <div>
+                    <h3 className="text-xl font-black text-slate-900 tracking-tight flex items-center">
+                      <Swords className="w-5 h-5 mr-2 text-red-500" /> Active Rivals
                     </h3>
-                    <p className="text-slate-300 font-medium text-lg mb-6 leading-relaxed max-w-xl">
-                      Get <strong className="text-amber-400">1 Free Boost</strong> for every 3 teammates that use your unique code. Reach the next Mega Bonus milestone to claim <strong className="text-amber-400">4 Boosts</strong>!
-                    </p>
-                    
-                    {!myReferralCode ? (
-                      <div className="bg-slate-800 border border-slate-700 text-slate-400 p-4 rounded-xl text-sm font-bold inline-block">
-                        Sync your Athletic.net profile above to generate your unique invite code!
-                      </div>
-                    ) : (
-                      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                        <div className="bg-slate-950 px-6 py-3 rounded-xl border border-emerald-500/30 flex items-center gap-4 shadow-inner">
-                          <span className="text-[10px] text-slate-500 uppercase tracking-widest font-black">Your Code:</span>
-                          <span className="text-2xl font-mono font-black tracking-widest text-emerald-400">{myReferralCode}</span>
+                  </div>
+                  <div className="bg-slate-100 text-slate-600 font-bold px-3 py-1.5 rounded-lg text-xs shrink-0">
+                    {activeRivals.length} / 5
+                  </div>
+                </div>
+
+                {activeRivals.length > 0 ? (
+                  <div className="grid grid-cols-1 gap-3 mb-6">
+                    {activeRivals.map((rival) => (
+                      <div key={rival.id} className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 bg-slate-50 hover:border-red-300 hover:bg-red-50 transition-colors group relative">
+                        <Link href={`/athlete/${rival.id}`} className="absolute inset-0 z-10" aria-label={`View ${rival.first_name}`}></Link>
+                        <AvatarWithBorder avatarUrl={rival.avatar_url ?? null} borderId={rival.equipped_border ?? null} sizeClasses="w-10 h-10 shrink-0" />
+                        <div className="flex-1 truncate relative z-0">
+                          <h4 className="font-bold text-sm text-slate-900 truncate group-hover:text-red-600 transition-colors">{rival.first_name} {rival.last_name}</h4>
                         </div>
-                        <button 
-                          onClick={() => handleShareCode(myReferralCode)}
-                          className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-6 py-3.5 rounded-xl font-black transition-colors flex items-center gap-2"
-                        >
-                          <Share2 className="w-5 h-5" /> Share Code
+                        <button onClick={() => handleRemoveRival(rival.id)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-white rounded-lg transition-colors z-20 relative">
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
-                    )}
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-6 bg-slate-50 rounded-2xl border border-slate-200 border-dashed mb-6">
+                    <Swords className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                    <p className="text-xs text-slate-500 font-medium">Head to the Arena to declare rivals.</p>
+                  </div>
+                )}
+                
+                <Link href="/compete" className="w-full bg-slate-900 hover:bg-black text-white font-black py-3 rounded-xl transition-all shadow-md flex items-center justify-center gap-2 mt-auto text-sm">
+                  Enter The Arena <ArrowRight className="w-3 h-3" />
+                </Link>
+              </div>
 
-                    {showCodeEntry && (
-                      <div className="mt-8 bg-slate-800/50 p-6 rounded-2xl border border-slate-700 max-w-md">
-                        <h4 className="text-white font-bold mb-2 flex items-center gap-2">
-                          <Gift className="w-5 h-5 text-fuchsia-400" /> Were you invited?
-                        </h4>
-                        <p className="text-xs text-slate-400 mb-4">Enter your teammate's code below to give them credit for inviting you!</p>
-                        <form onSubmit={handleSubmitInviteCode} className="flex gap-2">
-                          <input 
-                            type="text" 
-                            required
-                            placeholder="Enter Code (e.g. 123456)" 
-                            value={inviteCodeInput}
-                            onChange={(e) => setInviteCodeInput(e.target.value)}
-                            className="flex-1 bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-2 focus:outline-none focus:border-fuchsia-500 font-mono text-sm"
-                          />
-                          <button 
-                            type="submit" 
-                            disabled={isSubmittingCode}
-                            className="bg-fuchsia-600 hover:bg-fuchsia-500 text-white px-4 py-2 rounded-xl font-bold text-sm disabled:opacity-50"
-                          >
-                            {isSubmittingCode ? '...' : 'Submit'}
-                          </button>
-                        </form>
+              <div className="bg-slate-900 rounded-[2rem] p-8 shadow-lg border border-slate-800 text-white relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 blur-[40px] rounded-full pointer-events-none"></div>
+                <div className="relative z-10 flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Boost Wallet</p>
+                    <h3 className="text-4xl font-black text-white leading-none">{athleteProfile?.boosts_available || 0}</h3>
+                  </div>
+                  <div className="w-12 h-12 bg-amber-500/20 rounded-2xl flex items-center justify-center border border-amber-500/30">
+                    <Rocket className="w-6 h-6 text-amber-400" />
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            {/* ================= RIGHT COLUMN: TABBED INTERFACE ================= */}
+            <div className="lg:col-span-2 space-y-6">
+              
+              {/* Sleek Tab Navigation */}
+              <div className="bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm flex overflow-x-auto custom-scrollbar sticky top-4 z-40">
+                {TABS.map(tab => (
+                  <button 
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)} 
+                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-bold text-sm transition-all whitespace-nowrap ${
+                      activeTab === tab.id 
+                        ? 'bg-blue-50 text-blue-700 shadow-sm border border-blue-200/50' 
+                        : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50 border border-transparent'
+                    }`}
+                  >
+                    <tab.icon className={`w-4 h-4 ${activeTab === tab.id ? 'text-blue-500' : 'text-slate-400'}`} /> {tab.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* 📊 TAB 1: MY STATS (WITH ADVANCED ANALYTICS) */}
+              {activeTab === 'stats' && (
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  
+                  {/* 🚨 PRO ANALYTICS HUB 🚨 */}
+                  <div className="bg-white rounded-[2rem] p-8 shadow-sm border border-slate-200 relative overflow-hidden">
+                    <div className="flex items-center justify-between mb-8 pb-6 border-b border-slate-100">
+                      <div>
+                        <h2 className="text-2xl font-black text-slate-900 flex items-center">
+                          <BarChart3 className="w-6 h-6 mr-3 text-indigo-500" /> Scouting Analytics
+                        </h2>
+                        <p className="text-slate-500 font-medium mt-1">See how much traction your profile is getting with college coaches.</p>
+                      </div>
+                    </div>
+
+                    <div className={`relative ${!athleteProfile?.is_premium ? 'min-h-[280px]' : ''}`}>
+                      
+                      {/* 🔓 UNLOCKED ROW: Proves to the athlete that the app is working! */}
+                      <div className="mb-6">
+                        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl p-6 md:p-8 flex flex-col sm:flex-row items-center justify-between gap-6 shadow-sm">
+                          <div>
+                            <p className="text-xs font-bold text-blue-500 uppercase tracking-widest mb-1 flex items-center gap-1.5">
+                              <Eye className="w-4 h-4" /> All-Time Profile Clicks
+                            </p>
+                            <h3 className="text-4xl md:text-5xl font-black text-blue-700 tracking-tight">
+                              {athleteProfile?.profile_views || 0}
+                            </h3>
+                          </div>
+                          <div className="text-center sm:text-right max-w-[200px]">
+                            <p className="text-sm font-medium text-slate-500">Coaches have actively clicked to view your full profile.</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 🔒 LOCKED PRO ROW: Impressions, Daily, Monthly, and Who Viewed */}
+                      <div className="relative rounded-2xl border border-slate-200 bg-slate-50 p-6 overflow-hidden">
+                        {!athleteProfile?.is_premium && (
+                          <div className="absolute inset-0 z-20 bg-slate-50/80 backdrop-blur-md flex flex-col items-center justify-center text-center p-6">
+                            <div className="w-14 h-14 bg-white rounded-full flex items-center justify-center mb-3 border border-slate-200 shadow-sm">
+                              <Lock className="w-6 h-6 text-slate-400" />
+                            </div>
+                            <h3 className="text-lg font-black text-slate-900 mb-1">Advanced Analytics Locked</h3>
+                            <p className="text-slate-500 text-sm font-medium mb-4 max-w-xs">Upgrade to Pro to track your feed impressions and see exactly who is viewing your profile.</p>
+                            <Link href="/pro" className="bg-gradient-to-r from-amber-400 to-amber-500 text-amber-950 font-black px-6 py-2.5 rounded-xl shadow-md hover:scale-105 transition-transform flex items-center gap-2 text-sm">
+                              <Crown className="w-4 h-4" /> Unlock Pro
+                            </Link>
+                          </div>
+                        )}
+
+                        <div className={`${!athleteProfile?.is_premium ? 'opacity-20 select-none blur-[2px]' : ''}`}>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                            {/* 🚨 FEED IMPRESSIONS WITH TOOLTIP 🚨 */}
+                            <div className="bg-white rounded-xl p-5 border border-slate-100 shadow-sm relative">
+                              <div className="flex items-center justify-between mb-2">
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                                  Feed Impressions
+                                  <button 
+                                    onClick={() => setShowImpressionTooltip(!showImpressionTooltip)} 
+                                    className="text-slate-300 hover:text-emerald-500 transition-colors focus:outline-none"
+                                  >
+                                    <HelpCircle className="w-3.5 h-3.5" />
+                                  </button>
+                                </p>
+                                <Search className="w-4 h-4 text-emerald-400" />
+                              </div>
+                              <h3 className="text-3xl font-black text-slate-900">{athleteProfile?.is_premium ? athleteProfile.search_appearances || 0 : '241'}</h3>
+                              
+                              {/* TOOLTIP POPOVER */}
+                              {showImpressionTooltip && athleteProfile?.is_premium && (
+                                <div className="absolute top-12 left-0 w-[200px] bg-slate-900 text-white text-xs p-4 rounded-xl shadow-xl z-50 animate-in fade-in zoom-in-95 border border-slate-700">
+                                  <p className="mb-3 leading-relaxed">This is the number of times your posts or profile appeared on a coach's screen while they were scrolling the feed or searching the database.</p>
+                                  <button onClick={() => setShowImpressionTooltip(false)} className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-2 rounded-lg transition-colors">Got it</button>
+                                </div>
+                              )}
+                            </div>
+                            
+                            <div className="bg-white rounded-xl p-5 border border-slate-100 shadow-sm">
+                              <div className="flex items-center justify-between mb-2">
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Views Today</p>
+                                <Activity className="w-4 h-4 text-blue-400" />
+                              </div>
+                              <h3 className="text-3xl font-black text-slate-900">{athleteProfile?.is_premium ? dailyViews : '14'}</h3>
+                            </div>
+                            
+                            <div className="bg-white rounded-xl p-5 border border-slate-100 shadow-sm">
+                              <div className="flex items-center justify-between mb-2">
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Views This Month</p>
+                                <Calendar className="w-4 h-4 text-indigo-400" />
+                              </div>
+                              <h3 className="text-3xl font-black text-slate-900">{athleteProfile?.is_premium ? monthlyViews : '89'}</h3>
+                            </div>
+                          </div>
+
+                          <div className="border-t border-slate-200 pt-6">
+                             <div className="flex items-center justify-between mb-4">
+                               <p className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+                                 <UserCircle2 className="w-4 h-4 text-indigo-400" /> Recent Coach Views
+                               </p>
+                               {allRecentViewers.length > 3 && (
+                                 <button onClick={() => setShowAllViewersModal(true)} className="text-[10px] font-black text-indigo-500 hover:text-indigo-600 uppercase tracking-widest bg-indigo-50 px-3 py-1.5 rounded-lg transition-colors border border-indigo-100 shadow-sm hover:shadow-md">
+                                   View All ({allRecentViewers.length})
+                                 </button>
+                               )}
+                             </div>
+                             
+                             {recentViewers.length > 0 ? (
+                               <div className="space-y-3">
+                                 {recentViewers.map((coach, idx) => (
+                                   <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-white border border-slate-100 shadow-sm">
+                                     <div className="flex items-center gap-4">
+                                       <AvatarWithBorder avatarUrl={coach.avatar_url} borderId="none" sizeClasses="w-10 h-10" userRole="coach" />
+                                       <div>
+                                         <p className="font-black text-slate-900 text-sm">Coach {coach.last_name}</p>
+                                         <p className="text-xs font-bold text-slate-500 truncate max-w-[200px]">{coach.school_name}</p>
+                                       </div>
+                                     </div>
+                                     <button 
+                                       onClick={() => handleContactCoach(coach.email)} 
+                                       className="w-10 h-10 rounded-full bg-slate-50 text-slate-500 flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all border border-slate-200"
+                                       title="Email Coach"
+                                     >
+                                       <Mail className="w-4 h-4" />
+                                     </button>
+                                   </div>
+                                 ))}
+                               </div>
+                             ) : (
+                               <p className="text-sm font-medium text-slate-400 italic py-4 bg-white p-4 rounded-xl border border-slate-100 text-center">No recent views from verified coaches.</p>
+                             )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 🚨 DOPAMINE IN-DEPTH COLLEGE PROJECTION SCORER 🚨 */}
+                  <div className="bg-white rounded-[2rem] p-8 md:p-10 shadow-sm border border-slate-200 relative overflow-hidden flex flex-col">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 pb-8 border-b border-slate-100 gap-4">
+                      <div>
+                        <h3 className="text-2xl font-black text-slate-900 tracking-tight flex items-center">
+                          <Target className="w-6 h-6 mr-3 text-blue-500" /> Recruiting Scouting Report
+                        </h3>
+                        <p className="text-slate-500 font-medium mt-1 text-sm">Where you stand against national college standards.</p>
+                      </div>
+                      <div className="bg-slate-900 text-white flex flex-col items-center justify-center px-6 py-4 rounded-2xl shadow-lg border border-slate-700 shrink-0 relative overflow-hidden min-w-[140px]">
+                        <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-blue-500 to-purple-500"></div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Overall Score</span>
+                        <span className="font-black text-4xl leading-none mb-1">{hasPRs && projection.overallScore > 0 ? projection.overallScore : '-'}</span>
+                        <span className="text-[9px] font-bold text-blue-300 uppercase tracking-widest bg-blue-500/20 px-2 py-0.5 rounded-full">Via {projection.bestEvent}</span>
+                      </div>
+                    </div>
+
+                    {hasPRs && projection.overallScore > 0 ? (
+                      <div className="space-y-8">
+                        <div className={`p-6 rounded-2xl border ${projection.bg} ${projection.border} relative overflow-hidden shadow-sm`}>
+                          <div className="absolute top-0 right-0 p-6 opacity-10 pointer-events-none"><BarChart3 className={`w-24 h-24 ${projection.color}`} /></div>
+                          <div className="relative z-10">
+                            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Projected Tier</p>
+                            <h4 className={`text-2xl font-black mb-3 ${projection.color}`}>{projection.overallLabel}</h4>
+                            <p className="text-slate-700 font-medium text-sm leading-relaxed max-w-lg">{projection.overallDesc}</p>
+                          </div>
+                        </div>
+
+                        <div>
+                          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
+                            <Activity className="w-3.5 h-3.5" /> Event-by-Event Breakdown
+                          </h4>
+                          
+                          <div className="space-y-6 max-h-[700px] overflow-y-auto pr-2 custom-scrollbar">
+                            {projection.eventBreakdowns.map((ev: any, i: number) => {
+                              const isExpanded = expandedEventIndex === i;
+
+                              return (
+                                <div key={i} className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-300">
+                                  <button 
+                                    onClick={() => toggleEventExpansion(i)} 
+                                    className="w-full flex justify-between items-center p-6 sm:px-8 text-left hover:bg-slate-50 transition-colors"
+                                  >
+                                    <div>
+                                      <span className="font-black text-2xl text-slate-900 tracking-tight">{ev.event}</span>
+                                    </div>
+                                    <div className="flex items-center gap-4">
+                                      <div className="flex items-end gap-1">
+                                        <span className="text-3xl font-black text-blue-600 leading-none">{ev.score}</span>
+                                        <span className="text-xs font-bold text-slate-400 pb-0.5">/99</span>
+                                      </div>
+                                      {isExpanded ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
+                                    </div>
+                                  </button>
+
+                                  {isExpanded && (
+                                    <div className="px-6 sm:px-8 pb-8 space-y-6 border-t border-slate-100 animate-in fade-in slide-in-from-top-1 duration-200">
+
+                                      <div className="flex flex-col sm:flex-row sm:items-center gap-4 pt-6">
+                                        <div className="bg-slate-50 border border-slate-100 px-5 py-3 rounded-xl flex-1 flex flex-col justify-center">
+                                          <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Current Mark</span>
+                                          <span className="font-black text-2xl text-slate-800">{ev.mark}</span>
+                                        </div>
+                                        <div className="bg-slate-50 border border-slate-100 px-5 py-3 rounded-xl flex-1 flex flex-col justify-center">
+                                          <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Current Tier</span>
+                                          <span className={`font-black text-lg tracking-tight ${
+                                            ev.score >= 85 ? 'text-fuchsia-600' :
+                                            ev.score >= 75 ? 'text-blue-600' :
+                                            ev.score >= 65 ? 'text-emerald-600' :
+                                            'text-slate-700'
+                                          }`}>{ev.currentTier}</span>
+                                        </div>
+                                      </div>
+
+                                      {ev.nextTier !== 'Elite' && ev.nextTier !== 'Varsity Standard' && (
+                                        <div className="bg-slate-50/50 border border-slate-100 rounded-xl p-5 flex items-center justify-between shadow-inner">
+                                          <div className="flex items-center gap-4">
+                                            <div className={`w-12 h-12 rounded-full flex items-center justify-center shadow-inner shrink-0 ${ev.isField ? 'bg-emerald-50 border border-emerald-100' : 'bg-cyan-50 border border-cyan-100'}`}>
+                                              {ev.isField ? <TrendingUp className="w-6 h-6 text-emerald-500" /> : <TrendingUp className="w-6 h-6 text-cyan-500 transform rotate-180" />}
+                                            </div>
+                                            <div>
+                                              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-0.5">Next Goal: {ev.nextTier}</p>
+                                              <p className="text-xl font-black text-slate-900 tracking-tight">{ev.targetMarkFormatted}</p>
+                                            </div>
+                                          </div>
+                                          <div className="text-right shrink-0">
+                                            <span className={`text-xl font-black block ${ev.isField ? 'text-emerald-600' : 'text-cyan-600'}`}>{ev.deltaFormatted}</span>
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Needed</p>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {ev.nextTier === 'Varsity Standard' && (
+                                        <div className="bg-slate-50 border border-slate-100 rounded-xl p-5 flex items-center justify-center">
+                                          <Activity className="w-5 h-5 text-slate-400 mr-2" />
+                                          <span className="text-base font-black text-slate-700 tracking-tight">Goal: Hit Varsity Standard ({ev.targetMarkFormatted})</span>
+                                        </div>
+                                      )}
+                                      {ev.nextTier === 'Elite' && (
+                                        <div className="bg-amber-50 border border-amber-100 rounded-xl p-5 flex items-center justify-center">
+                                          <Crown className="w-5 h-5 text-amber-500 mr-2" />
+                                          <span className="text-base font-black text-amber-600 tracking-tight">Elite Status Achieved - Maintain Dominance</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        <div className="mt-6 pt-6 border-t border-slate-100 flex items-center justify-center gap-2">
+                           <Activity className="w-4 h-4 text-blue-400" />
+                           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                             Powered by ChasedSports Scoring Algorithm v2.0
+                           </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center py-12 bg-slate-50 rounded-2xl border border-slate-200 border-dashed">
+                         <Activity className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+                         <h4 className="text-lg font-black text-slate-900 mb-1">No data available</h4>
+                         <p className="text-sm text-slate-500 font-medium">Sync your Athletic.net profile to generate your scouting report.</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* VERIFIED PRS */}
+                  <div className="bg-white rounded-[2rem] p-8 md:p-12 border border-slate-200 shadow-sm relative overflow-hidden">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+                      <div>
+                        <h3 className="text-2xl font-black text-slate-900 tracking-tight">Verified PRs</h3>
+                        <p className="text-slate-500 font-medium">Your official meet results & national rank.</p>
+                      </div>
+                      
+                      <button onClick={handleReSync} disabled={isSyncing} className="flex items-center justify-center bg-slate-900 hover:bg-blue-600 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-colors disabled:opacity-50 disabled:hover:bg-slate-900">
+                        {isSyncing ? (
+                          <><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Finding...</>
+                        ) : (
+                          <><RefreshCw className="w-4 h-4 mr-2" /> Sync Latest PRs</>
+                        )}
+                      </button>
+                    </div>
+
+                    {hasPRs ? (
+                      <div className="grid grid-cols-1 gap-4">
+                        {athleteProfile!.prs!.map((pr, index) => {
+                          const queryParams = new URLSearchParams({ event: pr.event, gender: athleteProfile.gender || 'Boys' });
+                          const leaderboardLink = `/leaderboard?${queryParams.toString()}#${athleteProfile.id}`;
+
+                          return (
+                            <div key={index} className={`flex flex-col sm:flex-row sm:items-center justify-between p-5 rounded-2xl border border-slate-200 bg-slate-50 gap-4 group hover:bg-blue-50 hover:border-blue-300 transition-colors cursor-pointer relative overflow-hidden`}>
+                              <Link href={leaderboardLink} className="absolute inset-0 z-10" aria-label={`View ${pr.event} Leaderboard`}></Link>
+                              
+                              <div className="flex-1 relative z-0">
+                                <span className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-widest group-hover:text-blue-500 transition-colors">Event</span>
+                                <span className="font-black text-xl text-slate-800">{pr.event}</span>
+                                {(pr.date || pr.meet) && (
+                                  <div className="flex items-center gap-2 text-xs text-slate-500 font-medium mt-2">
+                                    <span className="flex items-center"><Calendar className="w-3 h-3 mr-1 text-slate-400" /> {pr.date}</span>
+                                    <span className="hidden sm:inline text-slate-300">•</span>
+                                    <span className="flex items-center truncate pr-2"><MapPin className="w-3 h-3 mr-1 text-slate-400" /> {pr.meet}</span>
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-5 sm:border-l sm:border-slate-200 sm:pl-5 pr-4 relative z-0">
+                                <div className="flex flex-col items-start sm:items-end">
+                                  <span className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-widest">Global Status</span>
+                                  {pr.tier ? (
+                                    <div className="flex items-center gap-2 mt-0.5">
+                                      <span className="text-sm font-black text-slate-400 group-hover:text-blue-500 transition-colors">#{pr.globalRank}</span>
+                                      <span className={`px-3 py-1 rounded-lg text-[10px] font-black tracking-widest uppercase text-white ${pr.tier.classes}`}>
+                                        {pr.tier.name}
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <span className="px-3 py-1 rounded-lg text-[10px] font-black tracking-widest uppercase bg-slate-100 text-slate-400 border border-slate-200">UNRANKED</span>
+                                  )}
+                                </div>
+                                <div className="text-right ml-auto sm:ml-0">
+                                  <span className="block text-[10px] font-bold text-blue-400 mb-1 uppercase tracking-widest">Mark</span>
+                                  <span className="font-black text-3xl text-blue-600">{pr.mark}</span>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    ) : (
+                      <div className="text-center py-12 bg-slate-50 rounded-2xl border border-slate-200 border-dashed text-center">
+                        <Activity className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+                        <h4 className="text-lg font-black text-slate-900 mb-1">No times found</h4>
+                        <p className="text-sm text-slate-500 font-medium mt-1">Sync your profile to populate this board.</p>
                       </div>
                     )}
                   </div>
                 </div>
+              )}
 
-                {/* 🚨 NEW MILESTONE TRACK UI 🚨 */}
-                <div className="mt-12 pt-8 border-t border-slate-800 relative z-10">
-                  <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-12 sm:mb-8 gap-4">
-                    <div>
-                      <h4 className="text-xl font-black text-white flex items-center gap-2">
-                        <Trophy className="w-5 h-5 text-amber-400"/> Reward Track
-                      </h4>
-                      <p className="text-sm text-slate-400 font-medium mt-1">
-                        You have <strong className="text-white">{currentRefs}</strong> verified invites.
+              {/* 🎯 TAB 2: RECRUITING */}
+              {activeTab === 'recruiting' && (
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  
+                  {/* NCAA RECRUITING RULES GUIDE */}
+                  <div className="bg-white rounded-[2rem] p-8 shadow-sm border border-slate-200 relative overflow-hidden">
+                    <div className="flex items-center gap-3 mb-6 pb-6 border-b border-slate-100">
+                      <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center border border-blue-100">
+                        <BookOpen className="w-6 h-6 text-blue-600" />
+                      </div>
+                      <div>
+                        <h2 className="text-2xl font-black text-slate-900 tracking-tight">NCAA Recruiting Guide</h2>
+                        <p className="text-slate-500 font-medium text-sm">Understand when and how coaches can contact you.</p>
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-6">
+                      <div className="bg-slate-50 border border-slate-100 rounded-2xl p-6">
+                        <h3 className="font-black text-lg text-slate-900 mb-2 flex items-center gap-2">
+                          <AlertCircle className="w-5 h-5 text-amber-500" /> The "June 15th" Rule (D1 & D2)
+                        </h3>
+                        <p className="text-slate-600 text-sm leading-relaxed mb-4">
+                          NCAA Division 1 and Division 2 coaches <strong>cannot</strong> send you recruiting materials, direct messages, or return your phone calls until <strong className="text-slate-900">June 15th after your Sophomore year.</strong> Before this date, they can only send you camp brochures or generic questionnaires.
+                        </p>
+                      </div>
+
+                      <div className="bg-blue-50/50 border border-blue-100 rounded-2xl p-6">
+                        <h3 className="font-black text-lg text-slate-900 mb-2 flex items-center gap-2">
+                          <CheckCircle2 className="w-5 h-5 text-blue-500" /> The "One-Way" Loophole
+                        </h3>
+                        <p className="text-slate-600 text-sm leading-relaxed">
+                          Even if you are a Freshman or Sophomore, <strong>you can still contact coaches!</strong> You are allowed to call, email, or DM them to express interest. 
+                          <br/><br/>
+                          <span className="font-bold text-slate-800">The Catch:</span> If you call and they pick up, you can talk. But if you leave a voicemail or send a DM, <strong>they are legally not allowed to reply to you</strong> until June 15th of your Sophomore year. Do not get discouraged if they don't answer—they are likely just following NCAA rules!
+                        </p>
+                      </div>
+
+                      <div className="bg-emerald-50/50 border border-emerald-100 rounded-2xl p-6">
+                        <h3 className="font-black text-lg text-slate-900 mb-2 flex items-center gap-2">
+                          <Trophy className="w-5 h-5 text-emerald-500" /> D3 & NAIA Programs
+                        </h3>
+                        <p className="text-slate-600 text-sm leading-relaxed">
+                          Division 3 and NAIA programs have much fewer restrictions. Coaches from these divisions can contact you, reply to your emails, and send you recruiting materials at almost any point during your high school career.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* INBOX BANNER */}
+                  <div className="bg-gradient-to-r from-purple-900 to-indigo-900 rounded-[2rem] p-8 border border-purple-700 shadow-xl relative overflow-hidden flex flex-col sm:flex-row items-center justify-between gap-6">
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-purple-500/20 blur-[80px] rounded-full pointer-events-none"></div>
+                    <div className="relative z-10 flex items-center gap-6 text-center sm:text-left">
+                      <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center border border-white/20 shrink-0 mx-auto sm:mx-0">
+                        <Mail className="w-8 h-8 text-purple-200" />
+                      </div>
+                      <div>
+                        <h3 className="text-2xl font-black text-white tracking-tight mb-1">Recruiting Inbox</h3>
+                        <p className="text-purple-200/80 font-medium text-sm">
+                          {unreadCount > 0 
+                            ? `You have ${unreadCount} unread pitches from college coaches!` 
+                            : "Coaches use the Discovery Engine to send you direct pitches."}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="relative z-10 w-full sm:w-auto shrink-0">
+                      <Link href="/dashboard/messages" className="block w-full text-center bg-white text-purple-900 hover:bg-purple-50 font-black px-8 py-4 rounded-xl shadow-lg transition-colors">
+                        View Messages {unreadCount > 0 && <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full ml-2">{unreadCount}</span>}
+                      </Link>
+                    </div>
+                  </div>
+
+                  {/* MASTER RESUME */}
+                  <div className="bg-white rounded-[2rem] p-8 md:p-10 border border-slate-200 shadow-sm h-auto flex flex-col relative overflow-hidden">
+                    {!athleteProfile?.is_premium && (
+                      <div className="absolute inset-0 z-10 bg-white/70 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center">
+                        <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4 border border-slate-200 shadow-inner">
+                          <Lock className="w-8 h-8 text-slate-400" />
+                        </div>
+                        <h3 className="text-xl font-black text-slate-900 mb-2">Resume Builder is Locked</h3>
+                        <p className="text-slate-500 font-medium mb-6 max-w-sm">Upgrade to Pro to create a master athletic resume that you can attach to any recruiting pitch with one click.</p>
+                        <Link href="/pro" className="bg-gradient-to-r from-amber-400 to-amber-500 text-amber-950 font-black px-6 py-3 rounded-xl shadow-lg hover:scale-105 transition-transform flex items-center gap-2">
+                          <Crown className="w-4 h-4" /> Unlock Pro Features
+                        </Link>
+                      </div>
+                    )}
+
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 pb-6 border-b border-slate-100 gap-4">
+                      <div>
+                        <h2 className="text-2xl font-black text-slate-900 flex items-center">
+                          <FileText className="w-6 h-6 mr-3 text-emerald-500" /> Master Resume
+                        </h2>
+                        <p className="text-slate-500 font-medium mt-1 text-sm">Save your academics and achievements. Attach this to any feed pitch instantly.</p>
+                      </div>
+                      
+                      {athleteProfile?.is_premium && (
+                        <button 
+                          onClick={handleSaveResume}
+                          disabled={isSavingResume}
+                          className="flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-white font-black px-5 py-2.5 rounded-xl text-sm transition-colors shadow-md disabled:opacity-50 shrink-0"
+                        >
+                          <Save className="w-4 h-4" /> {isSavingResume ? 'Saving...' : 'Save Resume'}
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="flex-1 flex flex-col">
+                      <textarea 
+                        value={resumeText}
+                        onChange={(e) => setResumeText(e.target.value)}
+                        disabled={!athleteProfile?.is_premium}
+                        placeholder="Example:&#10;&#10;Academics:&#10;GPA: 3.9 (Unweighted)&#10;SAT: 1450&#10;Intended Major: Business Administration&#10;&#10;Athletic Highlights:&#10;• 2024 State Finalist (400m)&#10;• 3x Varsity Letterman&#10;• Team Captain (Junior & Senior Year)"
+                        className="flex-1 w-full bg-slate-50 border border-slate-200 rounded-2xl p-5 text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white resize-none min-h-[250px]"
+                      />
+                      <p className="text-xs font-bold text-slate-400 text-right mt-3">
+                        Markdown and line breaks are supported.
                       </p>
                     </div>
-                    <div className="text-left sm:text-right">
-                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Next Mega Bonus</span>
-                      <span className="text-lg font-black text-amber-400">{base + 12} Invites</span>
-                    </div>
                   </div>
 
-                  {/* Visual Track */}
-                  <div className="relative w-full h-4 bg-slate-950 rounded-full border border-slate-800 shadow-inner mb-10 mx-auto max-w-[95%]">
+                  {/* TARGET SCHOOLS */}
+                  <div className="bg-white rounded-[2rem] p-8 md:p-10 border border-slate-200 shadow-sm relative overflow-hidden">
+                    <div className="flex items-center justify-between mb-6 border-b border-slate-100 pb-6">
+                      <div>
+                        <h3 className="text-xl font-black text-slate-900 tracking-tight flex items-center">
+                          <School className="w-6 h-6 mr-2 text-blue-600" /> Target Schools
+                        </h3>
+                        <p className="text-slate-500 font-medium text-sm mt-1">Colleges you are actively interested in.</p>
+                      </div>
+                      <div className="bg-slate-100 text-slate-600 font-bold px-3 py-1.5 rounded-lg text-xs">
+                        {savedColleges?.length || 0} Saved
+                      </div>
+                    </div>
                     
-                    {/* Fill */}
-                    <div 
-                      className="absolute left-0 top-0 h-full bg-gradient-to-r from-blue-500 via-emerald-400 to-amber-400 rounded-full transition-all duration-1000" 
-                      style={{ width: `${progressPct}%` }}
-                    >
-                      <div className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-[0_0_10px_rgba(255,255,255,0.8)]"></div>
+                    {savedColleges && savedColleges.length > 0 ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {savedColleges.map((saved) => {
+                          const college = saved.universities; 
+                          if (!college) return null;
+                          return (
+                            <div key={saved.id} className="flex items-center gap-4 p-4 rounded-2xl border border-slate-200 bg-slate-50 hover:border-blue-300 hover:bg-blue-50 transition-colors group cursor-pointer relative">
+                              <Link href={`/college/${college.id}`} className="absolute inset-0 z-10" aria-label={`View ${college.name}`}></Link>
+                              <div className="w-12 h-12 bg-white rounded-full border border-slate-200 shadow-sm flex items-center justify-center shrink-0 overflow-hidden relative z-0">
+                                {college.logo_url ? (
+                                  <img src={college.logo_url} alt={college.name} className="w-8 h-8 object-contain" />
+                                ) : (
+                                  <School className="w-6 h-6 text-slate-400" />
+                                )}
+                              </div>
+                              <div className="flex-1 truncate relative z-0">
+                                <h4 className="font-bold text-slate-900 truncate group-hover:text-blue-600 transition-colors">{college.name}</h4>
+                                <p className="text-xs font-medium text-slate-500 flex items-center mt-0.5">
+                                  {college.division || 'NCAA'} • {college.state || 'USA'}
+                                </p>
+                              </div>
+                              <button 
+                                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleRemoveCollege(saved.id); }} 
+                                 className="relative z-20 p-2 text-slate-400 hover:text-red-500 hover:bg-white rounded-lg transition-colors"
+                                 title="Remove school"
+                              >
+                                 <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 bg-slate-50 rounded-2xl border border-slate-200 border-dashed">
+                        <Bookmark className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+                        <h4 className="text-lg font-bold text-slate-900 mb-1">No schools saved yet</h4>
+                        <p className="text-sm text-slate-500 font-medium mb-4 max-w-sm mx-auto">Build your recruiting board by saving colleges that match your athletic and academic goals.</p>
+                        <Link href="/search" className="inline-flex items-center justify-center bg-white border border-slate-200 hover:border-blue-400 hover:text-blue-600 text-slate-700 font-bold px-6 py-2.5 rounded-xl transition-all shadow-sm">
+                          Open College Finder
+                        </Link>
+                      </div>
+                    )}
+                  </div>
+
+                </div>
+              )}
+
+              {/* 🕵️ TAB 3: PRO SCOUT */}
+              {activeTab === 'scout' && (
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  <div className="bg-white rounded-[2rem] p-8 md:p-10 shadow-sm border border-slate-200 h-auto flex flex-col relative overflow-hidden">
+                    {!athleteProfile?.is_premium && (
+                      <div className="absolute inset-0 z-10 bg-white/70 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center">
+                        <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4 border border-slate-200 shadow-inner">
+                          <Lock className="w-8 h-8 text-slate-400" />
+                        </div>
+                        <h3 className="text-xl font-black text-slate-900 mb-2">Pro Scout is Locked</h3>
+                        <p className="text-slate-500 font-medium mb-6 max-w-sm">Upgrade to Pro to instantly generate a recruiting score and tier projection for any competitor in the country.</p>
+                        <Link href="/pro" className="bg-gradient-to-r from-amber-400 to-amber-500 text-amber-950 font-black px-6 py-3 rounded-xl shadow-lg hover:scale-105 transition-transform flex items-center gap-2">
+                          <Crown className="w-4 h-4" /> Unlock Pro Features
+                        </Link>
+                      </div>
+                    )}
+
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 pb-6 border-b border-slate-100 gap-4">
+                      <div>
+                        <h2 className="text-2xl font-black text-slate-900 flex items-center">
+                          <Search className="w-6 h-6 mr-3 text-indigo-500" /> Pro Scout
+                        </h2>
+                        <p className="text-slate-500 font-medium mt-1 text-sm">Paste any athlete's Athletic.net link to see their recruiting score.</p>
+                      </div>
+                      <div className="bg-slate-100 text-slate-600 font-bold px-3 py-1.5 rounded-lg text-xs shrink-0">
+                        {scoutsRemaining} / 10 Daily Uses
+                      </div>
                     </div>
 
-                    {/* Nodes */}
-                    {milestones.map((m, i) => {
-                      const posPct = ((m.count - base) / 12) * 100;
-                      const isAchieved = currentRefs >= m.count;
-                      const Icon = m.icon;
-                      
-                      return (
-                        <div key={i} className="absolute top-1/2 flex flex-col items-center" style={{ left: `${posPct}%`, transform: 'translate(-50%, -50%)' }}>
-                          
-                          {/* The Node Dot */}
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center border-4 border-slate-900 z-10 transition-colors duration-500 ${isAchieved ? m.bg : 'bg-slate-800'} ${m.isMajor ? 'w-10 h-10 shadow-[0_0_15px_rgba(245,158,11,0.5)]' : ''}`}>
-                            {isAchieved ? <CheckCircle2 className="w-4 h-4 text-white" /> : <Icon className={`w-4 h-4 ${m.isMajor ? 'text-amber-400' : 'text-slate-500'}`} />}
-                          </div>
+                    <form onSubmit={handleScoutCompetitor} className="flex gap-2 mb-6">
+                      <input 
+                        type="url" 
+                        required 
+                        placeholder="Paste Athletic.net link..." 
+                        value={scoutUrl} 
+                        onChange={(e) => setScoutUrl(e.target.value)} 
+                        disabled={!athleteProfile?.is_premium || scoutsRemaining <= 0}
+                        className="flex-1 bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-sm transition-colors" 
+                      />
+                      <button 
+                        type="submit" 
+                        disabled={isScouting || !athleteProfile?.is_premium || scoutsRemaining <= 0} 
+                        className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3 rounded-xl font-bold text-sm disabled:opacity-50 transition-colors shadow-sm shrink-0 flex items-center"
+                      >
+                        {isScouting ? <RefreshCw className="w-4 h-4 animate-spin" /> : 'Scout'}
+                      </button>
+                    </form>
 
-                          {/* The Node Label */}
-                          <div className="absolute top-12 text-center w-24">
-                            <span className={`block text-[11px] font-black mb-0.5 ${isAchieved ? m.color : 'text-slate-500'}`}>{m.label}</span>
-                            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">{m.count} Invites</span>
-                          </div>
-                        </div>
-                      )
-                    })}
+                    {scoutedAthletes.length > 0 && (
+                      <div className="mt-8 space-y-4">
+                        <h4 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-4">Saved Scout Reports</h4>
+                        {scoutedAthletes.map(scout => {
+                          const proj = getAthleteProjection(scout.prs, scout.gender);
+                          return (
+                            <div key={scout.id} className="bg-slate-50 border border-slate-200 rounded-2xl p-5 relative group transition-all hover:border-indigo-300">
+                              <button
+                                onClick={() => handleRemoveScouted(scout.id)}
+                                className="absolute top-4 right-4 p-1.5 bg-white text-slate-400 hover:text-red-500 rounded-lg border border-slate-200 shadow-sm opacity-0 group-hover:opacity-100 transition-all z-20"
+                                title="Remove report"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+
+                              <div className="flex justify-between items-start mb-4 pb-4 border-b border-slate-200 pr-8">
+                                <div>
+                                  <h4 className="text-lg font-black text-slate-900">{scout.first_name} {scout.last_name}</h4>
+                                  <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-0.5">{scout.high_school}</p>
+                                </div>
+                                <div className="text-right flex flex-col items-end">
+                                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Overall Score</span>
+                                  <div className="flex items-end gap-1">
+                                    <span className="font-black text-2xl text-indigo-600 leading-none">{scout.calculated_score || '-'}</span>
+                                    <span className="text-[10px] font-bold text-slate-400 pb-0.5">/99</span>
+                                  </div>
+                                  <span className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest mt-1 bg-indigo-50 px-1.5 py-0.5 rounded">Via {proj.bestEvent}</span>
+                                </div>
+                              </div>
+
+                              <div className={`px-4 py-2 rounded-xl border mb-4 inline-block ${proj.bg || 'bg-slate-100'} ${proj.border || 'border-slate-200'}`}>
+                                <span className={`text-sm font-black ${proj.color || 'text-slate-600'}`}>{scout.calculated_tier || 'N/A'}</span>
+                              </div>
+
+                              {proj.eventBreakdowns && proj.eventBreakdowns.length > 0 && (
+                                <div className="space-y-2 mb-4 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">All Events</p>
+                                  {proj.eventBreakdowns.map((ev: any, idx: number) => (
+                                    <div key={idx} className="flex items-center justify-between bg-white border border-slate-100 rounded-lg p-2.5 shadow-sm">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-xs font-black text-slate-700">{ev.event}</span>
+                                        <span className="text-[10px] font-medium text-slate-500">{ev.mark}</span>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-[10px] font-bold text-slate-400">{ev.currentTier}</span>
+                                        <span className="text-xs font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">{ev.score}</span>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              <button 
+                                onClick={() => setActiveCardAthlete(scout)}
+                                className="w-full mt-2 bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 rounded-xl text-xs transition-colors flex items-center justify-center gap-2 shadow-sm"
+                              >
+                                <Share2 className="w-4 h-4" /> Export Scout Card
+                              </button>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
                 </div>
+              )}
 
-              </div>
+              {/* 🎁 TAB 4: REWARDS */}
+              {activeTab === 'rewards' && (
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  
+                  {/* TITLE MANAGER */}
+                  <div className="bg-white rounded-[2rem] p-8 border border-slate-200 shadow-sm relative">
+                    <div className="flex items-center justify-between mb-6">
+                      <div>
+                        <h3 className="text-xl font-black text-slate-900 tracking-tight">Rank Titles</h3>
+                        <p className="text-xs text-slate-500 font-medium mt-1">Equip your highest earned rank.</p>
+                      </div>
+                      <Trophy className="w-6 h-6 text-slate-300" />
+                    </div>
+
+                    {/* 🚨 NEW SLEEK TITLE DROPDOWN MENU 🚨 */}
+                    <div className="relative mb-6">
+                      <button 
+                        onClick={() => setIsTitleDropdownOpen(!isTitleDropdownOpen)}
+                        className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-all text-left bg-blue-50 border-blue-300 shadow-sm`}
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className={`px-3 py-1.5 rounded-lg text-[10px] font-black tracking-widest uppercase text-white ${activeTitle.badgeClass}`}>
+                            {activeTitle.name}
+                          </div>
+                          <span className="block text-[10px] font-bold text-blue-500 uppercase tracking-wider">Currently Equipped</span>
+                        </div>
+                        {isTitleDropdownOpen ? <ChevronUp className="w-5 h-5 text-blue-500" /> : <ChevronDown className="w-5 h-5 text-blue-500" />}
+                      </button>
+
+                      {isTitleDropdownOpen && (
+                        <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl border border-slate-200 shadow-2xl z-20 overflow-hidden animate-in fade-in slide-in-from-top-2">
+                          <div className="max-h-64 overflow-y-auto p-2 space-y-1 custom-scrollbar">
+                            {EARNED_TITLES.map((title) => {
+                              const isUnlocked = highestPercentile <= title.reqPercentile;
+                              const isEquipped = equippedTitle === title.id;
+
+                              return (
+                                <button 
+                                  key={title.id}
+                                  disabled={!isUnlocked || isEquipping}
+                                  onClick={() => handleEquipTitle(title.id)}
+                                  className={`w-full flex items-center justify-between p-3 rounded-xl transition-all text-left ${
+                                    isEquipped 
+                                      ? 'bg-blue-50/50' 
+                                      : isUnlocked 
+                                        ? 'hover:bg-slate-50' 
+                                        : 'opacity-40 cursor-not-allowed'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <div className={`px-2 py-1 rounded text-[9px] font-black tracking-widest uppercase text-white ${isUnlocked ? title.badgeClass : 'bg-slate-300 text-slate-500 border border-slate-400'}`}>
+                                      {title.name}
+                                    </div>
+                                    {!isUnlocked && <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider flex items-center"><Lock className="w-2.5 h-2.5 inline mr-1 -mt-0.5" />{title.unlockText}</span>}
+                                  </div>
+                                  {isEquipped && <CheckCircle2 className="w-4 h-4 text-blue-500" />}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <Link href="/dashboard/customize" className={`w-full flex items-center justify-center py-4 rounded-xl font-black transition-all bg-slate-900 text-white hover:bg-slate-800 hover:-translate-y-0.5 shadow-md`}>
+                      <Paintbrush className="w-5 h-5 mr-2" /> Customize Profile
+                    </Link>
+                  </div>
+
+                  {/* REFERRAL PROGRAM WITH MILESTONES */}
+                  <div className="bg-slate-900 rounded-[2rem] p-8 md:p-12 border border-slate-800 shadow-xl relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 blur-[80px] rounded-full pointer-events-none"></div>
+                    
+                    <div className="flex flex-col md:flex-row items-start justify-between gap-12 relative z-10">
+                      <div className="flex-1 w-full">
+                        <h3 className="text-3xl font-black text-white tracking-tight mb-3 flex items-center gap-3">
+                          <Users className="w-8 h-8 text-emerald-400" /> Invite & Earn
+                        </h3>
+                        <p className="text-slate-300 font-medium text-lg mb-6 leading-relaxed max-w-xl">
+                          Get <strong className="text-amber-400">1 Free Boost</strong> for every single teammate that uses your unique code. Reach 5 invites to unlock the exclusive Plasma Border!
+                        </p>
+                        
+                        {!myReferralCode ? (
+                          <div className="bg-slate-800 border border-slate-700 text-slate-400 p-4 rounded-xl text-sm font-bold inline-block">
+                            Sync your Athletic.net profile above to generate your unique invite code!
+                          </div>
+                        ) : (
+                          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                            <div className="bg-slate-950 px-6 py-3 rounded-xl border border-emerald-500/30 flex items-center gap-4 shadow-inner">
+                              <span className="text-[10px] text-slate-500 uppercase tracking-widest font-black">Your Code:</span>
+                              <span className="text-2xl font-mono font-black tracking-widest text-emerald-400">{myReferralCode}</span>
+                            </div>
+                            <button 
+                              onClick={() => handleShareCode(myReferralCode)}
+                              className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-6 py-3.5 rounded-xl font-black transition-colors flex items-center gap-2"
+                            >
+                              <Share2 className="w-5 h-5" /> Share Code
+                            </button>
+                          </div>
+                        )}
+
+                        {showCodeEntry && (
+                          <div className="mt-8 bg-slate-800/50 p-6 rounded-2xl border border-slate-700 max-w-md">
+                            <h4 className="text-white font-bold mb-2 flex items-center gap-2">
+                              <Gift className="w-5 h-5 text-fuchsia-400" /> Were you invited?
+                            </h4>
+                            <p className="text-xs text-slate-400 mb-4">Enter your teammate's code below to get a free Boost!</p>
+                            <form onSubmit={handleSubmitInviteCode} className="flex gap-2">
+                              <input 
+                                type="text" 
+                                required
+                                placeholder="Enter Code (e.g. 123456)" 
+                                value={inviteCodeInput}
+                                onChange={(e) => setInviteCodeInput(e.target.value)}
+                                className="flex-1 bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-2 focus:outline-none focus:border-fuchsia-500 font-mono text-sm"
+                              />
+                              <button 
+                                type="submit" 
+                                disabled={isSubmittingCode}
+                                className="bg-fuchsia-600 hover:bg-fuchsia-500 text-white px-4 py-2 rounded-xl font-bold text-sm disabled:opacity-50"
+                              >
+                                {isSubmittingCode ? '...' : 'Submit'}
+                              </button>
+                            </form>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="mt-12 pt-8 border-t border-slate-800 relative z-10">
+                      <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-12 sm:mb-8 gap-4">
+                        <div>
+                          <h4 className="text-xl font-black text-white flex items-center gap-2">
+                            <Trophy className="w-5 h-5 text-amber-400"/> Reward Track
+                          </h4>
+                          <p className="text-sm text-slate-400 font-medium mt-1">
+                            You have <strong className="text-white">{currentRefs}</strong> verified invites.
+                          </p>
+                        </div>
+                        <div className="text-left sm:text-right">
+                          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Next Mega Bonus</span>
+                          <span className="text-lg font-black text-amber-400">{base + 5} Invites</span>
+                        </div>
+                      </div>
+
+                      {/* Visual Track */}
+                      <div className="relative w-full h-4 bg-slate-950 rounded-full border border-slate-800 shadow-inner mb-10 mx-auto max-w-[95%]">
+                        
+                        <div 
+                          className="absolute left-0 top-0 h-full bg-gradient-to-r from-blue-500 via-emerald-400 to-amber-400 rounded-full transition-all duration-1000" 
+                          style={{ width: `${progressPct}%` }}
+                        >
+                          <div className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-[0_0_10px_rgba(255,255,255,0.8)]"></div>
+                        </div>
+
+                        {milestones.map((m, i) => {
+                          const posPct = ((m.count - base) / 5) * 100;
+                          const isAchieved = currentRefs >= m.count;
+                          const Icon = m.icon;
+                          
+                          return (
+                            <div key={i} className="absolute top-1/2 flex flex-col items-center" style={{ left: `${posPct}%`, transform: 'translate(-50%, -50%)' }}>
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center border-4 border-slate-900 z-10 transition-colors duration-500 ${isAchieved ? m.bg : 'bg-slate-800'} ${m.isMajor ? 'w-10 h-10 shadow-[0_0_15px_rgba(245,158,11,0.5)]' : ''}`}>
+                                {isAchieved ? <CheckCircle2 className="w-4 h-4 text-white" /> : <Icon className={`w-4 h-4 ${m.isMajor ? 'text-amber-400' : 'text-slate-500'}`} />}
+                              </div>
+
+                              <div className="absolute top-12 text-center w-24">
+                                <span className={`block text-[11px] font-black mb-0.5 ${isAchieved ? m.color : 'text-slate-500'}`}>{m.label}</span>
+                                <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">{m.count} Invites</span>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
             </div>
-
           </div>
         )}
       </div>
+
+      {/* SCOUT CARD MODAL */}
+      {activeCardAthlete && cardProjection && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="flex flex-col items-center max-w-md w-full">
+            
+            <div className="flex justify-between items-center w-full mb-4">
+              <h3 className="text-white font-black text-xl">Scout Card</h3>
+              <button onClick={() => setActiveCardAthlete(null)} className="p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors">
+                <X className="w-5 h-5 text-white" />
+              </button>
+            </div>
+
+            <div id="scout-card-export" className={`relative w-[340px] aspect-[4/5] rounded-3xl overflow-hidden shadow-2xl bg-gradient-to-b ${cardAccentColor} border-4 flex flex-col p-6`}>
+               <div className={`absolute -top-10 -right-10 w-48 h-48 rounded-full blur-[60px] ${cardGlowColor}`}></div>
+               <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
+
+               <div className="flex justify-between items-start z-10">
+                  <div className="flex flex-col items-center bg-black/30 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/10 shadow-lg">
+                     <span className="text-5xl font-black text-white leading-none tracking-tighter">{cardProjection.overallScore}</span>
+                     <span className="text-[10px] font-black text-white/80 uppercase tracking-widest mt-1">OVR</span>
+                  </div>
+                  <ShieldCheck className="w-10 h-10 text-white/50" />
+               </div>
+
+               <div className="text-center mt-auto z-10">
+                  <h2 className="text-3xl font-black text-white uppercase italic tracking-tight drop-shadow-md">
+                    {activeCardAthlete.first_name} {activeCardAthlete.last_name}
+                  </h2>
+                  <p className="text-sm text-white/80 font-bold tracking-widest uppercase mt-1">{activeCardAthlete.high_school}</p>
+                  <div className="inline-block px-3 py-1 rounded-md bg-black/30 border border-white/10 mt-3">
+                    <p className="text-[10px] font-black text-white uppercase tracking-widest">{cardProjection.overallLabel}</p>
+                  </div>
+               </div>
+
+               <div className="w-full h-px bg-gradient-to-r from-transparent via-white/40 to-transparent my-6 z-10"></div>
+
+               <div className="flex justify-around z-10 text-white mb-2">
+                  {cardProjection.eventBreakdowns.slice(0,3).map((ev: any, idx: number) => (
+                    <div key={idx} className="flex flex-col items-center">
+                       <span className="text-xl font-black">{ev.mark}</span>
+                       <span className="text-[9px] font-bold uppercase text-white/60 tracking-widest mt-1 text-center max-w-[80px] truncate">{ev.event}</span>
+                    </div>
+                  ))}
+               </div>
+
+               <div className="absolute bottom-3 left-0 right-0 text-center z-10">
+                  <span className="text-[8px] font-bold uppercase tracking-widest text-white/30">Verified by ChasedSports</span>
+               </div>
+            </div>
+
+            <button 
+              onClick={handleDownloadCard} 
+              disabled={isExportingCard}
+              className="mt-8 w-full max-w-[340px] bg-white text-slate-900 font-black py-4 rounded-xl shadow-xl hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-2"
+            >
+              {isExportingCard ? <RefreshCw className="w-5 h-5 animate-spin" /> : <><Download className="w-5 h-5" /> Download Scout Card</>}
+            </button>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
