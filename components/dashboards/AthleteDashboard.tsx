@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
-import { Activity, ShieldCheck, Link as LinkIcon, Trophy, BookOpen, LogOut, Medal, Timer, TrendingUp, CheckCircle2, Search, AlertCircle, Zap, Calendar, MapPin, Camera, Mail, RefreshCw, School, Lock, AlertTriangle, ExternalLink, ChevronRight, Check, Clock, Edit2, MousePointer2, Flame, Bookmark, Share2, Instagram, X, Users, Gift, Paintbrush, ArrowDown, HelpCircle, Globe, UserCircle2, Eye, BarChart3, Rocket, FileText, Save, Crown, Target, Swords, ArrowRight, Trash2, Download, ChevronDown, ChevronUp } from 'lucide-react';
+import { Activity, ShieldCheck, Link as LinkIcon, Trophy, BookOpen, LogOut, Medal, Timer, TrendingUp, CheckCircle2, Search, AlertCircle, Zap, Calendar, MapPin, Camera, Mail, RefreshCw, School, Lock, AlertTriangle, ExternalLink, ChevronRight, Check, Clock, Edit2, MousePointer2, Flame, Bookmark, BookmarkPlus, Share2, Instagram, X, Users, Gift, Paintbrush, ArrowDown, HelpCircle, Globe, UserCircle2, Eye, BarChart3, Rocket, FileText, Save, Crown, Target, Swords, ArrowRight, Trash2, Download, ChevronDown, ChevronUp } from 'lucide-react';
 import Link from 'next/link';
 import imageCompression from 'browser-image-compression';
 
@@ -331,6 +331,11 @@ export default function DashboardPage() {
   const [editLastName, setEditLastName] = useState('');
   const [showLinkModal, setShowLinkModal] = useState(false);
 
+  // 🚨 COLLEGE FINDER STATE 🚨
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isSearchingColleges, setIsSearchingColleges] = useState(false);
+
   const showToast = (message: string, type: 'error' | 'success' = 'error') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 4000);
@@ -352,6 +357,60 @@ export default function DashboardPage() {
       showToast("School removed from target list.", "success");
     } catch (err: any) {
       showToast(err.message, 'error');
+    }
+  };
+
+  // 🚨 COLLEGE FINDER: LIVE SEARCH EFFECT 🚨
+  useEffect(() => {
+    const searchColleges = async () => {
+      if (searchQuery.trim().length < 3) {
+        setSearchResults([]);
+        return;
+      }
+      setIsSearchingColleges(true);
+      const { data, error } = await supabase
+        .from('universities')
+        .select('id, name, state, division, logo_url')
+        .ilike('name', `%${searchQuery.trim()}%`)
+        .limit(6);
+      
+      if (data) setSearchResults(data);
+      setIsSearchingColleges(false);
+    };
+    
+    const timeoutId = setTimeout(searchColleges, 400);
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery, supabase]);
+
+  // 🚨 COLLEGE FINDER: SAVE SCHOOL 🚨
+  const handleSaveCollege = async (collegeId: string) => {
+    if (!currentUserId) return;
+    try {
+      // Check if already saved
+      const exists = savedColleges.some(c => c.college_id === collegeId);
+      if (exists) {
+        showToast("College is already on your board!", "error");
+        return;
+      }
+
+      const { error } = await supabase.from('saved_colleges').insert({
+        athlete_id: currentUserId,
+        college_id: collegeId
+      });
+      if (error) throw error;
+      
+      // Refresh board
+      const { data: savedCollegesData } = await supabase
+        .from('saved_colleges')
+        .select(`id, college_id, universities (*)`)
+        .eq('athlete_id', currentUserId);
+        
+      if (savedCollegesData) setSavedColleges(savedCollegesData);
+      
+      setSearchQuery('');
+      showToast("College added to your board!", "success");
+    } catch (err: any) {
+      showToast(err.message, "error");
     }
   };
 
@@ -1106,7 +1165,7 @@ export default function DashboardPage() {
                <div className="w-full h-px bg-gradient-to-r from-transparent via-white/40 to-transparent my-6 z-10"></div>
 
                <div className="flex justify-around z-10 text-white mb-2">
-                  {activeCardAthlete.prs.slice(0,3).map((ev: any, idx: number) => (
+                  {cardProjection.eventBreakdowns.slice(0,3).map((ev: any, idx: number) => (
                     <div key={idx} className="flex flex-col items-center">
                        <span className="text-xl font-black">{ev.mark}</span>
                        <span className="text-[9px] font-bold uppercase text-white/60 tracking-widest mt-1 text-center max-w-[80px] truncate">{ev.event}</span>
@@ -1171,9 +1230,16 @@ export default function DashboardPage() {
             
             {/* 🚨 VISIBLE TOP-LEVEL RANK DISPLAY */}
             <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 mb-3">
-              <div className={`inline-flex items-center px-3 py-1 rounded-full text-[10px] sm:text-xs font-black tracking-widest uppercase border shadow-sm ${activeTitle.badgeClass}`}>
-                <Trophy className="w-3.5 h-3.5 mr-1.5" /> {activeTitle.name} Rank
-              </div>
+              {isSkipped ? (
+                <div className={`inline-flex items-center px-3 py-1 rounded-full text-[10px] sm:text-xs font-black tracking-widest uppercase border shadow-sm bg-slate-800 border-slate-700 text-slate-300`}>
+                  <Globe className="w-3.5 h-3.5 mr-1.5" /> General Profile
+                </div>
+              ) : (
+                <div className={`inline-flex items-center px-3 py-1 rounded-full text-[10px] sm:text-xs font-black tracking-widest uppercase border shadow-sm ${activeTitle.badgeClass}`}>
+                  <Trophy className="w-3.5 h-3.5 mr-1.5" /> {activeTitle.name} Rank
+                </div>
+              )}
+              
               {athleteProfile?.is_premium && (
                 <div className={`inline-flex items-center px-3 py-1 rounded-full text-[10px] sm:text-xs font-black tracking-widest uppercase border bg-amber-500/20 border-amber-400/30 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.2)]`}>
                   <Crown className="w-3.5 h-3.5 mr-1.5" /> Pro Member
@@ -1184,14 +1250,18 @@ export default function DashboardPage() {
             <div className="group relative w-fit mx-auto md:mx-0">
               <h1 className="text-4xl font-black mb-2 flex flex-col md:flex-row md:items-center justify-center md:justify-start gap-2">
                 {athleteProfile?.first_name ? `${athleteProfile.first_name} ${athleteProfile.last_name}` : 'Welcome, Athlete'}
-                {athleteProfile?.trust_level! > 0 && (
+                {athleteProfile?.trust_level! > 0 && !isSkipped && (
                   <span title="Verified Athlete" className="flex items-center shrink-0">
                     <CheckCircle2 className="w-6 h-6 text-green-400" />
                   </span>
                 )}
               </h1>
               <p className="text-lg text-slate-400 font-medium flex items-center justify-center md:justify-start gap-2">
-                <MapPin className="w-4 h-4 opacity-70" /> {athleteProfile?.high_school || 'Set up your profile'}
+                <MapPin className="w-4 h-4 opacity-70" /> 
+                {isSkipped 
+                  ? (athleteProfile?.high_school ? `${athleteProfile.high_school} • Class of ${athleteProfile.grad_year}` : 'College Recruiting Hub')
+                  : (athleteProfile?.high_school || 'Set up your profile')
+                }
               </p>
             </div>
           </div>
@@ -1315,6 +1385,108 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {/* 🚨 RESTORED VERIFY OWNERSHIP BLOCK 🚨 */}
+        {isUnverified && !noProfileLinked && !isSkipped && (
+          <div className="bg-gradient-to-r from-amber-500 to-orange-600 rounded-[2rem] p-8 md:p-10 border border-orange-400 shadow-2xl relative overflow-hidden mb-10 mx-auto text-white">
+            <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
+              
+              {!showVerificationStep ? (
+                <>
+                  <div>
+                    <h2 className="text-3xl font-black tracking-tight mb-2 flex items-center">
+                      <AlertTriangle className="w-8 h-8 mr-3 text-orange-200" /> Verify Ownership
+                    </h2>
+                    <p className="text-orange-100 font-medium text-lg mb-2">We found your profile! To protect athlete data, you must prove you own this profile before you can access your dashboard.</p>
+                  </div>
+                  <button onClick={beginVerification} className="w-full md:w-auto bg-slate-900 hover:bg-black text-white px-8 py-4 rounded-xl font-black transition-transform hover:scale-105 shadow-xl shrink-0 text-lg flex items-center justify-center">
+                    Verify Profile <ArrowDown className="w-5 h-5 ml-2 animate-bounce" />
+                  </button>
+                </>
+              ) : (
+                <div className="w-full">
+                  <div className="flex justify-between items-start mb-6">
+                    <div>
+                      <h3 className="text-2xl font-black flex items-center">
+                        <ShieldCheck className="w-6 h-6 mr-2" /> Paste Your Secret Code
+                      </h3>
+                      <p className="text-orange-100 font-medium text-sm mt-1 flex items-center gap-1.5 bg-black/10 px-3 py-1.5 rounded-lg inline-block">
+                        <Lock className="w-3.5 h-3.5 inline" /> You must be logged into Athletic.net on a web browser.
+                      </p>
+                    </div>
+                    <button onClick={() => { setShowVerificationStep(false); setErrorMessage(''); }} className="p-2 hover:bg-white/10 rounded-full transition-colors"><X className="w-6 h-6" /></button>
+                  </div>
+                  
+                  {errorMessage && (
+                    <div className="bg-red-900/50 border border-red-400/50 text-white p-4 rounded-xl mb-6 text-sm font-bold flex items-center gap-3 animate-pulse shadow-inner">
+                      <AlertCircle className="w-5 h-5 shrink-0 text-red-400" /> {errorMessage}
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 items-stretch">
+                    <div className="lg:col-span-3 space-y-4 text-orange-50 font-medium bg-black/20 p-6 rounded-2xl border border-white/10 shadow-inner">
+                      <div className="flex gap-3">
+                        <span className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center font-black text-sm shrink-0">1</span>
+                        <p>Sign into Athletic.net on your computer or phone browser.</p>
+                      </div>
+                      <div className="flex gap-3">
+                        <span className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center font-black text-sm shrink-0">2</span>
+                        <p>Go to your profile and click the <strong className="text-white">Pencil Icon</strong> next to your name.</p>
+                      </div>
+                      <div className="flex gap-3">
+                        <span className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center font-black text-sm shrink-0">3</span>
+                        <p>Paste the code below exactly into your <strong className="text-white underline decoration-wavy">Username</strong> or First Name field and click Save.</p>
+                      </div>
+                      
+                      <div className="bg-slate-900/90 py-5 rounded-xl mt-6 border border-white/20 flex flex-col items-center justify-center shadow-2xl relative overflow-hidden">
+                        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10 pointer-events-none"></div>
+                        <span className="text-[10px] text-orange-400 uppercase tracking-widest font-bold mb-1 relative z-10">Your Code</span>
+                        <span className="text-5xl font-mono font-black tracking-widest text-emerald-400 relative z-10">{verificationCode}</span>
+                      </div>
+                    </div>
+
+                    <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-xl border border-slate-200 text-slate-800 relative transform rotate-1 hover:rotate-0 transition-transform flex flex-col justify-center">
+                      <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-4 border-b pb-2 flex items-center gap-1.5"><HelpCircle className="w-3.5 h-3.5" /> What to look for</div>
+                      <div className="flex items-center gap-4">
+                        <div className="w-14 h-14 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-black text-xl shadow-inner border border-blue-200 shrink-0">LS</div>
+                        <div>
+                          <h4 className="text-xl font-bold text-slate-900 tracking-tight">Luke Skywalker</h4>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-slate-500 font-medium text-xs border-r pr-2">South Albany HS</span>
+                            <div className="relative">
+                              <div className="p-1.5 bg-slate-100 border border-slate-200 rounded hover:bg-slate-200 flex items-center justify-center relative z-10 shadow-sm cursor-pointer">
+                                <Edit2 className="w-3 h-3 text-slate-600" />
+                              </div>
+                              <span className="absolute inset-0 rounded bg-orange-400 animate-ping opacity-75"></span>
+                              <div className="absolute -right-8 -top-8 animate-bounce text-orange-500 flex flex-col items-center pointer-events-none">
+                                <span className="bg-orange-500 text-white text-[9px] font-black px-2 py-0.5 rounded shadow-md mb-1 whitespace-nowrap">Click This!</span>
+                                <MousePointer2 className="w-4 h-4 fill-current" />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="mt-4 pt-4 border-t border-slate-100 border-dashed">
+                         <div className="bg-slate-50 border border-slate-200 p-2 rounded text-xs font-mono text-slate-400 flex items-center">
+                            <span className="w-16">Username:</span>
+                            <span className="text-emerald-600 font-bold ml-2 bg-emerald-50 px-1 rounded">{verificationCode}</span>
+                         </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-8 text-center">
+                    <button onClick={confirmVerification} disabled={isVerifying} className="w-full sm:w-auto bg-slate-900 hover:bg-black text-white px-10 py-4 rounded-xl font-black disabled:opacity-50 transition-transform hover:scale-[1.02] active:scale-[0.98] shadow-2xl flex justify-center items-center text-lg mx-auto">
+                      {isVerifying ? <><RefreshCw className="w-5 h-5 mr-2 animate-spin text-emerald-400" /> Checking Athletic.net...</> : 'I Saved It - Check My Profile!'}
+                    </button>
+                    <p className="text-xs text-orange-200 font-medium mt-3 opacity-80">You can safely delete the code from your Athletic.net profile right after we verify you.</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* 🚨 EXCLUSIVE "SKIPPED / GENERAL ATHLETE" DASHBOARD 🚨 */}
         {athleteProfile && isSkipped && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-8 animate-in fade-in slide-in-from-bottom-4">
@@ -1354,20 +1526,66 @@ export default function DashboardPage() {
             {/* RIGHT COLUMN: CORE TOOLS */}
             <div className="lg:col-span-2 space-y-6">
               
-              {/* TARGET SCHOOLS */}
-              <div className="bg-white rounded-[2rem] p-8 md:p-10 shadow-sm border border-slate-200 relative overflow-hidden h-full flex flex-col">
-                <div className="flex items-center justify-between mb-8 border-b border-slate-100 pb-6">
+              {/* TARGET SCHOOLS W/ LIVE COLLEGE FINDER */}
+              <div className="bg-white rounded-[2rem] p-8 md:p-10 shadow-sm border border-slate-200 relative overflow-visible h-full flex flex-col z-20">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 pb-6 border-b border-slate-100 gap-4">
                   <div>
                     <h3 className="text-2xl font-black text-slate-900 tracking-tight flex items-center">
-                      <School className="w-6 h-6 mr-3 text-blue-600" /> Target Schools
+                      <School className="w-6 h-6 mr-3 text-blue-600" /> My Recruiting Board
                     </h3>
-                    <p className="text-slate-500 font-medium text-sm mt-1">Colleges you are actively interested in.</p>
+                    <p className="text-slate-500 font-medium text-sm mt-1">Search and save colleges you are actively interested in.</p>
                   </div>
-                  <div className="bg-slate-100 text-slate-600 font-bold px-3 py-1.5 rounded-lg text-xs">
+                  <div className="bg-slate-100 text-slate-600 font-bold px-3 py-1.5 rounded-lg text-xs shrink-0">
                     {savedColleges?.length || 0} Saved
                   </div>
                 </div>
+
+                {/* 🚨 LIVE COLLEGE FINDER WIDGET 🚨 */}
+                <div className="relative mb-8">
+                  <div className="flex items-center bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 focus-within:ring-2 focus-within:ring-blue-500 focus-within:bg-white transition-all shadow-sm">
+                     <Search className="w-5 h-5 text-slate-400 mr-3 shrink-0" />
+                     <input 
+                       type="text"
+                       placeholder="Search for any college (e.g., Oregon, UCLA)..."
+                       value={searchQuery}
+                       onChange={(e) => setSearchQuery(e.target.value)}
+                       className="w-full bg-transparent focus:outline-none text-sm font-bold text-slate-900 placeholder:text-slate-400 placeholder:font-medium"
+                     />
+                     {isSearchingColleges && <RefreshCw className="w-4 h-4 text-blue-500 animate-spin" />}
+                  </div>
+                  
+                  {/* Dropdown Results */}
+                  {searchQuery.length >= 3 && searchResults.length > 0 && (
+                     <div className="absolute top-full mt-2 left-0 right-0 bg-white rounded-xl border border-slate-200 shadow-xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2">
+                        {searchResults.map((uni: any) => {
+                          const isAlreadySaved = savedColleges.some(c => c.college_id === uni.id);
+                          return (
+                            <div key={uni.id} className="flex items-center justify-between p-4 border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
+                                <Link href={`/college/${uni.id}`} className="flex items-center gap-4 flex-1">
+                                  <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center shrink-0 border border-slate-200 overflow-hidden shadow-sm">
+                                      {uni.logo_url ? <img src={uni.logo_url} className="w-8 h-8 object-contain"/> : <School className="w-5 h-5 text-slate-400" />}
+                                  </div>
+                                  <div>
+                                      <p className="text-sm font-bold text-slate-900">{uni.name}</p>
+                                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">{uni.division} • {uni.state}</p>
+                                  </div>
+                                </Link>
+                                <button 
+                                  onClick={() => handleSaveCollege(uni.id)} 
+                                  disabled={isAlreadySaved}
+                                  className={`p-2.5 rounded-lg transition-colors shadow-sm border shrink-0 ${isAlreadySaved ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed' : 'bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white border-blue-200 hover:border-blue-600'}`}
+                                  title={isAlreadySaved ? "Already saved" : "Save to board"}
+                                >
+                                  {isAlreadySaved ? <Check className="w-4 h-4" /> : <BookmarkPlus className="w-4 h-4" />}
+                                </button>
+                            </div>
+                          )
+                        })}
+                     </div>
+                  )}
+                </div>
                 
+                {/* Board List */}
                 {savedColleges && savedColleges.length > 0 ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 flex-1">
                     {savedColleges.map((saved) => {
@@ -1403,17 +1621,14 @@ export default function DashboardPage() {
                 ) : (
                   <div className="text-center py-12 bg-slate-50 rounded-2xl border border-slate-200 border-dashed flex-1 flex flex-col items-center justify-center">
                     <Bookmark className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                    <h4 className="text-xl font-black text-slate-900 mb-2">No schools saved yet</h4>
-                    <p className="text-sm text-slate-500 font-medium mb-6 max-w-sm mx-auto">Build your recruiting board by saving colleges that match your athletic and academic goals.</p>
-                    <Link href="/search" className="inline-flex items-center justify-center bg-blue-600 hover:bg-blue-500 text-white font-bold px-8 py-3 rounded-xl transition-all shadow-md">
-                      Open College Finder
-                    </Link>
+                    <h4 className="text-xl font-black text-slate-900 mb-2">Your board is empty</h4>
+                    <p className="text-sm text-slate-500 font-medium max-w-sm mx-auto">Use the search bar above to look up colleges and add them to your recruiting target list.</p>
                   </div>
                 )}
               </div>
 
               {/* MASTER RESUME */}
-              <div className="bg-white rounded-[2rem] p-8 md:p-10 border border-slate-200 shadow-sm h-auto flex flex-col relative overflow-hidden">
+              <div className="bg-white rounded-[2rem] p-8 md:p-10 border border-slate-200 shadow-sm h-auto flex flex-col relative overflow-hidden z-10">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 pb-6 border-b border-slate-100 gap-4">
                   <div>
                     <h2 className="text-2xl font-black text-slate-900 flex items-center">

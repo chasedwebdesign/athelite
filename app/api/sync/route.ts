@@ -20,53 +20,56 @@ const FIELD_EVENTS = ['Shot Put', 'Discus', 'Javelin', 'Hammer', 'High Jump', 'P
 
 export async function POST(req: Request) {
   const { url } = await req.json();
-  const BROWSERLESS_API_KEY = process.env.BROWSERLESS_API_KEY;
+  const ZENROWS_API_KEY = process.env.ZENROWS_API_KEY; // 🚨 New ZenRows Key
 
   if (!url || !url.includes('athletic.net')) {
     return NextResponse.json({ error: 'Invalid URL' }, { status: 400 });
   }
 
-  // 🚨 INVISIBLE BACKEND QUEUE: Silently retries up to 3 times on Vercel
-  const MAX_RETRIES = 3;
+  if (!ZENROWS_API_KEY) {
+    return NextResponse.json({ error: 'ZenRows API key is missing from environment variables.' }, { status: 500 });
+  }
+
+  const MAX_RETRIES = 2;
   let attempt = 0;
 
   while (attempt < MAX_RETRIES) {
-    let browser; 
+    let browser: any = null; 
     attempt++;
 
     try {
-      console.log(`☁️ Connecting securely to Browserless.io... (Attempt ${attempt}/${MAX_RETRIES})`);
+      console.log(`☁️ Connecting securely to ZenRows... (Attempt ${attempt}/${MAX_RETRIES})`);
       
+      // 🚨 ZENROWS MAGIC: We point Puppeteer to ZenRows, and they handle Cloudflare, residential proxies, and fingerprinting!
       browser = await puppeteerCore.connect({
-        browserWSEndpoint: `wss://chrome.browserless.io?token=${BROWSERLESS_API_KEY}&stealth=true`
+        browserWSEndpoint: `wss://browser.zenrows.com?apikey=${ZENROWS_API_KEY}`
       });
       
       const page = await browser.newPage();
       
-      await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-      await page.setExtraHTTPHeaders({
-        'Accept-Language': 'en-US,en;q=0.9',
-      });
-
-      await page.setRequestInterception(true);
-      page.on('request', (request) => {
-        // 🚨 CRITICAL FIX: We removed 'stylesheet' from this list so the Avatar CSS actually loads!
-        if (['image', 'media', 'font'].includes(request.resourceType())) request.abort();
-        else request.continue();
-      });
-
+      // ZenRows already handles stealth and user agents internally.
+      
       console.log(`🚀 Step 1: Loading Athlete Page -> ${url}`);
       
+      // We give it 30s because ZenRows is doing heavy CAPTCHA solving behind the scenes before the page loads.
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
       
-      // Wait for the PR times to show up
+      // Failsafe: if ZenRows somehow passes back a Cloudflare check page, wait a few seconds.
+      const pageTitle = await page.title();
+      if (pageTitle.includes('Just a moment') || pageTitle.includes('Attention Required') || pageTitle.toLowerCase() === 'www.athletic.net') {
+          console.log("🛡️ Cloudflare check detected! ZenRows is solving it...");
+          await new Promise(r => setTimeout(r, 5000));
+      }
+
+      await page.waitForSelector('h1', { timeout: 5000 }).catch(() => console.log("H1 not found, might be a malformed page."));
+      
       await page.waitForFunction(() => {
         const text = document.body.innerText;
         return text.includes('PB') || text.includes('PR') || text.includes('SR');
-      }, { timeout: 15000 }).catch(() => console.log("Timeout waiting for PR tags. Proceeding anyway."));
+      }, { timeout: 8000 }).catch(() => console.log("Timeout waiting for PR tags. Proceeding anyway."));
 
-      // 🚨 THE STARE-DOWN FIX: Force the scraper to wait until the Vue.js circle changes to Pink or Blue
       console.log("⏳ Waiting for Avatar CSS to paint...");
+      
       await page.waitForFunction(() => {
         const h1 = document.querySelector('h1');
         if (!h1) return false;
@@ -82,35 +85,36 @@ export async function POST(req: Request) {
             
             const combined = (bg + ' ' + inline + ' ' + fill).toLowerCase();
             
-            // Check for the specific hex codes or strong RGB math
-            if (combined.includes('rgb(255, 163, 172)') || combined.includes('#ffa3ac') || combined.includes('pink')) return true; // It's a girl
-            if (combined.includes('rgb(61, 142, 232)') || combined.includes('#3d8ee8') || combined.includes('blue')) return true; // It's a boy
+            if (combined.includes('rgb(255, 163, 172)') || combined.includes('#ffa3ac') || combined.includes('pink')) return true; 
+            if (combined.includes('rgb(61, 142, 232)') || combined.includes('#3d8ee8') || combined.includes('blue')) return true; 
             
             const rgbMatch = bg.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
             if (rgbMatch) {
                 const r = parseInt(rgbMatch[1]);
                 const g = parseInt(rgbMatch[2]);
                 const b = parseInt(rgbMatch[3]);
-                // If it's heavily red/pink or heavily blue, it's fully rendered
                 if ((r > 200 && r > b + 20 && r > g + 20) || (b > 200 && b > r + 20 && b > g + 20)) {
                     return true;
                 }
             }
         }
         return false;
-      }, { timeout: 8000 }).catch(() => console.log("⚠️ Avatar color wait timed out, relying on script fallbacks."));
+      }, { timeout: 2000 }).catch(() => console.log("⚠️ Avatar color wait timed out, relying on script fallbacks."));
 
-      // Extra 500ms pad to ensure all JS objects settle
-      await new Promise(r => setTimeout(r, 500));
+      await new Promise(r => setTimeout(r, 200));
 
-      let extractedData = await page.evaluate((eventsList, fieldEventsList) => {
+      let extractedData = await page.evaluate((eventsList: string[], fieldEventsList: string[]) => {
         
-        // Nuke sidebars and noise
         const trashSelectors = ['.feed', '.news-feed', '.training-log', '.side-nav', '.nav', '.sidebar', '.menu', '[class*="training"]', '.blurred', '[style*="filter: blur"]'];
         document.querySelectorAll(trashSelectors.join(', ')).forEach(el => el.remove());
 
         const h1 = document.querySelector('h1') as HTMLElement;
         let fullName = h1?.innerText || document.title.split('-')[0].trim();
+        
+        if (fullName.toLowerCase().includes('athletic.net') || fullName.toLowerCase().includes('just a moment')) {
+            throw new Error("Cloudflare Block Active");
+        }
+
         const firstName = fullName.split(' ')[0] || 'Unknown';
         const lastName = fullName.split(' ').slice(1).join(' ') || '';
 
@@ -264,9 +268,6 @@ export async function POST(req: Request) {
           }
         }
 
-        // ==========================================
-        // 🎨 EXACT GENDER DETECTOR (Wait-Optimized)
-        // ==========================================
         let gender = 'Boys'; 
 
         const eventsText = prs.map(p => p.event.toLowerCase()).join(' ');
@@ -302,7 +303,6 @@ export async function POST(req: Request) {
                 }
             }
             
-            // Absolute Last Resort Fallback
             if (gender === 'Boys') {
                 const scripts = Array.from(document.querySelectorAll('script')).map(s => s.innerText.toLowerCase());
                 for (let script of scripts) {
@@ -328,9 +328,9 @@ export async function POST(req: Request) {
           let targetUrl = extractedData.teamUrl;
           if (targetUrl.startsWith('/')) targetUrl = 'https://www.athletic.net' + targetUrl;
 
-          await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+          await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 10000 });
           
-          const teamDetails = await page.evaluate((isClub) => {
+          const teamDetails = await page.evaluate((isClub: boolean) => {
             let st = null;
             let sz = null;
             let conf = null;
@@ -374,8 +374,10 @@ export async function POST(req: Request) {
         }
       }
 
-      await browser.close();
-      browser = null; 
+      if (browser) {
+        try { await browser.close(); } catch (e) {}
+        try { browser.disconnect(); } catch (e) {} 
+      }
 
       return NextResponse.json({ 
         success: true, 
@@ -398,17 +400,18 @@ export async function POST(req: Request) {
       
       const msg = error.message || "";
       
-      if (msg.includes('429') || msg.includes('concurrency') || msg.includes('WebSocket') || msg.includes('Too Many Requests')) {
+      if (msg.includes('Cloudflare') || msg.includes('security') || msg.includes('429') || msg.includes('Too Many Requests') || msg.includes('Timeout') || msg.includes('Execution context was destroyed')) {
         if (attempt >= MAX_RETRIES) {
-          return NextResponse.json({ error: 'Our servers are experiencing extremely high traffic. Please try again in 1 minute.' }, { status: 503 });
+          return NextResponse.json({ error: 'Athletic.net security check is temporarily blocking us. Please wait a minute and try again.' }, { status: 503 });
         }
-        await new Promise(res => setTimeout(res, 3000));
+        await new Promise(res => setTimeout(res, 1000));
         continue; 
       }
       return NextResponse.json({ error: `Scraper Error: ${msg}` }, { status: 500 });
     } finally {
       if (browser) {
         try { await browser.close(); } catch (e) {}
+        try { browser.disconnect(); } catch (e) {}
       }
     }
   }
