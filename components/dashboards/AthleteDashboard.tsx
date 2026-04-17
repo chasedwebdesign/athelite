@@ -284,6 +284,12 @@ export default function DashboardPage() {
   const [isVerifying, setIsVerifying] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
+  // 🚨 RATE LIMITING STATES 🚨
+  const [canSync, setCanSync] = useState(true);
+  const [syncCooldownText, setSyncCooldownText] = useState('');
+  const [verifyAttempts, setVerifyAttempts] = useState(0);
+  const [verifyLockout, setVerifyLockout] = useState<number | null>(null);
+
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false); 
   const [unreadCount, setUnreadCount] = useState(0);
   const [highestPercentile, setHighestPercentile] = useState<number>(1.0);
@@ -340,6 +346,35 @@ export default function DashboardPage() {
     setToast({ message, type });
     setTimeout(() => setToast(null), 4000);
   };
+
+  // 🚨 CHECK LOCALSTORAGE FOR COOLDOWNS ON MOUNT 🚨
+  useEffect(() => {
+    // 1. Check Sync Cooldown (24 hours)
+    const lastSync = localStorage.getItem('last_sync_time');
+    if (lastSync) {
+      const timeSince = Date.now() - parseInt(lastSync);
+      const hours24 = 24 * 60 * 60 * 1000;
+      if (timeSince < hours24) {
+        const remaining = hours24 - timeSince;
+        const hoursLeft = Math.ceil(remaining / (1000 * 60 * 60));
+        setCanSync(false);
+        setSyncCooldownText(`Sync available in ${hoursLeft}h`);
+      }
+    }
+
+    // 2. Check Verify Cooldown (3 hours if locked)
+    const lockedUntil = localStorage.getItem('verify_lockout_until');
+    if (lockedUntil && Date.now() < parseInt(lockedUntil)) {
+      setVerifyLockout(parseInt(lockedUntil));
+    } else {
+      // Clear expired locks
+      localStorage.removeItem('verify_lockout_until');
+      localStorage.removeItem('verify_attempts');
+    }
+    
+    const attempts = localStorage.getItem('verify_attempts');
+    if (attempts) setVerifyAttempts(parseInt(attempts));
+  }, []);
 
   const handleContactCoach = (coachEmail: string | null) => {
     if (!coachEmail) {
@@ -609,6 +644,11 @@ export default function DashboardPage() {
     e.preventDefault();
     setErrorMessage('');
     
+    if (!canSync) {
+      setErrorMessage(`You have reached the API limit. ${syncCooldownText}`);
+      return;
+    }
+
     const validationError = validateAthleticUrl(syncUrl);
     if (validationError) {
       setErrorMessage(validationError);
@@ -651,6 +691,8 @@ export default function DashboardPage() {
         trust_level: 0 
       }).eq('id', athleteProfile?.id);
 
+      // 🚨 SAVE SYNC COOLDOWN ON SUCCESS
+      localStorage.setItem('last_sync_time', Date.now().toString());
       window.location.reload();
     } catch (err: any) { 
       setErrorMessage(err.message); 
@@ -667,6 +709,13 @@ export default function DashboardPage() {
 
   const confirmVerification = async () => {
     if (!athleteProfile?.athletic_net_url) return;
+    
+    // 🚨 ENFORCE VERIFICATION LOCKOUT
+    if (verifyLockout && Date.now() < verifyLockout) {
+      setErrorMessage("Too many failed attempts. You are locked out for 3 hours to prevent API spam.");
+      return;
+    }
+
     setIsVerifying(true);
     setErrorMessage('');
     
@@ -678,7 +727,27 @@ export default function DashboardPage() {
       });
       
       const verifyData = await verifyRes.json();
-      if (!verifyRes.ok || !verifyData.success) throw new Error(verifyData.error || "Code not found on profile. Did you save it to your username?");
+      
+      // 🚨 FAILED ATTEMPT TRACKING
+      if (!verifyRes.ok || !verifyData.success) {
+        const newAttempts = verifyAttempts + 1;
+        setVerifyAttempts(newAttempts);
+        localStorage.setItem('verify_attempts', newAttempts.toString());
+
+        if (newAttempts >= 3) {
+          const lockoutTime = Date.now() + 3 * 60 * 60 * 1000; // 3 Hours
+          setVerifyLockout(lockoutTime);
+          localStorage.setItem('verify_lockout_until', lockoutTime.toString());
+          throw new Error("Too many failed attempts. Try again in 3 hours.");
+        } else {
+          const remaining = 3 - newAttempts;
+          throw new Error(`${verifyData.error || "Code not found."} (${remaining} attempts remaining)`);
+        }
+      }
+
+      // 🚨 SUCCESS! Clear the tracking logs
+      localStorage.removeItem('verify_attempts');
+      localStorage.removeItem('verify_lockout_until');
 
       if (athleteProfile.referred_by && athleteProfile.trust_level === 0) {
         
@@ -731,6 +800,12 @@ export default function DashboardPage() {
 
   const handleReSync = async () => {
     if (!athleteProfile?.athletic_net_url || athleteProfile.athletic_net_url === 'skipped') return;
+    
+    if (!canSync) {
+      showToast(syncCooldownText, "error");
+      return;
+    }
+
     setIsSyncing(true);
     
     try {
@@ -752,6 +827,8 @@ export default function DashboardPage() {
         grad_year: result.data.gradYear       
       }).eq('id', athleteProfile.id);
       
+      // 🚨 SAVE SYNC COOLDOWN ON SUCCESS
+      localStorage.setItem('last_sync_time', Date.now().toString());
       window.location.reload(); 
     } catch (err: any) { 
       showToast(err.message, "error");
@@ -1085,8 +1162,8 @@ export default function DashboardPage() {
                 onChange={e=>setSyncUrl(e.target.value)} 
                 className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium" 
               />
-              <button type="submit" disabled={isSyncing} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-3 rounded-xl shadow-md transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
-                {isSyncing ? <><RefreshCw className="w-4 h-4 animate-spin"/> Fetching...</> : 'Fetch Stats'}
+              <button type="submit" disabled={isSyncing || !canSync} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-3 rounded-xl shadow-md transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+                {isSyncing ? <><RefreshCw className="w-4 h-4 animate-spin"/> Fetching...</> : canSync ? 'Fetch Stats' : syncCooldownText}
               </button>
             </form>
           </div>
@@ -1334,8 +1411,8 @@ export default function DashboardPage() {
                       onChange={(e) => setSyncUrl(e.target.value)} 
                       className="w-full flex-grow bg-transparent text-white rounded-xl pl-6 pr-4 py-4 focus:outline-none focus:bg-white/5 font-semibold placeholder:text-blue-300/30 text-lg transition-colors" 
                     />
-                    <button type="submit" disabled={isSyncing} className="bg-blue-500 hover:bg-blue-400 text-white px-10 py-4 rounded-xl font-black disabled:opacity-50 transition-transform hover:scale-[1.02] active:scale-[0.98] shadow-lg flex items-center justify-center text-lg shrink-0">
-                      {isSyncing ? <><RefreshCw className="w-5 h-5 mr-2 animate-spin" /> Finding...</> : 'Fetch Stats'}
+                    <button type="submit" disabled={isSyncing || !canSync} className="bg-blue-500 hover:bg-blue-400 text-white px-10 py-4 rounded-xl font-black disabled:opacity-50 transition-transform hover:scale-[1.02] active:scale-[0.98] shadow-lg flex items-center justify-center text-lg shrink-0">
+                      {isSyncing ? <><RefreshCw className="w-5 h-5 mr-2 animate-spin" /> Finding...</> : canSync ? 'Fetch Stats' : syncCooldownText}
                     </button>
                   </form>
                   
@@ -1476,8 +1553,12 @@ export default function DashboardPage() {
                   </div>
 
                   <div className="mt-8 text-center">
-                    <button onClick={confirmVerification} disabled={isVerifying} className="w-full sm:w-auto bg-slate-900 hover:bg-black text-white px-10 py-4 rounded-xl font-black disabled:opacity-50 transition-transform hover:scale-[1.02] active:scale-[0.98] shadow-2xl flex justify-center items-center text-lg mx-auto">
-                      {isVerifying ? <><RefreshCw className="w-5 h-5 mr-2 animate-spin text-emerald-400" /> Checking Athletic.net...</> : 'I Saved It - Check My Profile!'}
+                    <button 
+                      onClick={confirmVerification} 
+                      disabled={isVerifying || (verifyLockout !== null && Date.now() < verifyLockout)} 
+                      className="w-full sm:w-auto bg-slate-900 hover:bg-black text-white px-10 py-4 rounded-xl font-black disabled:opacity-50 transition-transform hover:scale-[1.02] active:scale-[0.98] shadow-2xl flex justify-center items-center text-lg mx-auto"
+                    >
+                      {isVerifying ? <><RefreshCw className="w-5 h-5 mr-2 animate-spin text-emerald-400" /> Checking Athletic.net...</> : (verifyLockout && Date.now() < verifyLockout) ? 'Locked for 3 Hours' : 'I Saved It - Check My Profile!'}
                     </button>
                     <p className="text-xs text-orange-200 font-medium mt-3 opacity-80">You can safely delete the code from your Athletic.net profile right after we verify you.</p>
                   </div>
@@ -2310,7 +2391,7 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              {/* 🕵️ TAB 3: PRO SCOUT */}
+              {/* 🕵️ TAB 3: PRO Scout */}
               {activeTab === 'scout' && (
                 <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
                   <div className="bg-white rounded-[2rem] p-8 md:p-10 shadow-sm border border-slate-200 h-auto flex flex-col relative overflow-hidden">
