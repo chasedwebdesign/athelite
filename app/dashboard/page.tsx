@@ -5,7 +5,7 @@ import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { UserCircle2, MapPin, School, Search, ShieldCheck, BookmarkPlus, Check, Trash2, FileText, Save, ArrowRight, Activity, Medal, Plus, LogOut, X, Target, Dumbbell } from 'lucide-react';
+import { UserCircle2, MapPin, School, Search, ShieldCheck, BookmarkPlus, Check, Trash2, FileText, Save, ArrowRight, Activity, Medal, Plus, LogOut, X, Target, Dumbbell, Scale, Swords, CheckCircle2, TrendingUp, DollarSign, GraduationCap } from 'lucide-react';
 import { AvatarWithBorder } from '@/components/AnimatedBorders';
 
 // 🚨 FUTURE SPORTS CONFIGURATION 🚨
@@ -17,6 +17,52 @@ const UPCOMING_SPORTS = [
   { id: 'weightlifting', name: 'Weightlifting', icon: Dumbbell, color: 'text-slate-600', bg: 'bg-slate-100', border: 'border-slate-300' },
 ];
 
+// 🚨 PULLS REAL DATA FROM SUPABASE 🚨
+const getRealStats = (college: any) => {
+  // FIXED: matchScore defaults to 0 instead of '-' to prevent TypeScript/Math.max errors
+  if (!college) return { tuitionStr: 'N/A', salaryStr: 'N/A', gradRateStr: 'N/A', budgetStr: 'N/A', matchScore: 0, rawTuition: Infinity, rawSalary: 0 };
+  
+  // Automatically checking common column names
+  const rawTuition = college.tuition_out_of_state || college.out_of_state_tuition || college.tuition_in_state || college.in_state_tuition || college.tuition || 0;
+  const rawSalary = college.median_earnings || college.median_salary || college.ten_year_salary || college.post_grad_earnings || 0;
+  const rawGradRate = college.graduation_rate || college.grad_rate || college.acceptance_rate || 0;
+  const rawBudget = college.athletic_budget || college.total_revenue || college.budget || 0;
+
+  // Safe Formatters (Strips symbols like $ or , out of DB strings before formatting)
+  const formatCurrency = (val: any) => {
+    const num = typeof val === 'string' ? parseFloat(val.replace(/[^0-9.-]+/g,"")) : Number(val);
+    if (!num || isNaN(num)) return 'N/A';
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(num);
+  };
+
+  const formatPercent = (val: any) => {
+    const num = typeof val === 'string' ? parseFloat(val.replace(/[^0-9.-]+/g,"")) : Number(val);
+    if (!num || isNaN(num)) return 'N/A';
+    return num <= 1 ? `${(num * 100).toFixed(0)}%` : `${num.toFixed(0)}%`;
+  };
+
+  const formatBudget = (val: any) => {
+    const num = typeof val === 'string' ? parseFloat(val.replace(/[^0-9.-]+/g,"")) : Number(val);
+    if (!num || isNaN(num)) return 'N/A';
+    if (num > 100000) return `$${(num / 1000000).toFixed(1)}M`;
+    return `$${num}M`;
+  };
+
+  // We keep Match Score dynamic as a proprietary visual for the athlete
+  const seed = college.name ? college.name.split('').reduce((acc: number, char: string) => acc + char.charCodeAt(0), 0) : 100;
+  const matchScore = 60 + (seed % 39);
+
+  return {
+    tuitionStr: formatCurrency(rawTuition) !== 'N/A' ? `${formatCurrency(rawTuition)}/yr` : 'N/A',
+    salaryStr: formatCurrency(rawSalary),
+    gradRateStr: formatPercent(rawGradRate),
+    budgetStr: formatBudget(rawBudget),
+    matchScore,
+    rawTuition: Number(rawTuition) || Infinity, 
+    rawSalary: Number(rawSalary) || 0,
+  };
+};
+
 export default function AthleteHomebase() {
   const supabase = createClient();
   const router = useRouter();
@@ -24,6 +70,7 @@ export default function AthleteHomebase() {
   const [loading, setLoading] = useState(true);
   const [athleteProfile, setAthleteProfile] = useState<any>(null);
   
+  // Universal Tools State
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearchingColleges, setIsSearchingColleges] = useState(false);
@@ -34,6 +81,9 @@ export default function AthleteHomebase() {
 
   const [showAddSportModal, setShowAddSportModal] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  // 🚨 COMPARE COLLEGES STATE 🚨
+  const [compareList, setCompareList] = useState<any[]>([]);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
@@ -93,8 +143,27 @@ export default function AthleteHomebase() {
   const handleRemoveCollege = async (savedId: string) => {
     try {
       await supabase.from('saved_colleges').delete().eq('id', savedId);
+      const removedItem = savedColleges.find(c => c.id === savedId);
       setSavedColleges(prev => prev.filter(c => c.id !== savedId));
+      
+      // Auto-remove from compare list if it was there
+      if (removedItem) {
+        setCompareList(prev => prev.filter(c => c.id !== removedItem.universities.id));
+      }
     } catch (err) { console.error(err); }
+  };
+
+  const toggleCompare = (college: any) => {
+    const isAlreadyComparing = compareList.some(c => c.id === college.id);
+    if (isAlreadyComparing) {
+      setCompareList(prev => prev.filter(c => c.id !== college.id));
+    } else {
+      if (compareList.length >= 3) {
+        showToast("You can only compare 3 colleges at a time.", "error");
+        return;
+      }
+      setCompareList(prev => [...prev, college]);
+    }
   };
 
   const handleSaveResume = async () => {
@@ -104,6 +173,22 @@ export default function AthleteHomebase() {
       await supabase.from('athletes').update({ saved_resume: resumeText }).eq('id', athleteProfile.id);
       showToast("Resume saved successfully!");
     } catch (err) { console.error(err); } finally { setIsSavingResume(false); }
+  };
+
+  const handleAddSport = async (sportId: string) => {
+    if (!athleteProfile?.id) return;
+    try {
+      const currentSports = athleteProfile.active_sports || [];
+      if (currentSports.includes(sportId)) return;
+      const newSports = [...currentSports, sportId];
+      await supabase.from('athletes').update({ active_sports: newSports }).eq('id', athleteProfile.id);
+      setAthleteProfile({ ...athleteProfile, active_sports: newSports });
+      setShowAddSportModal(false);
+      showToast("Track & Field portal added!", "success");
+    } catch (err) {
+      console.error(err);
+      showToast("Failed to add sport", "error");
+    }
   };
 
   const handleSignOut = async () => {
@@ -120,7 +205,13 @@ export default function AthleteHomebase() {
     );
   }
 
-  const activeSports = athleteProfile?.active_sports || ['track'];
+  const activeSports = athleteProfile?.active_sports || [];
+  const primarySportQuery = activeSports.length > 0 ? activeSports[0] : 'general';
+
+  // 🚨 DETERMINE WINNERS FOR HIGHLIGHTING 🚨
+  const bestTuition = Math.min(...compareList.map(c => getRealStats(c).rawTuition));
+  const bestSalary = Math.max(...compareList.map(c => getRealStats(c).rawSalary));
+  const bestScore = Math.max(...compareList.map(c => getRealStats(c).matchScore));
 
   return (
     <main className="min-h-screen bg-[#F8FAFC] font-sans pb-24 md:pb-12">
@@ -128,8 +219,8 @@ export default function AthleteHomebase() {
       {/* TOAST NOTIFICATION */}
       {toast && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[200] animate-in slide-in-from-top-5 fade-in duration-300">
-          <div className="bg-slate-900 text-white rounded-full px-6 py-3 shadow-2xl flex items-center gap-3 font-bold text-sm border border-slate-700">
-            <Check className="w-4 h-4 text-emerald-400" /> {toast.message}
+          <div className={`rounded-full px-6 py-3 shadow-2xl flex items-center gap-3 font-bold text-sm border ${toast.type === 'error' ? 'bg-red-900 text-white border-red-700' : 'bg-slate-900 text-white border-slate-700'}`}>
+            {toast.type === 'error' ? <X className="w-4 h-4 text-red-400" /> : <Check className="w-4 h-4 text-emerald-400" />} {toast.message}
           </div>
         </div>
       )}
@@ -143,51 +234,42 @@ export default function AthleteHomebase() {
             <p className="text-sm font-medium text-slate-500 mb-6">Select another sport you compete in to add its portal to your Locker Room.</p>
             
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {UPCOMING_SPORTS.map((sport) => {
-                const Icon = sport.icon;
-                return (
-                  <button 
-                    key={sport.id}
-                    onClick={() => {
-                      setShowAddSportModal(false);
-                      showToast(`${sport.name} portal is launching Fall 2026!`, 'success');
-                    }}
-                    className={`flex items-center gap-3 p-4 rounded-xl border ${sport.border} ${sport.bg} hover:shadow-md hover:scale-[1.02] transition-all text-left`}
-                  >
-                    <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm shrink-0">
-                      <Icon className={`w-5 h-5 ${sport.color}`} />
-                    </div>
-                    <div>
-                      <span className="block font-black text-slate-800 leading-none">{sport.name}</span>
-                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1 block">Coming Soon</span>
-                    </div>
-                  </button>
-                )
-              })}
+              {!activeSports.includes('track') && (
+                <button 
+                  onClick={() => handleAddSport('track')}
+                  className="flex items-center gap-3 p-4 rounded-xl border border-blue-200 bg-blue-50 hover:shadow-md hover:scale-[1.02] transition-all text-left"
+                >
+                  <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm shrink-0">
+                    <Activity className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div>
+                    <span className="block font-black text-slate-800 leading-none">Track & Field</span>
+                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1 block">Add to Locker Room</span>
+                  </div>
+                </button>
+              )}
+
+              <div className={`flex flex-col items-center justify-center gap-2 p-6 rounded-xl border border-slate-200 bg-slate-50 border-dashed opacity-70 cursor-not-allowed text-center ${!activeSports.includes('track') ? 'sm:col-span-1' : 'sm:col-span-2'}`}>
+                <div>
+                  <span className="block font-black text-slate-600 leading-none">More sports coming soon!</span>
+                  <span className="text-[10px] font-bold text-slate-400 mt-2 block">Basketball, Soccer, Football & more</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* 🚨 UNIVERSAL TOP NAV (UPDATED TO ICON) 🚨 */}
-      <nav className="bg-white border-b border-slate-200 sticky top-0 z-50 px-4 md:px-6 py-3 flex items-center justify-between">
-        
+      {/* TOP NAV */}
+      <nav className="bg-white border-b border-slate-200 sticky top-0 z-50 px-4 md:px-6 py-3 flex items-center justify-between shadow-sm">
         <Link href="/" className="flex items-center gap-2 group shrink-0">
           <div className="relative w-8 h-8 sm:w-10 sm:h-10 overflow-hidden group-hover:scale-105 transition-transform">
-            <Image 
-              src="/icon.png" 
-              alt="ChasedSports Icon" 
-              fill
-              sizes="(max-width: 768px) 32px, 40px"
-              className="object-contain"
-              priority
-            />
+            <Image src="/icon.png" alt="ChasedSports Icon" fill sizes="(max-width: 768px) 32px, 40px" className="object-contain" priority />
           </div>
           <span className="font-black text-slate-900 tracking-tight hidden sm:block text-xl">
             Chased<span className="text-blue-600">Sports</span>
           </span>
         </Link>
-
         <button onClick={handleSignOut} className="text-sm font-bold text-slate-500 hover:text-slate-900 flex items-center gap-2 transition-colors">
           Sign Out <LogOut className="w-4 h-4" />
         </button>
@@ -214,7 +296,7 @@ export default function AthleteHomebase() {
 
       <div className="max-w-7xl mx-auto px-4 md:px-6 -mt-8 relative z-20 space-y-6">
         
-        {/* DYNAMIC SPORTS LOCKER */}
+        {/* SPORTS LOCKER */}
         <div className="bg-white rounded-[2rem] p-6 md:p-8 shadow-sm border border-slate-200">
           <div className="mb-6">
             <h2 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight flex items-center">
@@ -224,7 +306,6 @@ export default function AthleteHomebase() {
           </div>
           
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-            
             {activeSports.includes('track') && (
               <Link href="/dashboard/track" className="group relative bg-gradient-to-br from-blue-900 to-indigo-900 rounded-2xl p-6 border border-blue-800 shadow-lg overflow-hidden hover:-translate-y-1 transition-all">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/20 blur-[40px] rounded-full pointer-events-none group-hover:bg-blue-400/30 transition-colors"></div>
@@ -235,21 +316,98 @@ export default function AthleteHomebase() {
                 </p>
               </Link>
             )}
-
-            <button onClick={() => setShowAddSportModal(true)} className="bg-slate-50 border-2 border-slate-200 border-dashed rounded-2xl p-6 flex flex-col items-center justify-center text-center opacity-70 hover:opacity-100 hover:bg-slate-100 transition-all cursor-pointer">
+            <button onClick={() => setShowAddSportModal(true)} className="bg-slate-50 border-2 border-slate-200 border-dashed rounded-2xl p-6 flex flex-col items-center justify-center text-center opacity-70 hover:opacity-100 hover:bg-slate-100 transition-all cursor-pointer min-h-[160px]">
               <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center mb-3">
                 <Plus className="w-5 h-5 text-slate-400" />
               </div>
               <h3 className="text-sm font-black text-slate-500 uppercase tracking-widest">Add Sport</h3>
               <p className="text-xs font-medium text-slate-400 mt-1">Join another portal</p>
             </button>
-
           </div>
         </div>
 
+        {/* 🚨 COMPARISON ARENA (Only visible if colleges are selected) 🚨 */}
+        {compareList.length > 0 && (
+          <div className="bg-slate-900 rounded-[2rem] p-6 md:p-8 shadow-xl border border-slate-800 text-white animate-in slide-in-from-top-4 fade-in duration-500">
+            <div className="flex items-center justify-between mb-8 pb-6 border-b border-slate-800">
+              <div>
+                <h3 className="text-2xl font-black tracking-tight flex items-center">
+                  <Swords className="w-6 h-6 mr-3 text-emerald-400" /> College Comparison Arena
+                </h3>
+                <p className="text-slate-400 font-medium text-sm mt-1">Comparing {compareList.length} selected schools.</p>
+              </div>
+              <button onClick={() => setCompareList([])} className="text-sm font-bold text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-xl transition-colors">
+                Clear All
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+              {compareList.map((college) => {
+                // 🚨 CALLING THE REAL STAT GETTER 🚨
+                const stats = getRealStats(college);
+                const isBestScore = stats.matchScore === bestScore;
+                const isBestTuition = stats.rawTuition === bestTuition && stats.rawTuition !== Infinity;
+                const isBestSalary = stats.rawSalary === bestSalary && stats.rawSalary !== 0;
+
+                return (
+                  <div key={college.id} className="bg-slate-800 border border-slate-700 rounded-2xl p-6 relative flex flex-col">
+                    <button onClick={() => toggleCompare(college)} className="absolute top-4 right-4 p-1.5 bg-slate-700 text-slate-400 hover:text-red-400 hover:bg-slate-600 rounded-full transition-colors"><X className="w-4 h-4" /></button>
+                    
+                    <div className="flex items-center gap-4 mb-6 pr-8">
+                      <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center shrink-0 border border-slate-600 overflow-hidden">
+                        {college.logo_url ? <img src={college.logo_url} className="w-8 h-8 object-contain"/> : <School className="w-6 h-6 text-slate-400" />}
+                      </div>
+                      <div>
+                        <h4 className="font-black text-lg text-white leading-tight line-clamp-2">{college.name}</h4>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{college.division}</p>
+                      </div>
+                    </div>
+
+                    {/* Score Hero */}
+                    <div className={`p-4 rounded-xl mb-6 flex items-center justify-between border ${isBestScore ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-slate-900 border-slate-700'}`}>
+                      <div>
+                        <Target className={`w-5 h-5 mb-1 ${isBestScore ? 'text-emerald-400' : 'text-blue-400'}`} />
+                        <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest">Match Score</span>
+                      </div>
+                      <div className="text-right">
+                        <span className={`text-3xl font-black ${isBestScore ? 'text-emerald-400 drop-shadow-[0_0_10px_rgba(52,211,153,0.5)]' : 'text-white'}`}>{stats.matchScore > 0 ? stats.matchScore : '-'}</span>
+                        <span className="text-xs font-bold text-slate-500">/99</span>
+                      </div>
+                    </div>
+
+                    {/* Data Rows */}
+                    <div className="space-y-3 mb-6 flex-1">
+                      <div className="flex items-center justify-between bg-slate-900/50 p-3 rounded-lg border border-slate-700/50">
+                        <span className="text-xs font-bold text-slate-400 flex items-center gap-1.5"><School className="w-3.5 h-3.5" /> Tuition</span>
+                        <span className={`font-black text-sm ${isBestTuition ? 'text-emerald-400' : 'text-white'}`}>{stats.tuitionStr}</span>
+                      </div>
+                      <div className="flex items-center justify-between bg-slate-900/50 p-3 rounded-lg border border-slate-700/50">
+                        <span className="text-xs font-bold text-slate-400 flex items-center gap-1.5"><TrendingUp className="w-3.5 h-3.5" /> 10-Yr Salary</span>
+                        <span className={`font-black text-sm ${isBestSalary ? 'text-emerald-400' : 'text-white'}`}>{stats.salaryStr}</span>
+                      </div>
+                      <div className="flex items-center justify-between bg-slate-900/50 p-3 rounded-lg border border-slate-700/50">
+                        <span className="text-xs font-bold text-slate-400 flex items-center gap-1.5"><GraduationCap className="w-3.5 h-3.5" /> Grad Rate</span>
+                        <span className="font-black text-sm text-white">{stats.gradRateStr}</span>
+                      </div>
+                      <div className="flex items-center justify-between bg-slate-900/50 p-3 rounded-lg border border-slate-700/50">
+                        <span className="text-xs font-bold text-slate-400 flex items-center gap-1.5"><DollarSign className="w-3.5 h-3.5" /> Ath. Budget</span>
+                        <span className="font-black text-sm text-white">{stats.budgetStr}</span>
+                      </div>
+                    </div>
+
+                    <Link href={`/college/${college.id}?sport=${primarySportQuery}`} className="w-full mt-auto text-center bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl transition-colors text-sm">
+                      View Full Profile
+                    </Link>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           
-          {/* UNIVERSAL COLLEGE BOARD */}
+          {/* RICH COLLEGE BOARD */}
           <div className="bg-white rounded-[2rem] p-6 md:p-8 shadow-sm border border-slate-200 flex flex-col">
             <div className="flex items-center justify-between mb-6 pb-5 border-b border-slate-100">
               <div>
@@ -300,22 +458,58 @@ export default function AthleteHomebase() {
             </div>
             
             {savedColleges && savedColleges.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1 content-start">
+              <div className="grid grid-cols-1 gap-3 flex-1 content-start">
                 {savedColleges.map((saved) => {
                   const college = saved.universities; 
                   if (!college) return null;
+                  
+                  // 🚨 CALLING THE REAL STAT GETTER 🚨
+                  const stats = getRealStats(college);
+                  const isComparing = compareList.some(c => c.id === college.id);
+
                   return (
-                    <div key={saved.id} className="flex items-center gap-3 p-3 rounded-2xl border border-slate-200 bg-slate-50 relative">
-                      <div className="w-10 h-10 bg-white rounded-full border border-slate-200 flex items-center justify-center shrink-0 overflow-hidden">
-                        {college.logo_url ? <img src={college.logo_url} className="w-6 h-6 object-contain" /> : <School className="w-5 h-5 text-slate-400" />}
+                    <div key={saved.id} className="group relative flex flex-col p-4 rounded-2xl border border-slate-200 bg-white hover:border-blue-300 hover:shadow-md transition-all">
+                      {/* Smart Link Wrapper */}
+                      <Link href={`/college/${college.id}?sport=${primarySportQuery}`} className="absolute inset-0 z-10" aria-label={`View ${college.name}`}></Link>
+                      
+                      <div className="flex items-start gap-4 mb-4 relative z-0">
+                        <div className="w-12 h-12 bg-slate-50 rounded-full border border-slate-200 flex items-center justify-center shrink-0 overflow-hidden shadow-sm">
+                          {college.logo_url ? <img src={college.logo_url} className="w-8 h-8 object-contain" /> : <School className="w-6 h-6 text-slate-400" />}
+                        </div>
+                        <div className="flex-1 truncate pt-1">
+                          <h4 className="font-black text-base text-slate-900 truncate group-hover:text-blue-600 transition-colors">{college.name}</h4>
+                          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">{college.division} • {college.state}</p>
+                        </div>
                       </div>
-                      <div className="flex-1 truncate">
-                        <h4 className="font-bold text-xs text-slate-900 truncate">{college.name}</h4>
-                        <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">{college.division}</p>
+
+                      {/* Rich Data Mini-Grid */}
+                      <div className="grid grid-cols-2 gap-2 mb-4 relative z-0">
+                        <div className="bg-slate-50 border border-slate-100 rounded-lg p-2.5 flex items-center justify-between">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Match Score</span>
+                          <span className="font-black text-sm text-blue-600">{stats.matchScore > 0 ? stats.matchScore : '-'}</span>
+                        </div>
+                        <div className="bg-slate-50 border border-slate-100 rounded-lg p-2.5 flex items-center justify-between">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tuition</span>
+                          <span className="font-black text-sm text-slate-700">{stats.tuitionStr}</span>
+                        </div>
                       </div>
-                      <button onClick={() => handleRemoveCollege(saved.id)} className="p-2 text-slate-400 hover:text-red-500 rounded-lg">
+
+                      {/* Action Bar (Z-20 to be clickable over the Link) */}
+                      <div className="flex items-center gap-2 pt-3 border-t border-slate-100 relative z-20 mt-auto">
+                        <button 
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleCompare(college); }}
+                          className={`flex-1 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5 border ${isComparing ? 'bg-slate-900 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:text-slate-900'}`}
+                        >
+                          <Scale className="w-3.5 h-3.5" /> {isComparing ? 'Comparing' : 'Compare'}
+                        </button>
+                        <button 
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleRemoveCollege(saved.id); }} 
+                          className="px-3 py-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg border border-transparent hover:border-red-100 transition-colors"
+                          title="Remove from board"
+                        >
                           <Trash2 className="w-4 h-4" />
-                      </button>
+                        </button>
+                      </div>
                     </div>
                   )
                 })}

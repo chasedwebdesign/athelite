@@ -5,7 +5,7 @@ import { createClient } from '@/utils/supabase/client';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { Search, ShieldCheck, Database, LineChart, ArrowRight, Activity, CheckCircle2, Trophy, Target, MapPin, DollarSign, Timer, GraduationCap, LockOpen } from 'lucide-react';
+import { Search, ShieldCheck, Database, LineChart, ArrowRight, Activity, CheckCircle2, Trophy, Target, MapPin, DollarSign, GraduationCap, LockOpen } from 'lucide-react';
 
 // 🚨 EXTENDED MOCK DATA FOR AUTO-SCROLLING CAROUSEL 🚨
 const FEATURED_COLLEGES = [
@@ -548,21 +548,23 @@ export default function LandingPage() {
               </Link>
             </div>
 
-            {/* DYNAMIC AUTO-CYCLING LEADERBOARD CARDS */}
-            <div className="flex-1 w-full relative h-[380px] sm:h-[450px] flex items-center justify-center mt-6 lg:mt-0">
+            {/* 🚨 DYNAMIC AUTO-CYCLING LEADERBOARD CARDS (CENTER-LOCKED) 🚨 */}
+            <div className="flex-1 w-full relative min-h-[480px] sm:min-h-[500px] flex items-center justify-center mt-12 lg:mt-0 z-20">
               
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-[280px] sm:max-w-[340px] h-full flex items-center justify-center z-30">
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[320px] sm:w-[400px] h-[320px] sm:h-[400px] rounded-full border border-slate-700/50 z-0 animate-[spin_10s_linear_infinite]"></div>
+
+              <div className="relative w-full max-w-[280px] sm:max-w-[340px] h-full z-30">
                 {topAthletes.map((athlete, idx) => (
                   idx === activeAthleteIdx && (
                     <div 
                       key={athlete.id} 
-                      className="absolute w-full bg-[#0a1128] border border-slate-700 shadow-2xl rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-8 text-center animate-in fade-in zoom-in-95 slide-in-from-bottom-4 duration-500 fill-mode-forwards"
+                      className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full bg-[#0a1128] border border-slate-700 shadow-2xl rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-8 text-center animate-in fade-in zoom-in-95 duration-500"
                     >
                       <div className="absolute -top-4 sm:-top-5 -right-4 sm:-right-5 w-10 h-10 sm:w-12 sm:h-12 bg-yellow-400 text-yellow-900 rounded-full border-4 border-[#0a1128] flex items-center justify-center font-black text-lg sm:text-xl shadow-lg z-40 transform rotate-12">
                         #{athlete.rank}
                       </div>
 
-                      <div className={`w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-br ${athlete.color} rounded-full mx-auto mb-4 sm:mb-6 shadow-[0_0_30px_rgba(168,85,247,0.4)] flex items-center justify-center border-4 border-slate-800 text-white font-black text-2xl sm:text-3xl`}>
+                      <div className={`w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-br ${athlete.color} rounded-full mx-auto mb-4 sm:mb-6 shadow-[0_0_30px_rgba(168,85,247,0.4)] flex items-center justify-center border-[3px] sm:border-4 border-slate-800 text-white font-black text-2xl sm:text-3xl`}>
                         {athlete.initials}
                       </div>
                       
@@ -573,7 +575,7 @@ export default function LandingPage() {
                         <MapPin className="w-3 h-3 inline mr-1 -mt-0.5" />{athlete.highSchool}
                       </p>
 
-                      <div className="bg-slate-900 border border-slate-800 p-4 sm:p-5 rounded-xl sm:rounded-2xl mb-5 sm:mb-6">
+                      <div className="bg-slate-900 border border-slate-800 p-4 sm:p-5 rounded-xl sm:rounded-2xl mb-4 sm:mb-6">
                         <span className="block text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">{athlete.event}</span>
                         <span className="text-2xl sm:text-3xl font-black text-white">{athlete.mark}</span>
                       </div>
@@ -586,7 +588,6 @@ export default function LandingPage() {
                 ))}
               </div>
 
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] sm:w-[400px] h-[300px] sm:h-[400px] rounded-full border border-slate-700/50 -z-10 animate-[spin_10s_linear_infinite]"></div>
               <div className="absolute inset-0 bg-[radial-gradient(#334155_1px,transparent_1px)] [background-size:16px_16px] opacity-20 -z-20"></div>
             </div>
           </div>
