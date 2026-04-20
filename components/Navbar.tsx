@@ -5,7 +5,7 @@ import { createClient } from '@/utils/supabase/client';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter, usePathname } from 'next/navigation';
-import { Activity, Mail, Search, LogOut, LayoutDashboard, User, School, Trophy, Globe, Medal, Menu, X, ShoppingCart, Target } from 'lucide-react'; 
+import { Activity, Mail, Search, LogOut, LayoutDashboard, User, School, Trophy, Globe, Medal, Menu, X, ShoppingCart, Target, ChevronDown } from 'lucide-react'; 
 
 // 🚨 IMPORTED CHASEDCASH COMPONENT
 import { ChasedCash } from '@/components/ChasedCash';
@@ -153,8 +153,7 @@ export default function Navbar() {
     };
   }, [pathname, supabase]);
 
-  // 🚨 NEW BULLETPROOF COIN TRACKER 🚨
-  // Constantly keeps the Navbar coins perfectly in sync without relying on complex DB real-time configs
+  // 🚨 BULLETPROOF COIN TRACKER 🚨
   useEffect(() => {
     if (!session?.user?.id || !isAthlete) return;
 
@@ -165,10 +164,7 @@ export default function Navbar() {
       }
     };
 
-    // Fast background poll every 3 seconds
     const interval = setInterval(fetchLatestCoins, 3000);
-    
-    // Instantly fetch the second the user clicks back into the window or closes a modal
     window.addEventListener('focus', fetchLatestCoins);
 
     return () => {
@@ -204,12 +200,12 @@ export default function Navbar() {
       <nav className="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-[60]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
           
-          {/* LOGO */}
+          {/* LOGO - UPDATED TO ICON.PNG */}
           <Link href="/" onClick={closeMobileMenu} className="flex items-center gap-2 group shrink-0">
             <div className="relative w-8 h-8 sm:w-10 sm:h-10 overflow-hidden group-hover:scale-105 transition-transform">
               <Image 
-                src="/logo.png" 
-                alt="ChasedSports Logo" 
+                src="/icon.png" 
+                alt="ChasedSports Icon" 
                 fill
                 sizes="(max-width: 768px) 32px, 40px"
                 className="object-contain"
@@ -254,24 +250,38 @@ export default function Navbar() {
             )}
           </div>
 
-          {/* DESKTOP NAVIGATION (Hidden on mobile) */}
+          {/* 🚨 DESKTOP NAVIGATION (ORGANIZED INTO HUB & SPOKES) 🚨 */}
           <div className="hidden md:flex items-center space-x-6 shrink-0">
-            <Link href="/feed" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors flex items-center"><Globe className="w-4 h-4 mr-1.5" /> Feed</Link>
+            <Link href="/search" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors flex items-center"><School className="w-4 h-4 mr-1.5" /> College Finder</Link>
             
-            <Link href="/compete" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors flex items-center"><Target className="w-4 h-4 mr-1.5" /> Compete</Link>
-            
-            <Link href="/leaderboard" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors flex items-center"><Trophy className="w-4 h-4 mr-1.5" /> Ranks</Link>
-            <Link href="/search" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors flex items-center"><School className="w-4 h-4 mr-1.5" /> Colleges</Link>
+            {/* 🚨 NEW TRACK & FIELD DROPDOWN MENU 🚨 */}
+            <div className="relative group">
+              <button className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors flex items-center py-2">
+                <Activity className="w-4 h-4 mr-1.5" /> Track & Field <ChevronDown className="w-3 h-3 ml-1 opacity-50 group-hover:rotate-180 transition-transform duration-300" />
+              </button>
+              
+              <div className="absolute top-full right-0 mt-1 w-48 bg-white rounded-2xl shadow-xl border border-slate-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 flex flex-col overflow-hidden transform translate-y-2 group-hover:translate-y-0">
+                {session && (
+                  <Link href="/dashboard/track" className="px-4 py-3 bg-blue-50/50 hover:bg-blue-100 font-black text-sm text-blue-700 flex items-center border-b border-slate-100 transition-colors">
+                    <Activity className="w-4 h-4 mr-2" /> Track Portal
+                  </Link>
+                )}
+                <Link href="/feed" className="px-4 py-3 hover:bg-slate-50 font-bold text-sm text-slate-700 flex items-center transition-colors"><Globe className="w-4 h-4 mr-2 text-indigo-500"/> The Feed</Link>
+                <Link href="/leaderboard" className="px-4 py-3 hover:bg-slate-50 font-bold text-sm text-slate-700 flex items-center transition-colors"><Trophy className="w-4 h-4 mr-2 text-amber-500"/> Leaderboards</Link>
+                <Link href="/compete" className="px-4 py-3 hover:bg-slate-50 font-bold text-sm text-slate-700 flex items-center transition-colors"><Target className="w-4 h-4 mr-2 text-red-500"/> The Arena</Link>
+              </div>
+            </div>
 
             {session ? (
               <>
-                <Link href="/dashboard" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors flex items-center"><LayoutDashboard className="w-4 h-4 mr-1.5" /> Dashboard</Link>
+                <div className="h-4 w-px bg-slate-200 mx-2"></div>
+                <Link href="/dashboard" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors flex items-center"><LayoutDashboard className="w-4 h-4 mr-1.5" /> Homebase</Link>
                 <Link href="/dashboard/messages" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors flex items-center relative">
                   <Mail className="w-4 h-4 mr-1.5" /> <span>Inbox</span>
                   {unreadCount > 0 && <span className="absolute -top-2.5 -right-3.5 bg-red-500 text-white text-[10px] leading-none font-black min-w-[18px] h-[18px] flex items-center justify-center rounded-full border-2 border-white shadow-sm px-1">{unreadCount}</span>}
                 </Link>
                 
-                {/* 🪙 COIN BADGE & NEW SHOP LINK (Athletes Only) */}
+                {/* 🪙 COIN BADGE & SHOP LINK (Athletes Only) */}
                 {isAthlete && (
                   <Link href="/shop" className="flex items-center gap-1 hover:-translate-y-0.5 transition-transform">
                     <ShoppingCart className="w-5 h-5 text-blue-600" />
@@ -279,7 +289,6 @@ export default function Navbar() {
                   </Link>
                 )}
                 
-                {/* UPGRADED: ONE-CLICK LOGOUT AVATAR */}
                 <button 
                   onClick={handleSignOut} 
                   title="Log Out" 
@@ -298,14 +307,12 @@ export default function Navbar() {
 
           {/* MOBILE HAMBURGER BUTTON */}
           <div className="flex items-center gap-4 md:hidden">
-            {/* 🪙 MOBILE COIN BADGE & SHOP LINK */}
             {session && isAthlete && (
               <Link href="/shop" className="flex items-center">
                 <CoinBadge />
               </Link>
             )}
 
-            {/* Quick Inbox icon for mobile if logged in */}
             {session && (
                <Link href="/dashboard/messages" className="relative p-2 text-slate-500 hover:text-blue-600 transition-colors" onClick={closeMobileMenu}>
                  <Mail className="w-6 h-6" />
@@ -319,7 +326,7 @@ export default function Navbar() {
         </div>
       </nav>
 
-      {/* MOBILE FULL-SCREEN MENU */}
+      {/* 🚨 MOBILE FULL-SCREEN MENU 🚨 */}
       {isMobileMenuOpen && (
         <div className="fixed inset-0 top-[64px] z-[50] bg-white overflow-y-auto animate-in slide-in-from-top-5 duration-200 md:hidden">
           <div className="p-6 flex flex-col gap-6">
@@ -359,23 +366,34 @@ export default function Navbar() {
 
             {/* MOBILE MENU LINKS */}
             <div className="flex flex-col gap-2">
-              <Link href="/feed" onClick={closeMobileMenu} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-50 text-slate-700 font-bold text-lg transition-colors"><Globe className="w-6 h-6 text-blue-500" /> The Feed</Link>
               
-              <Link href="/compete" onClick={closeMobileMenu} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-50 text-slate-700 font-bold text-lg transition-colors"><Target className="w-6 h-6 text-blue-500" /> Compete</Link>
-
-              <Link href="/leaderboard" onClick={closeMobileMenu} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-50 text-slate-700 font-bold text-lg transition-colors"><Trophy className="w-6 h-6 text-blue-500" /> Leaderboards</Link>
-              <Link href="/search" onClick={closeMobileMenu} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-50 text-slate-700 font-bold text-lg transition-colors"><School className="w-6 h-6 text-blue-500" /> College Finder</Link>
+              <Link href="/search" onClick={closeMobileMenu} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-50 text-slate-700 font-bold text-lg transition-colors">
+                <School className="w-6 h-6 text-blue-500" /> College Finder
+              </Link>
+              
+              {/* 🚨 NEW MOBILE TRACK CATEGORY BLOCK 🚨 */}
+              <div className="bg-slate-50 rounded-2xl p-2 border border-slate-100 my-2">
+                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 mt-2 pl-3">Track & Field</h4>
+                {session && (
+                  <Link href="/dashboard/track" onClick={closeMobileMenu} className="flex items-center gap-4 p-3 rounded-xl hover:bg-white text-slate-700 font-bold transition-colors">
+                    <Activity className="w-5 h-5 text-blue-500" /> Track Portal
+                  </Link>
+                )}
+                <Link href="/feed" onClick={closeMobileMenu} className="flex items-center gap-4 p-3 rounded-xl hover:bg-white text-slate-700 font-bold transition-colors"><Globe className="w-5 h-5 text-indigo-500" /> The Feed</Link>
+                <Link href="/leaderboard" onClick={closeMobileMenu} className="flex items-center gap-4 p-3 rounded-xl hover:bg-white text-slate-700 font-bold transition-colors"><Trophy className="w-5 h-5 text-amber-500" /> Leaderboards</Link>
+                <Link href="/compete" onClick={closeMobileMenu} className="flex items-center gap-4 p-3 rounded-xl hover:bg-white text-slate-700 font-bold transition-colors"><Target className="w-5 h-5 text-red-500" /> The Arena</Link>
+              </div>
               
               {session ? (
                 <>
                   <div className="h-px bg-slate-100 my-2"></div>
-                  <Link href="/dashboard" onClick={closeMobileMenu} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-50 text-slate-700 font-bold text-lg transition-colors"><LayoutDashboard className="w-6 h-6 text-purple-500" /> Dashboard</Link>
+                  <Link href="/dashboard" onClick={closeMobileMenu} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-50 text-slate-700 font-bold text-lg transition-colors"><LayoutDashboard className="w-6 h-6 text-slate-500" /> Homebase</Link>
                   {isAthlete && (
                     <Link href="/shop" onClick={closeMobileMenu} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-50 text-slate-700 font-bold text-lg transition-colors">
                       <ShoppingCart className="w-6 h-6 text-blue-600" /> The Shop
                     </Link>
                   )}
-                  <Link href="/dashboard/messages" onClick={closeMobileMenu} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-50 text-slate-700 font-bold text-lg transition-colors"><Mail className="w-6 h-6 text-purple-500" /> Inbox {unreadCount > 0 && <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full ml-auto">{unreadCount} new</span>}</Link>
+                  <Link href="/dashboard/messages" onClick={closeMobileMenu} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-50 text-slate-700 font-bold text-lg transition-colors"><Mail className="w-6 h-6 text-slate-500" /> Inbox {unreadCount > 0 && <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full ml-auto">{unreadCount} new</span>}</Link>
                   <button onClick={handleSignOut} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-red-50 text-red-600 font-bold text-lg transition-colors text-left w-full"><LogOut className="w-6 h-6" /> Log Out</button>
                 </>
               ) : (

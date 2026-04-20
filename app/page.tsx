@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { Search, ShieldCheck, Database, LineChart, ArrowRight, Activity, CheckCircle2, Trophy, Target, MapPin, DollarSign, Timer, GraduationCap, LockOpen } from 'lucide-react';
 
@@ -364,6 +365,28 @@ export default function LandingPage() {
       onMouseMove={handleMouseMove}
       className="min-h-screen bg-[#020617] font-sans selection:bg-blue-500/30 overflow-x-hidden relative pb-24 sm:pb-32 text-slate-200"
     >
+      {/* 🚨 TOP NAVIGATION FOR LANDING PAGE 🚨 */}
+      <nav className="fixed top-0 left-0 right-0 z-50 px-4 sm:px-6 py-4 flex items-center justify-between">
+        <Link href="/" className="flex items-center gap-2 group shrink-0">
+          <div className="relative w-8 h-8 sm:w-10 sm:h-10 overflow-hidden group-hover:scale-105 transition-transform">
+            <Image 
+              src="/icon.png" 
+              alt="ChasedSports Icon" 
+              fill
+              sizes="(max-width: 768px) 32px, 40px"
+              className="object-contain drop-shadow-md"
+              priority
+            />
+          </div>
+          <span className="text-xl font-black tracking-tight text-white hidden sm:block drop-shadow-md">
+            Chased<span className="text-blue-400">Sports</span>
+          </span>
+        </Link>
+        <Link href="/login" className="text-sm font-bold bg-white/10 hover:bg-white/20 text-white backdrop-blur-md border border-white/20 px-5 py-2 rounded-full transition-all shadow-sm">
+          Log In
+        </Link>
+      </nav>
+
       <div 
         className="pointer-events-none fixed inset-0 z-30 transition-opacity duration-300 hidden md:block opacity-50"
         style={{ background: `radial-gradient(800px circle at ${mousePosition.x}px ${mousePosition.y}px, rgba(56, 189, 248, 0.06), transparent 40%)` }}
@@ -406,7 +429,7 @@ export default function LandingPage() {
       {/* ========================================================= */}
       {/* 🚀 HERO SECTION 🚀                                        */}
       {/* ========================================================= */}
-      <div className="relative pt-24 sm:pt-32 pb-20 lg:pt-48 lg:pb-40 px-5 sm:px-6 mt-[-4rem] overflow-hidden">
+      <div className="relative pt-32 sm:pt-40 pb-20 lg:pt-56 lg:pb-40 px-5 sm:px-6 mt-[-4rem] overflow-hidden">
         <div className="absolute inset-0 bg-grid-pattern [mask-image:linear-gradient(to_bottom,black_20%,transparent_80%)] -z-20">
            <div className="absolute inset-0 bg-grid-pattern animate-[grid-pan_3s_linear_infinite]"></div>
         </div>
@@ -421,8 +444,7 @@ export default function LandingPage() {
             <ShieldCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" /> The New Standard in Recruiting
           </div>
           
-          <h1 className="text-[3rem] leading-[1.05] sm:text-5xl md:text-7xl lg:text-[6rem] font-black tracking-tighter text-white drop-shadow-2xl">
-            Reverse-engineer college standards. <br/>
+          <h1 className="text-[4rem] leading-[1.05] sm:text-6xl md:text-8xl lg:text-[8rem] font-black tracking-tighter text-white drop-shadow-2xl">
             Find <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-cyan-300 to-emerald-400 filter drop-shadow-[0_0_30px_rgba(56,189,248,0.4)]">YOUR</span> college.
           </h1>
           
@@ -442,7 +464,7 @@ export default function LandingPage() {
       </div>
 
       {/* ========================================================= */}
-      {/* 🔍 TOOL 1: THE DISCOVERY ENGINE (INFINITE MARQUEE)        */}
+      {/* 🔍 TOOL 1: THE COLLEGE FINDER (INFINITE MARQUEE)        */}
       {/* ========================================================= */}
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-8 sm:py-12 relative z-10">
         <div className="group relative bg-[#0a0f1e]/80 backdrop-blur-md rounded-[2rem] sm:rounded-[3rem] border border-slate-800/80 overflow-hidden shadow-2xl transition-all duration-700">
@@ -526,23 +548,21 @@ export default function LandingPage() {
               </Link>
             </div>
 
-            {/* 🚨 DYNAMIC AUTO-CYCLING LEADERBOARD CARDS 🚨 */}
-            <div className="flex-1 w-full relative h-[420px] sm:h-[480px] flex items-center justify-center mt-10 lg:mt-0 z-20">
+            {/* DYNAMIC AUTO-CYCLING LEADERBOARD CARDS */}
+            <div className="flex-1 w-full relative h-[380px] sm:h-[450px] flex items-center justify-center mt-6 lg:mt-0">
               
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[280px] sm:w-[400px] h-[280px] sm:h-[400px] rounded-full border border-slate-700/50 z-0 animate-[spin_10s_linear_infinite]"></div>
-
-              <div className="relative w-full max-w-[280px] sm:max-w-[340px] h-full flex items-center justify-center z-30">
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-[280px] sm:max-w-[340px] h-full flex items-center justify-center z-30">
                 {topAthletes.map((athlete, idx) => (
                   idx === activeAthleteIdx && (
                     <div 
                       key={athlete.id} 
-                      className="absolute w-full bg-[#0a1128] border border-slate-700 shadow-2xl rounded-[2rem] sm:rounded-[2.5rem] p-5 sm:p-8 text-center animate-in fade-in zoom-in-95 slide-in-from-bottom-4 duration-500 fill-mode-forwards"
+                      className="absolute w-full bg-[#0a1128] border border-slate-700 shadow-2xl rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-8 text-center animate-in fade-in zoom-in-95 slide-in-from-bottom-4 duration-500 fill-mode-forwards"
                     >
                       <div className="absolute -top-4 sm:-top-5 -right-4 sm:-right-5 w-10 h-10 sm:w-12 sm:h-12 bg-yellow-400 text-yellow-900 rounded-full border-4 border-[#0a1128] flex items-center justify-center font-black text-lg sm:text-xl shadow-lg z-40 transform rotate-12">
                         #{athlete.rank}
                       </div>
 
-                      <div className={`w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-br ${athlete.color} rounded-full mx-auto mb-4 sm:mb-6 shadow-[0_0_30px_rgba(168,85,247,0.4)] flex items-center justify-center border-[3px] sm:border-4 border-slate-800 text-white font-black text-2xl sm:text-3xl`}>
+                      <div className={`w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-br ${athlete.color} rounded-full mx-auto mb-4 sm:mb-6 shadow-[0_0_30px_rgba(168,85,247,0.4)] flex items-center justify-center border-4 border-slate-800 text-white font-black text-2xl sm:text-3xl`}>
                         {athlete.initials}
                       </div>
                       
@@ -553,7 +573,7 @@ export default function LandingPage() {
                         <MapPin className="w-3 h-3 inline mr-1 -mt-0.5" />{athlete.highSchool}
                       </p>
 
-                      <div className="bg-slate-900 border border-slate-800 p-4 sm:p-5 rounded-xl sm:rounded-2xl mb-4 sm:mb-6">
+                      <div className="bg-slate-900 border border-slate-800 p-4 sm:p-5 rounded-xl sm:rounded-2xl mb-5 sm:mb-6">
                         <span className="block text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">{athlete.event}</span>
                         <span className="text-2xl sm:text-3xl font-black text-white">{athlete.mark}</span>
                       </div>
@@ -566,6 +586,7 @@ export default function LandingPage() {
                 ))}
               </div>
 
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] sm:w-[400px] h-[300px] sm:h-[400px] rounded-full border border-slate-700/50 -z-10 animate-[spin_10s_linear_infinite]"></div>
               <div className="absolute inset-0 bg-[radial-gradient(#334155_1px,transparent_1px)] [background-size:16px_16px] opacity-20 -z-20"></div>
             </div>
           </div>
