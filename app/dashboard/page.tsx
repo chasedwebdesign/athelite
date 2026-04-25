@@ -78,6 +78,7 @@ export default function AthleteHomebase() {
   
   const [resumeText, setResumeText] = useState('');
   const [isSavingResume, setIsSavingResume] = useState(false);
+  const [lastSaved, setLastSaved] = useState<string | null>(null);
 
   const [showAddSportModal, setShowAddSportModal] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -137,6 +138,7 @@ export default function AthleteHomebase() {
       const { data } = await supabase.from('saved_colleges').select(`id, college_id, universities (*)`).eq('athlete_id', athleteProfile.id);
       if (data) setSavedColleges(data);
       setSearchQuery('');
+      showToast("College added to your board!", "success");
     } catch (err) { console.error(err); }
   };
 
@@ -150,6 +152,7 @@ export default function AthleteHomebase() {
       if (removedItem) {
         setCompareList(prev => prev.filter(c => c.id !== removedItem.universities.id));
       }
+      showToast("College removed.", "success");
     } catch (err) { console.error(err); }
   };
 
@@ -171,6 +174,7 @@ export default function AthleteHomebase() {
     setIsSavingResume(true);
     try {
       await supabase.from('athletes').update({ saved_resume: resumeText }).eq('id', athleteProfile.id);
+      setLastSaved(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
       showToast("Resume saved successfully!");
     } catch (err) { console.error(err); } finally { setIsSavingResume(false); }
   };
@@ -277,20 +281,36 @@ export default function AthleteHomebase() {
 
       {/* UNIVERSAL HERO PROFILE */}
       <div className="bg-slate-900 text-white pt-10 pb-16 px-5 md:pt-16 md:pb-24 md:px-6 relative overflow-hidden">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center md:items-start gap-6 md:gap-8 relative z-10">
-          <div className="relative w-24 h-24 md:w-32 md:h-32 shrink-0">
-            <AvatarWithBorder avatarUrl={athleteProfile?.avatar_url} borderId={athleteProfile?.equipped_border} sizeClasses="w-24 h-24 md:w-32 md:h-32" />
+        <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/10 blur-[100px] rounded-full pointer-events-none"></div>
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center md:items-start justify-between gap-6 md:gap-8 relative z-10">
+          
+          <div className="flex flex-col md:flex-row items-center md:items-start gap-6 w-full">
+            <div className="relative w-24 h-24 md:w-32 md:h-32 shrink-0">
+              <AvatarWithBorder avatarUrl={athleteProfile?.avatar_url} borderId={athleteProfile?.equipped_border} sizeClasses="w-24 h-24 md:w-32 md:h-32" />
+            </div>
+            <div className="text-center md:text-left flex-1">
+              <h1 className="text-3xl md:text-4xl font-black mb-2 tracking-tight">
+                {athleteProfile?.first_name ? `${athleteProfile.first_name} ${athleteProfile.last_name}` : 'Welcome, Athlete'}
+              </h1>
+              <p className="text-base md:text-lg text-slate-400 font-medium flex items-center justify-center md:justify-start gap-2 mb-6">
+                <MapPin className="w-4 h-4 opacity-70" /> 
+                {athleteProfile?.high_school || 'General Athlete Profile'} 
+                {athleteProfile?.grad_year && ` • Class of ${athleteProfile.grad_year}`}
+              </p>
+              
+              {/* Dynamic Call to Action */}
+              {activeSports.includes('track') ? (
+                <Link href="/dashboard/track" className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-black px-6 py-3 rounded-xl transition-all shadow-md">
+                   Enter Track Portal <ArrowRight className="w-4 h-4" />
+                </Link>
+              ) : (
+                <button onClick={() => setShowAddSportModal(true)} className="inline-flex items-center gap-2 bg-white text-slate-900 hover:bg-slate-50 font-black px-6 py-3 rounded-xl transition-all shadow-md">
+                   <Plus className="w-4 h-4" /> Add Your Sport
+                </button>
+              )}
+            </div>
           </div>
-          <div className="text-center md:text-left flex-1 w-full">
-            <h1 className="text-3xl md:text-4xl font-black mb-2 tracking-tight">
-              {athleteProfile?.first_name ? `${athleteProfile.first_name} ${athleteProfile.last_name}` : 'Welcome, Athlete'}
-            </h1>
-            <p className="text-base md:text-lg text-slate-400 font-medium flex items-center justify-center md:justify-start gap-2">
-              <MapPin className="w-4 h-4 opacity-70" /> 
-              {athleteProfile?.high_school || 'General Athlete Profile'} 
-              {athleteProfile?.grad_year && ` • Class of ${athleteProfile.grad_year}`}
-            </p>
-          </div>
+
         </div>
       </div>
 
@@ -298,18 +318,20 @@ export default function AthleteHomebase() {
         
         {/* SPORTS LOCKER */}
         <div className="bg-white rounded-[2rem] p-6 md:p-8 shadow-sm border border-slate-200">
-          <div className="mb-6">
-            <h2 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight flex items-center">
-              <Medal className="w-6 h-6 mr-3 text-blue-600" /> My Sports Locker
-            </h2>
-            <p className="text-slate-500 font-medium text-sm mt-1">Select a sport to view your specific stats, scouting reports, and leaderboards.</p>
+          <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight flex items-center">
+                <Medal className="w-6 h-6 mr-3 text-blue-600" /> My Sports Locker
+              </h2>
+              <p className="text-slate-500 font-medium text-sm mt-1">Select a sport to view your specific stats, scouting reports, and leaderboards.</p>
+            </div>
           </div>
           
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
             {activeSports.includes('track') && (
               <Link href="/dashboard/track" className="group relative bg-gradient-to-br from-blue-900 to-indigo-900 rounded-2xl p-6 border border-blue-800 shadow-lg overflow-hidden hover:-translate-y-1 transition-all">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/20 blur-[40px] rounded-full pointer-events-none group-hover:bg-blue-400/30 transition-colors"></div>
-                <Activity className="w-10 h-10 text-blue-300 mb-4" />
+                <Activity className="w-10 h-10 text-blue-300 mb-4 group-hover:scale-110 transition-transform" />
                 <h3 className="text-2xl font-black text-white mb-1">Track & Field</h3>
                 <p className="text-blue-200/70 text-sm font-medium flex items-center">
                   Enter Portal <ArrowRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
@@ -351,9 +373,9 @@ export default function AthleteHomebase() {
 
                 return (
                   <div key={college.id} className="bg-slate-800 border border-slate-700 rounded-2xl p-6 relative flex flex-col">
-                    <button onClick={() => toggleCompare(college)} className="absolute top-4 right-4 p-1.5 bg-slate-700 text-slate-400 hover:text-red-400 hover:bg-slate-600 rounded-full transition-colors"><X className="w-4 h-4" /></button>
+                    <button onClick={() => toggleCompare(college)} className="absolute top-4 right-4 p-1.5 bg-slate-700 text-slate-400 hover:text-red-400 hover:bg-slate-600 rounded-full transition-colors z-20"><X className="w-4 h-4" /></button>
                     
-                    <div className="flex items-center gap-4 mb-6 pr-8">
+                    <div className="flex items-center gap-4 mb-6 pr-8 relative z-10">
                       <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center shrink-0 border border-slate-600 overflow-hidden">
                         {college.logo_url ? <img src={college.logo_url} className="w-8 h-8 object-contain"/> : <School className="w-6 h-6 text-slate-400" />}
                       </div>
@@ -367,7 +389,9 @@ export default function AthleteHomebase() {
                     <div className={`p-4 rounded-xl mb-6 flex items-center justify-between border ${isBestScore ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-slate-900 border-slate-700'}`}>
                       <div>
                         <Target className={`w-5 h-5 mb-1 ${isBestScore ? 'text-emerald-400' : 'text-blue-400'}`} />
-                        <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest">Match Score</span>
+                        <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                          Match Score {isBestScore && <span className="bg-emerald-500/20 text-emerald-400 text-[8px] px-1.5 py-0.5 rounded">TOP MATCH</span>}
+                        </span>
                       </div>
                       <div className="text-right">
                         <span className={`text-3xl font-black ${isBestScore ? 'text-emerald-400 drop-shadow-[0_0_10px_rgba(52,211,153,0.5)]' : 'text-white'}`}>{stats.matchScore > 0 ? stats.matchScore : '-'}</span>
@@ -379,11 +403,17 @@ export default function AthleteHomebase() {
                     <div className="space-y-3 mb-6 flex-1">
                       <div className="flex items-center justify-between bg-slate-900/50 p-3 rounded-lg border border-slate-700/50">
                         <span className="text-xs font-bold text-slate-400 flex items-center gap-1.5"><School className="w-3.5 h-3.5" /> Tuition</span>
-                        <span className={`font-black text-sm ${isBestTuition ? 'text-emerald-400' : 'text-white'}`}>{stats.tuitionStr}</span>
+                        <div className="flex items-center">
+                           {isBestTuition && <span className="bg-emerald-500/20 text-emerald-400 text-[9px] px-1.5 py-0.5 rounded uppercase tracking-widest mr-2 font-black">Lowest</span>}
+                           <span className={`font-black text-sm ${isBestTuition ? 'text-emerald-400' : 'text-white'}`}>{stats.tuitionStr}</span>
+                        </div>
                       </div>
                       <div className="flex items-center justify-between bg-slate-900/50 p-3 rounded-lg border border-slate-700/50">
                         <span className="text-xs font-bold text-slate-400 flex items-center gap-1.5"><TrendingUp className="w-3.5 h-3.5" /> 10-Yr Salary</span>
-                        <span className={`font-black text-sm ${isBestSalary ? 'text-emerald-400' : 'text-white'}`}>{stats.salaryStr}</span>
+                        <div className="flex items-center">
+                           {isBestSalary && <span className="bg-blue-500/20 text-blue-400 text-[9px] px-1.5 py-0.5 rounded uppercase tracking-widest mr-2 font-black">Highest</span>}
+                           <span className={`font-black text-sm ${isBestSalary ? 'text-blue-400' : 'text-white'}`}>{stats.salaryStr}</span>
+                        </div>
                       </div>
                       <div className="flex items-center justify-between bg-slate-900/50 p-3 rounded-lg border border-slate-700/50">
                         <span className="text-xs font-bold text-slate-400 flex items-center gap-1.5"><GraduationCap className="w-3.5 h-3.5" /> Grad Rate</span>
@@ -517,7 +547,7 @@ export default function AthleteHomebase() {
             ) : (
               <div className="text-center py-10 bg-slate-50 rounded-2xl border border-slate-200 border-dashed flex-1 flex flex-col items-center justify-center">
                 <School className="w-10 h-10 text-slate-300 mb-3" />
-                <p className="text-sm text-slate-500 font-medium">Search to add colleges to your board.</p>
+                <p className="text-sm text-slate-500 font-medium max-w-[200px] leading-relaxed">Search the database above to add colleges to your board.</p>
               </div>
             )}
           </div>
@@ -529,8 +559,9 @@ export default function AthleteHomebase() {
                 <h2 className="text-xl font-black text-slate-900 flex items-center tracking-tight">
                   <FileText className="w-5 h-5 mr-2 text-emerald-500" /> Master Resume
                 </h2>
+                {lastSaved && <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Last saved at {lastSaved}</p>}
               </div>
-              <button onClick={handleSaveResume} disabled={isSavingResume} className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-white font-black px-4 py-2 rounded-xl text-xs transition-colors shadow-md">
+              <button onClick={handleSaveResume} disabled={isSavingResume} className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-white font-black px-4 py-2 rounded-xl text-xs transition-colors shadow-md disabled:opacity-50">
                 <Save className="w-4 h-4" /> {isSavingResume ? 'Saving...' : 'Save'}
               </button>
             </div>

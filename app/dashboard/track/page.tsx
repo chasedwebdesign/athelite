@@ -1281,6 +1281,7 @@ export default function DashboardPage() {
                   }
                 </p>
 
+                {/* VERIFICATION BUTTON MOVED TO HERO */}
                 {isUnverified && (
                   <button type="button" onClick={beginVerification} className="bg-amber-500 hover:bg-amber-400 text-amber-950 font-black px-4 py-1.5 rounded-lg text-xs transition-transform hover:scale-105 shadow-md flex items-center gap-2 mx-auto md:mx-0 relative z-50 cursor-pointer pointer-events-auto">
                     <ShieldCheck className="w-4 h-4" /> Verify Ownership to Unlock Features
@@ -1417,15 +1418,6 @@ export default function DashboardPage() {
                   </button>
                 </form>
               )}
-
-              {/* GENERAL ATHLETE UPSLL BUTTON */}
-              <div className="relative mt-12 pt-8 border-t border-white/10 flex flex-col items-center">
-                <span className="absolute -top-2.5 bg-[#0f172a] px-4 text-xs font-bold text-slate-400 uppercase tracking-widest">OR</span>
-                <button onClick={handleManualSave} disabled={isSyncing} className="bg-white/5 hover:bg-white/10 border border-white/20 text-white font-bold py-3 px-8 rounded-xl transition-colors flex items-center gap-2 shadow-sm">
-                  <UserCircle2 className="w-5 h-5" /> Create a General Profile
-                </button>
-                <p className="text-xs text-slate-400 font-medium mt-4 text-center max-w-sm">Not a Track & Field athlete? You can still use our College Finder and Resume Builder tools.</p>
-              </div>
 
             </div>
           </div>
@@ -1608,23 +1600,9 @@ export default function DashboardPage() {
         )}
 
         {/* 🚨 MAIN DASHBOARD CONTENT (ONLY VISIBLE IF VERIFIED + TRACK) 🚨 */}
-        {athleteProfile && !isSkipped && (
+        {athleteProfile && !isUnverified && !isSkipped && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-8 animate-in fade-in slide-in-from-bottom-4">
             
-            {/* 🚨 PERSISTENT VERIFICATION BANNER 🚨 */}
-            {isUnverified && (
-              <div className="lg:col-span-3 bg-amber-500 rounded-2xl p-6 shadow-lg border border-amber-600 text-amber-950 flex flex-col md:flex-row items-center justify-between gap-6 mb-2 relative z-10">
-                <div className="flex items-center gap-4 text-center md:text-left">
-                  <ShieldCheck className="w-10 h-10 shrink-0" />
-                  <div>
-                    <h3 className="text-xl font-black">Verify Ownership Required</h3>
-                    <p className="font-medium text-sm">You can view your recruiting score, but you must verify to unlock the community feed, leaderboards, and discovery searches.</p>
-                  </div>
-                </div>
-                <button type="button" onClick={beginVerification} className="w-full md:w-auto bg-slate-900 hover:bg-black text-white font-black px-8 py-3 rounded-xl shadow-md shrink-0 transition-colors cursor-pointer pointer-events-auto">Start Verification</button>
-              </div>
-            )}
-
             {/* ================= LEFT COLUMN: PERMANENT SIDEBAR ================= */}
             <div className="lg:col-span-1 space-y-6">
               
@@ -1635,13 +1613,11 @@ export default function DashboardPage() {
                       borderId={equippedBorder ?? null} 
                       sizeClasses="w-28 h-28"
                   />
-                  {!isUnverified && (
-                    <label className="absolute inset-0 bg-black/40 rounded-full flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer z-30">
-                      <Camera className="w-6 h-6 text-white mb-1" />
-                      <span className="text-[10px] text-white font-bold uppercase tracking-wider">Upload</span>
-                      <input type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} disabled={isUploadingAvatar} />
-                    </label>
-                  )}
+                  <label className="absolute inset-0 bg-black/40 rounded-full flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer z-30">
+                    <Camera className="w-6 h-6 text-white mb-1" />
+                    <span className="text-[10px] text-white font-bold uppercase tracking-wider">Upload</span>
+                    <input type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} disabled={isUploadingAvatar} />
+                  </label>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3 mb-1">
@@ -2641,31 +2617,65 @@ export default function DashboardPage() {
       {/* 🚨 VERIFICATION MODAL 🚨 */}
       {showVerificationStep && (
          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
-           <div className="bg-white rounded-[2rem] p-8 max-w-2xl w-full shadow-2xl relative">
-              <button type="button" onClick={() => setShowVerificationStep(false)} className="absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-600 rounded-full transition-colors"><X className="w-6 h-6"/></button>
-              <h3 className="text-2xl font-black text-slate-900 flex items-center mb-6">
-                <ShieldCheck className="w-7 h-7 mr-3 text-amber-500" /> Verify Athletic.net Identity
-              </h3>
+           <div className="bg-white rounded-[2.5rem] p-8 md:p-10 max-w-2xl w-full shadow-2xl relative overflow-hidden">
+              <button type="button" onClick={() => setShowVerificationStep(false)} className="absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-full transition-colors z-20"><X className="w-6 h-6"/></button>
               
-              <div className="bg-amber-50 p-6 rounded-2xl border border-amber-200 mb-6 space-y-4 text-amber-900 font-medium">
-                <p className="flex items-start gap-3"><span className="bg-amber-200 text-amber-800 font-black w-6 h-6 rounded-full flex items-center justify-center shrink-0">1</span> Log into your Athletic.net account on a browser.</p>
-                <p className="flex items-start gap-3"><span className="bg-amber-200 text-amber-800 font-black w-6 h-6 rounded-full flex items-center justify-center shrink-0">2</span> Click the <strong>Pencil Icon</strong> next to your name to edit your profile.</p>
-                <p className="flex items-start gap-3"><span className="bg-amber-200 text-amber-800 font-black w-6 h-6 rounded-full flex items-center justify-center shrink-0">3</span> Paste the code below exactly into your <strong>First Name</strong> or <strong>Username</strong> field and hit Save.</p>
+              <div className="flex items-center gap-4 mb-8">
+                <div className="w-14 h-14 bg-amber-50 rounded-2xl flex items-center justify-center border border-amber-100 shrink-0">
+                  <ShieldCheck className="w-8 h-8 text-amber-500" />
+                </div>
+                <div>
+                  <h3 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">Verify Identity</h3>
+                  <p className="text-sm font-medium text-slate-500 mt-1">Prove you own this Athletic.net profile to unlock features.</p>
+                </div>
+              </div>
+              
+              <div className="bg-slate-50 p-6 md:p-8 rounded-3xl border border-slate-200 mb-8 space-y-6">
+                <div className="flex items-start gap-4">
+                  <span className="bg-blue-600 text-white font-black w-8 h-8 rounded-full flex items-center justify-center shrink-0 shadow-md mt-0.5">1</span>
+                  <div>
+                    <p className="text-slate-900 font-bold text-lg leading-tight">Open Athletic.net in a Web Browser</p>
+                    <p className="text-sm text-slate-500 mt-1 font-medium">Log into your account using a browser (Safari, Chrome, etc.). <strong className="text-amber-600">Do not use the mobile app.</strong></p>
+                  </div>
+                </div>
+                
+                <div className="w-0.5 h-6 bg-slate-200 ml-4 -my-4"></div>
+                
+                <div className="flex items-start gap-4">
+                  <span className="bg-blue-600 text-white font-black w-8 h-8 rounded-full flex items-center justify-center shrink-0 shadow-md mt-0.5">2</span>
+                  <div>
+                    <p className="text-slate-900 font-bold text-lg leading-tight flex items-center gap-2">
+                      Click the <Edit2 className="w-4 h-4 text-slate-400" /> Pencil Icon
+                    </p>
+                    <p className="text-sm text-slate-500 mt-1 font-medium">Navigate to your profile and click edit next to your name.</p>
+                  </div>
+                </div>
+
+                <div className="w-0.5 h-6 bg-slate-200 ml-4 -my-4"></div>
+
+                <div className="flex items-start gap-4">
+                  <span className="bg-blue-600 text-white font-black w-8 h-8 rounded-full flex items-center justify-center shrink-0 shadow-md mt-0.5">3</span>
+                  <div>
+                    <p className="text-slate-900 font-bold text-lg leading-tight">Update your <span className="text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">@Username</span></p>
+                    <p className="text-sm text-slate-500 mt-1 font-medium">Paste the secure code below exactly into your <strong>Username</strong> (or First Name) field and hit Save.</p>
+                  </div>
+                </div>
               </div>
 
-              <div className="bg-slate-900 py-8 rounded-2xl text-center mb-8 shadow-inner border border-slate-700 relative overflow-hidden">
+              <div className="bg-slate-900 py-8 rounded-3xl text-center mb-8 shadow-[inset_0_2px_15px_rgba(0,0,0,0.5)] border border-slate-800 relative overflow-hidden">
                 <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10 pointer-events-none"></div>
-                <span className="text-xs text-slate-400 uppercase tracking-widest font-bold mb-2 block relative z-10">Your Secure Code</span>
-                <span className="text-5xl font-mono font-black tracking-widest text-emerald-400 relative z-10 select-all">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 blur-[40px] rounded-full pointer-events-none"></div>
+                <span className="text-xs text-slate-400 uppercase tracking-widest font-black mb-2 block relative z-10">Your Secure Code</span>
+                <span className="text-5xl md:text-6xl font-mono font-black tracking-widest text-emerald-400 relative z-10 select-all drop-shadow-md">
                   {verificationCode}
                 </span>
               </div>
 
               <div className="flex flex-col items-center">
-                <button type="button" onClick={confirmVerification} disabled={isVerifying || (verifyLockout !== null && Date.now() < verifyLockout)} className="w-full bg-blue-600 hover:bg-blue-500 text-white py-4 rounded-xl font-black shadow-lg transition-transform hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 flex items-center justify-center text-lg">
-                  {isVerifying ? <><RefreshCw className="w-5 h-5 animate-spin mr-2"/> Checking Athletic.net...</> : (verifyLockout && Date.now() < verifyLockout) ? 'Locked for 3 Hours' : 'I Saved It - Verify Me!'}
+                <button type="button" onClick={confirmVerification} disabled={isVerifying || (verifyLockout !== null && Date.now() < verifyLockout)} className="w-full bg-blue-600 hover:bg-blue-500 text-white py-4 md:py-5 rounded-2xl font-black shadow-[0_4px_14px_rgba(37,99,235,0.39)] transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:hover:scale-100 flex items-center justify-center text-lg">
+                  {isVerifying ? <><RefreshCw className="w-5 h-5 animate-spin mr-2"/> Verifying Connection...</> : (verifyLockout && Date.now() < verifyLockout) ? 'Locked for 3 Hours' : 'I Saved It - Verify Me!'}
                 </button>
-                <p className="text-xs text-slate-500 font-medium mt-4">You can safely delete the code from your Athletic.net profile right after we verify you.</p>
+                <p className="text-xs text-slate-400 font-bold mt-5 text-center px-4">You can safely delete the code from your Athletic.net profile right after we verify you.</p>
               </div>
            </div>
          </div>
