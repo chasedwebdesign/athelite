@@ -246,34 +246,31 @@ const getAthleteProjection = (prs: any[], gender: string): ProjectionResult | nu
   return { overallScore: best.score, overallLabel: label, overallDesc: desc, color, bg, border, bestEvent: best.event, eventBreakdowns: allBreakdowns };
 };
 
-// ============================================================================
-// 🚨 MAIN DASHBOARD COMPONENT
-// ============================================================================
 export default function DashboardPage() {
   const supabase = createClient();
   const router = useRouter();
   
+  // ==========================================
+  // STATE DEFINITIONS
+  // ==========================================
   const [athleteProfile, setAthleteProfile] = useState<AthleteProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<'athlete' | 'coach' | null>(null);
   
-  // Onboarding Tabs
   const [onboardTab, setOnboardTab] = useState<'search' | 'link'>('search');
   const [searchFirstName, setSearchFirstName] = useState('');
   const [searchLastName, setSearchLastName] = useState('');
-  const [searchCity, setSearchCity] = useState(''); // Added City filter
+  const [searchCity, setSearchCity] = useState(''); 
   const [searchState, setSearchState] = useState('');
   const [isSearchingName, setIsSearchingName] = useState(false);
   const [athleteSearchResults, setAthleteSearchResults] = useState<any[]>([]);
   
-  // State Search Combobox Logic
   const [isStateDropdownOpen, setIsStateDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const filteredStates = US_STATES.filter(s => s.toLowerCase().includes(searchState.toLowerCase()));
 
-  // Dashboard States
   const [activeTab, setActiveTab] = useState<'stats' | 'recruiting' | 'scout' | 'rewards'>('stats');
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncUrl, setSyncUrl] = useState('');
@@ -319,7 +316,6 @@ export default function DashboardPage() {
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearchingColleges, setIsSearchingColleges] = useState(false);
 
-  // 🚨 RESTORED MISSING STATES 🚨
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [editFirstName, setEditFirstName] = useState('');
   const [editLastName, setEditLastName] = useState('');
@@ -338,7 +334,6 @@ export default function DashboardPage() {
     } catch (e) {}
   };
 
-  // Close dropdown on click outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
@@ -349,7 +344,6 @@ export default function DashboardPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // 🚨 CHECK LOCALSTORAGE FOR COOLDOWNS ON MOUNT 🚨
   useEffect(() => {
     const lastSync = localStorage.getItem('last_sync_time');
     if (lastSync) {
@@ -394,7 +388,6 @@ export default function DashboardPage() {
     }
   };
 
-  // 🚨 COLLEGE FINDER: LIVE SEARCH EFFECT 🚨
   useEffect(() => {
     const searchColleges = async () => {
       if (searchQuery.trim().length < 3) {
@@ -416,7 +409,6 @@ export default function DashboardPage() {
     return () => clearTimeout(timeoutId);
   }, [searchQuery, supabase]);
 
-  // 🚨 COLLEGE FINDER: SAVE SCHOOL 🚨
   const handleSaveCollege = async (collegeId: string) => {
     if (!currentUserId) return;
     try {
@@ -619,7 +611,6 @@ export default function DashboardPage() {
     loadDashboardData();
   }, [supabase, router]);
 
-  // 🚨 NEW: HANDLE SNIPER SEARCH API 🚨
   const handleNameSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
@@ -634,7 +625,7 @@ export default function DashboardPage() {
           firstName: searchFirstName.trim(), 
           lastName: searchLastName.trim(), 
           state: searchState,
-          city: searchCity.trim() // Passes city filter to backend
+          city: searchCity.trim()
         })
       });
       const result = await response.json();
@@ -666,7 +657,7 @@ export default function DashboardPage() {
     setErrorMessage('');
     
     if (!canSync) {
-      setErrorMessage(`You have reached the API limit. ${syncCooldownText}`);
+      showToast(syncCooldownText, "error");
       return;
     }
 
@@ -731,7 +722,7 @@ export default function DashboardPage() {
     if (!athleteProfile?.athletic_net_url) return;
     
     if (verifyLockout && Date.now() < verifyLockout) {
-      setErrorMessage("Too many failed attempts. You are locked out for 3 hours to prevent API spam.");
+      showToast("Too many failed attempts. You are locked out for 3 hours to prevent API spam.", "error");
       return;
     }
 
@@ -753,7 +744,7 @@ export default function DashboardPage() {
         localStorage.setItem('verify_attempts', newAttempts.toString());
 
         if (newAttempts >= 3) {
-          const lockoutTime = Date.now() + 3 * 60 * 60 * 1000; // 3 Hours
+          const lockoutTime = Date.now() + 3 * 60 * 60 * 1000; 
           setVerifyLockout(lockoutTime);
           localStorage.setItem('verify_lockout_until', lockoutTime.toString());
           throw new Error("Too many failed attempts. Try again in 3 hours.");
@@ -784,19 +775,16 @@ export default function DashboardPage() {
       window.location.reload();
 
     } catch (err: any) { 
-      setErrorMessage(err.message); 
+      showToast(err.message, "error"); 
     } finally {
       setIsVerifying(false);
     }
   };
 
-  const handleManualSave = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleManualSave = async () => {
     setIsSyncing(true);
     try {
       const { error } = await supabase.from('athletes').update({
-        first_name: editFirstName,
-        last_name: editLastName,
         athletic_net_url: 'skipped', 
         trust_level: 0 
       }).eq('id', athleteProfile?.id);
@@ -1054,7 +1042,7 @@ export default function DashboardPage() {
       showToast("Scout Card exported successfully!", "success");
     } catch (err) {
       console.error(err);
-      showToast("Failed to export card.", "error");
+      showToast("Failed to export card. Ensure you ran: npm install html2canvas", "error");
     } finally {
       setIsExportingCard(false);
     }
@@ -1083,7 +1071,7 @@ export default function DashboardPage() {
 
   const isSkipped = athleteProfile?.athletic_net_url === 'skipped';
   const noProfileLinked = !athleteProfile?.athletic_net_url;
-  const isUnverified = athleteProfile?.trust_level === 0 && !!athleteProfile?.athletic_net_url && !isSkipped;
+  const isUnverified = athleteProfile?.trust_level === 0 && !noProfileLinked && !isSkipped;
 
   const projection = getAthleteProjection(athleteProfile?.prs || [], athleteProfile?.gender || 'Boys');
   const myReferralCode = athleteProfile?.athletic_net_url?.match(/\d{5,}/)?.[0] || null;
@@ -1232,7 +1220,7 @@ export default function DashboardPage() {
         {athleteProfile?.is_premium && (
           <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/20 blur-[100px] rounded-full pointer-events-none"></div>
         )}
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center gap-8 relative z-10">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center gap-8 relative z-30">
           
           <div className="relative w-32 h-32 group shrink-0">
             <div className={`w-full h-full rounded-full border-4 ${athleteProfile?.is_premium ? 'border-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.3)]' : 'border-slate-800 shadow-xl'} overflow-hidden bg-slate-800 flex items-center justify-center ${isUploadingAvatar ? 'animate-pulse' : ''}`}>
@@ -1283,13 +1271,22 @@ export default function DashboardPage() {
                   </span>
                 )}
               </h1>
-              <p className="text-lg text-slate-400 font-medium flex items-center justify-center md:justify-start gap-2">
-                <MapPin className="w-4 h-4 opacity-70" /> 
-                {isSkipped 
-                  ? (athleteProfile?.high_school ? `${athleteProfile.high_school} • Class of ${athleteProfile.grad_year}` : 'College Recruiting Hub')
-                  : (athleteProfile?.high_school || 'Set up your profile')
-                }
-              </p>
+              
+              <div className="flex flex-col items-center md:items-start gap-3 mt-2">
+                <p className="text-lg text-slate-400 font-medium flex items-center justify-center md:justify-start gap-2">
+                  <MapPin className="w-4 h-4 opacity-70" /> 
+                  {isSkipped 
+                    ? (athleteProfile?.high_school ? `${athleteProfile.high_school} • Class of ${athleteProfile.grad_year}` : 'College Recruiting Hub')
+                    : (athleteProfile?.high_school || 'Set up your profile')
+                  }
+                </p>
+
+                {isUnverified && (
+                  <button type="button" onClick={beginVerification} className="bg-amber-500 hover:bg-amber-400 text-amber-950 font-black px-4 py-1.5 rounded-lg text-xs transition-transform hover:scale-105 shadow-md flex items-center gap-2 mx-auto md:mx-0 relative z-50 cursor-pointer pointer-events-auto">
+                    <ShieldCheck className="w-4 h-4" /> Verify Ownership to Unlock Features
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -1315,7 +1312,7 @@ export default function DashboardPage() {
 
               {/* TABS */}
               <div className="flex justify-center mb-10">
-                <div className="bg-white/10 p-1.5 rounded-2xl flex gap-1 border border-white/10">
+                <div className="bg-white/10 p-1.5 rounded-xl flex gap-1 border border-white/10">
                   <button onClick={() => setOnboardTab('search')} className={`px-8 py-3 rounded-xl text-sm font-black transition-all ${onboardTab === 'search' ? 'bg-white text-slate-900 shadow-xl' : 'text-white hover:bg-white/10'}`}>Athlete Search</button>
                   <button onClick={() => setOnboardTab('link')} className={`px-8 py-3 rounded-xl text-sm font-black transition-all ${onboardTab === 'link' ? 'bg-white text-slate-900 shadow-xl' : 'text-white hover:bg-white/10'}`}>Paste Link</button>
                 </div>
@@ -1364,8 +1361,8 @@ export default function DashboardPage() {
                       )}
                     </div>
 
-                    <button type="submit" disabled={isSearchingName} className="bg-blue-500 hover:bg-blue-400 text-white px-6 py-4 rounded-xl font-black disabled:opacity-50 transition-all shadow-lg flex items-center justify-center sm:col-span-2 text-lg">
-                      {isSearchingName ? <><RefreshCw className="w-5 h-5 mr-2 animate-spin" /> Searching Database...</> : 'Find Me'}
+                    <button type="submit" disabled={isSearchingName} className="bg-blue-500 hover:bg-blue-400 text-white py-4 rounded-xl font-black disabled:opacity-50 transition-all shadow-lg flex items-center justify-center sm:col-span-2 text-lg">
+                      {isSearchingName ? <><RefreshCw className="w-5 h-5 mr-2 animate-spin" /> Searching Database...</> : <><Search className="w-5 h-5 mr-2" /> Find My Profile</>}
                     </button>
                   </form>
 
@@ -1420,17 +1417,203 @@ export default function DashboardPage() {
                   </button>
                 </form>
               )}
+
+              {/* GENERAL ATHLETE UPSLL BUTTON */}
+              <div className="relative mt-12 pt-8 border-t border-white/10 flex flex-col items-center">
+                <span className="absolute -top-2.5 bg-[#0f172a] px-4 text-xs font-bold text-slate-400 uppercase tracking-widest">OR</span>
+                <button onClick={handleManualSave} disabled={isSyncing} className="bg-white/5 hover:bg-white/10 border border-white/20 text-white font-bold py-3 px-8 rounded-xl transition-colors flex items-center gap-2 shadow-sm">
+                  <UserCircle2 className="w-5 h-5" /> Create a General Profile
+                </button>
+                <p className="text-xs text-slate-400 font-medium mt-4 text-center max-w-sm">Not a Track & Field athlete? You can still use our College Finder and Resume Builder tools.</p>
+              </div>
+
             </div>
           </div>
         )}
 
-        {/* 🚨 STATE 2: THE DASHBOARD (Personal Data View) 🚨 */}
-        {!noProfileLinked && (
+        {/* 🚨 EXCLUSIVE "SKIPPED / GENERAL ATHLETE" DASHBOARD 🚨 */}
+        {athleteProfile && isSkipped && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-8 animate-in fade-in slide-in-from-bottom-4">
+            
+            {/* LEFT COLUMN: BASIC PROFILE + UPSELL */}
+            <div className="lg:col-span-1 space-y-6">
+              <div className="bg-white rounded-[2rem] p-8 border border-slate-200 shadow-sm relative flex flex-col items-center text-center">
+                <div className="relative w-28 h-28 mb-4 group">
+                  <AvatarWithBorder avatarUrl={athleteProfile.avatar_url ?? null} borderId="none" sizeClasses="w-28 h-28" />
+                  <label className="absolute inset-0 bg-black/40 rounded-full flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer z-30">
+                    <Camera className="w-6 h-6 text-white mb-1" />
+                    <span className="text-[10px] text-white font-bold uppercase tracking-wider px-2">Upload</span>
+                    <input type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} disabled={isUploadingAvatar} />
+                  </label>
+                </div>
+                <h1 className="text-2xl font-black text-slate-900 mb-2">{athleteProfile.first_name} {athleteProfile.last_name}</h1>
+                <div className="inline-flex items-center px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-slate-600 text-xs font-bold tracking-widest uppercase shadow-sm">
+                  General Athlete
+                </div>
+              </div>
+
+              <div className="bg-gradient-to-br from-blue-900 to-indigo-900 rounded-[2rem] p-8 shadow-xl border border-blue-700 text-white relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-48 h-48 bg-blue-500/20 blur-[60px] rounded-full pointer-events-none"></div>
+                <div className="relative z-10 text-center">
+                  <div className="w-14 h-14 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4 shadow-inner border border-white/20">
+                    <Medal className="w-6 h-6 text-blue-300" />
+                  </div>
+                  <h3 className="text-xl font-black mb-2">Are you a Track Athlete?</h3>
+                  <p className="text-blue-200/80 text-sm font-medium mb-6">Link your Athletic.net profile to instantly unlock the Recruiting Feed, Messaging, and Scouting Analytics.</p>
+                  <button onClick={() => setShowLinkModal(true)} className="w-full bg-white text-blue-900 hover:bg-blue-50 font-black py-3 rounded-xl shadow-lg transition-transform hover:scale-105 flex items-center justify-center gap-2 text-sm">
+                    <LinkIcon className="w-4 h-4" /> Link Profile
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* RIGHT COLUMN: CORE TOOLS */}
+            <div className="lg:col-span-2 space-y-6">
+              
+              {/* TARGET SCHOOLS W/ LIVE COLLEGE FINDER */}
+              <div className="bg-white rounded-[2rem] p-8 md:p-10 shadow-sm border border-slate-200 relative overflow-visible h-full flex flex-col z-20">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 pb-6 border-b border-slate-100 gap-4">
+                  <div>
+                    <h3 className="text-2xl font-black text-slate-900 tracking-tight flex items-center">
+                      <School className="w-6 h-6 mr-3 text-blue-600" /> My Recruiting Board
+                    </h3>
+                    <p className="text-slate-500 font-medium text-sm mt-1">Search and save colleges you are actively interested in.</p>
+                  </div>
+                  <div className="bg-slate-100 text-slate-600 font-bold px-3 py-1.5 rounded-lg text-xs shrink-0">
+                    {savedColleges?.length || 0} Saved
+                  </div>
+                </div>
+
+                {/* 🚨 LIVE COLLEGE FINDER WIDGET 🚨 */}
+                <div className="relative mb-8">
+                  <div className="flex items-center bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 focus-within:ring-2 focus-within:ring-blue-500 focus-within:bg-white transition-all shadow-sm">
+                     <Search className="w-5 h-5 text-slate-400 mr-3 shrink-0" />
+                     <input 
+                       type="text"
+                       placeholder="Search for any college (e.g., Oregon, UCLA)..."
+                       value={searchQuery}
+                       onChange={(e) => setSearchQuery(e.target.value)}
+                       className="w-full bg-transparent focus:outline-none text-sm font-bold text-slate-900 placeholder:text-slate-400 placeholder:font-medium"
+                     />
+                     {isSearchingColleges && <RefreshCw className="w-4 h-4 text-blue-500 animate-spin" />}
+                  </div>
+                  
+                  {/* Dropdown Results */}
+                  {searchQuery.length >= 3 && searchResults.length > 0 && (
+                     <div className="absolute top-full mt-2 left-0 right-0 bg-white rounded-xl border border-slate-200 shadow-xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2">
+                        {searchResults.map((uni: any) => {
+                          const isAlreadySaved = savedColleges.some(c => c.college_id === uni.id);
+                          return (
+                            <div key={uni.id} className="flex items-center justify-between p-4 border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
+                                <Link href={`/college/${uni.id}`} className="flex items-center gap-4 flex-1">
+                                  <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center shrink-0 border border-slate-200 overflow-hidden shadow-sm">
+                                      {uni.logo_url ? <img src={uni.logo_url} className="w-8 h-8 object-contain"/> : <School className="w-5 h-5 text-slate-400" />}
+                                  </div>
+                                  <div>
+                                      <p className="text-sm font-bold text-slate-900">{uni.name}</p>
+                                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">{uni.division} • {uni.state}</p>
+                                  </div>
+                                </Link>
+                                <button 
+                                  onClick={() => handleSaveCollege(uni.id)} 
+                                  disabled={isAlreadySaved}
+                                  className={`p-2.5 rounded-lg transition-colors shadow-sm border shrink-0 ${isAlreadySaved ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed' : 'bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white border-blue-200 hover:border-blue-600'}`}
+                                  title={isAlreadySaved ? "Already saved" : "Save to board"}
+                                >
+                                  {isAlreadySaved ? <Check className="w-4 h-4" /> : <BookmarkPlus className="w-4 h-4" />}
+                                </button>
+                            </div>
+                          )
+                        })}
+                     </div>
+                  )}
+                </div>
+                
+                {/* Board List */}
+                {savedColleges && savedColleges.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 flex-1">
+                    {savedColleges.map((saved) => {
+                      const college = saved.universities; 
+                      if (!college) return null;
+                      return (
+                        <div key={saved.id} className="flex items-center gap-4 p-4 rounded-2xl border border-slate-200 bg-slate-50 hover:border-blue-300 hover:bg-blue-50 transition-colors group cursor-pointer relative">
+                          <Link href={`/college/${college.id}`} className="absolute inset-0 z-10" aria-label={`View ${college.name}`}></Link>
+                          <div className="w-12 h-12 bg-white rounded-full border border-slate-200 shadow-sm flex items-center justify-center shrink-0 overflow-hidden relative z-0">
+                            {college.logo_url ? (
+                              <img src={college.logo_url} alt={college.name} className="w-8 h-8 object-contain" />
+                            ) : (
+                              <School className="w-6 h-6 text-slate-400" />
+                            )}
+                          </div>
+                          <div className="flex-1 truncate relative z-0">
+                            <h4 className="font-bold text-slate-900 truncate group-hover:text-blue-600 transition-colors">{college.name}</h4>
+                            <p className="text-xs font-medium text-slate-500 flex items-center mt-0.5">
+                              {college.division || 'NCAA'} • {college.state || 'USA'}
+                            </p>
+                          </div>
+                          <button 
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleRemoveCollege(saved.id); }} 
+                              className="relative z-20 p-2 text-slate-400 hover:text-red-500 hover:bg-white rounded-lg transition-colors"
+                              title="Remove school"
+                          >
+                              <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-12 bg-slate-50 rounded-2xl border border-slate-200 border-dashed flex-1 flex flex-col items-center justify-center">
+                    <Bookmark className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+                    <h4 className="text-xl font-black text-slate-900 mb-2">Your board is empty</h4>
+                    <p className="text-sm text-slate-500 font-medium max-w-sm mx-auto">Use the search bar above to look up colleges and add them to your recruiting target list.</p>
+                  </div>
+                )}
+              </div>
+
+              {/* MASTER RESUME */}
+              <div className="bg-white rounded-[2rem] p-8 md:p-10 border border-slate-200 shadow-sm h-auto flex flex-col relative overflow-hidden z-10">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 pb-6 border-b border-slate-100 gap-4">
+                  <div>
+                    <h2 className="text-2xl font-black text-slate-900 flex items-center">
+                      <FileText className="w-6 h-6 mr-3 text-emerald-500" /> Master Resume
+                    </h2>
+                    <p className="text-slate-500 font-medium mt-1 text-sm">Save your academics and achievements for college coaches.</p>
+                  </div>
+                  
+                  <button 
+                    onClick={handleSaveResume}
+                    disabled={isSavingResume}
+                    className="flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-white font-black px-5 py-2.5 rounded-xl text-sm transition-colors shadow-md disabled:opacity-50 shrink-0"
+                  >
+                    <Save className="w-4 h-4" /> {isSavingResume ? 'Saving...' : 'Save Resume'}
+                  </button>
+                </div>
+
+                <div className="flex-1 flex flex-col">
+                  <textarea 
+                    value={resumeText}
+                    onChange={(e) => setResumeText(e.target.value)}
+                    placeholder="Example:&#10;&#10;Academics:&#10;GPA: 3.9 (Unweighted)&#10;SAT: 1450&#10;Intended Major: Business Administration&#10;&#10;Athletic Highlights:&#10;• 2024 State Finalist&#10;• 3x Varsity Letterman&#10;• Team Captain (Junior & Senior Year)"
+                    className="flex-1 w-full bg-slate-50 border border-slate-200 rounded-2xl p-5 text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white resize-none min-h-[300px]"
+                  />
+                  <p className="text-xs font-bold text-slate-400 text-right mt-3">
+                    Markdown and line breaks are supported.
+                  </p>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        )}
+
+        {/* 🚨 MAIN DASHBOARD CONTENT (ONLY VISIBLE IF VERIFIED + TRACK) 🚨 */}
+        {athleteProfile && !isSkipped && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-8 animate-in fade-in slide-in-from-bottom-4">
             
             {/* 🚨 PERSISTENT VERIFICATION BANNER 🚨 */}
             {isUnverified && (
-              <div className="lg:col-span-3 bg-amber-500 rounded-2xl p-6 shadow-lg border border-amber-600 text-amber-950 flex flex-col md:flex-row items-center justify-between gap-6 mb-2">
+              <div className="lg:col-span-3 bg-amber-500 rounded-2xl p-6 shadow-lg border border-amber-600 text-amber-950 flex flex-col md:flex-row items-center justify-between gap-6 mb-2 relative z-10">
                 <div className="flex items-center gap-4 text-center md:text-left">
                   <ShieldCheck className="w-10 h-10 shrink-0" />
                   <div>
@@ -1438,11 +1621,11 @@ export default function DashboardPage() {
                     <p className="font-medium text-sm">You can view your recruiting score, but you must verify to unlock the community feed, leaderboards, and discovery searches.</p>
                   </div>
                 </div>
-                <button onClick={beginVerification} className="w-full md:w-auto bg-slate-900 hover:bg-black text-white font-black px-8 py-3 rounded-xl shadow-md shrink-0 transition-colors">Start Verification</button>
+                <button type="button" onClick={beginVerification} className="w-full md:w-auto bg-slate-900 hover:bg-black text-white font-black px-8 py-3 rounded-xl shadow-md shrink-0 transition-colors cursor-pointer pointer-events-auto">Start Verification</button>
               </div>
             )}
 
-            {/* LEFT COLUMN: PROFILE SUMMARY */}
+            {/* ================= LEFT COLUMN: PERMANENT SIDEBAR ================= */}
             <div className="lg:col-span-1 space-y-6">
               
               <div className="bg-white rounded-[2rem] p-8 border border-slate-200 shadow-sm relative flex flex-col">
@@ -1462,7 +1645,7 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3 mb-1">
-                  <h1 className="text-2xl font-black text-slate-900">{athleteProfile?.first_name} {athleteProfile?.last_name}</h1>
+                  <h1 className="text-2xl font-black text-slate-900">{athleteProfile.first_name} {athleteProfile.last_name}</h1>
                   {streak > 0 && (
                     <div className={`flex items-center px-2.5 py-1 rounded-lg border text-[10px] font-black tracking-widest uppercase ${streakTheme.bg}`}>
                       <Flame className={`w-3.5 h-3.5 mr-1 ${streakTheme.icon}`} />
@@ -1472,11 +1655,11 @@ export default function DashboardPage() {
                 </div>
                 
                 <p className="text-slate-500 font-medium leading-relaxed mt-2 mb-6">
-                  {athleteProfile?.high_school} 
-                  {athleteProfile?.grad_year && ` • Class of ${athleteProfile.grad_year}`}
-                  {athleteProfile?.state && ` • ${athleteProfile.state}`}
-                  {athleteProfile?.school_size && ` • ${athleteProfile.school_size}`}
-                  {athleteProfile?.conference && ` • ${athleteProfile.conference}`}
+                  {athleteProfile.high_school} 
+                  {athleteProfile.grad_year && ` • Class of ${athleteProfile.grad_year}`}
+                  {athleteProfile.state && ` • ${athleteProfile.state}`}
+                  {athleteProfile.school_size && ` • ${athleteProfile.school_size}`}
+                  {athleteProfile.conference && ` • ${athleteProfile.conference}`}
                 </p>
                 
                 <div className="border-t border-slate-100 pt-6 mt-auto grid grid-cols-2 gap-4">
@@ -1491,7 +1674,7 @@ export default function DashboardPage() {
                     <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Division</span>
                     <div className="flex items-center gap-1.5">
                       <CheckCircle2 className="w-4 h-4 text-slate-400" />
-                      <span className="text-xs font-bold text-slate-700">{athleteProfile?.gender || 'Boys'}</span>
+                      <span className="text-xs font-bold text-slate-700">{athleteProfile.gender || 'Boys'}</span>
                     </div>
                   </div>
                 </div>
@@ -1859,11 +2042,11 @@ export default function DashboardPage() {
                           const leaderboardLink = `/leaderboard?${queryParams.toString()}#${athleteProfile?.id}`;
 
                           return (
-                            <div key={index} className={`flex flex-col sm:flex-row sm:items-center justify-between p-5 rounded-2xl border border-slate-200 bg-slate-50 gap-4 group ${!isUnverified ? 'hover:bg-blue-50 hover:border-blue-300 cursor-pointer' : ''} relative overflow-hidden transition-colors`}>
-                              {!isUnverified && <Link href={leaderboardLink} className="absolute inset-0 z-10" aria-label={`View ${pr.event} Leaderboard`}></Link>}
+                            <div key={index} className={`flex flex-col sm:flex-row sm:items-center justify-between p-5 rounded-2xl border border-slate-200 bg-slate-50 gap-4 group cursor-pointer relative overflow-hidden transition-colors hover:bg-blue-50 hover:border-blue-300`}>
+                              <Link href={leaderboardLink} className="absolute inset-0 z-10" aria-label={`View ${pr.event} Leaderboard`}></Link>
                               
                               <div className="flex-1 relative z-0">
-                                <span className={`text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-widest transition-colors ${!isUnverified ? 'group-hover:text-blue-500' : ''}`}>Event</span>
+                                <span className={`text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-widest transition-colors group-hover:text-blue-500`}>Event</span>
                                 <span className="font-black text-xl text-slate-800">{pr.event}</span>
                                 {(pr.date || pr.meet) && (
                                   <div className="flex items-center gap-2 text-xs text-slate-500 font-medium mt-2">
@@ -2453,6 +2636,39 @@ export default function DashboardPage() {
             </button>
           </div>
         </div>
+      )}
+
+      {/* 🚨 VERIFICATION MODAL 🚨 */}
+      {showVerificationStep && (
+         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+           <div className="bg-white rounded-[2rem] p-8 max-w-2xl w-full shadow-2xl relative">
+              <button type="button" onClick={() => setShowVerificationStep(false)} className="absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-600 rounded-full transition-colors"><X className="w-6 h-6"/></button>
+              <h3 className="text-2xl font-black text-slate-900 flex items-center mb-6">
+                <ShieldCheck className="w-7 h-7 mr-3 text-amber-500" /> Verify Athletic.net Identity
+              </h3>
+              
+              <div className="bg-amber-50 p-6 rounded-2xl border border-amber-200 mb-6 space-y-4 text-amber-900 font-medium">
+                <p className="flex items-start gap-3"><span className="bg-amber-200 text-amber-800 font-black w-6 h-6 rounded-full flex items-center justify-center shrink-0">1</span> Log into your Athletic.net account on a browser.</p>
+                <p className="flex items-start gap-3"><span className="bg-amber-200 text-amber-800 font-black w-6 h-6 rounded-full flex items-center justify-center shrink-0">2</span> Click the <strong>Pencil Icon</strong> next to your name to edit your profile.</p>
+                <p className="flex items-start gap-3"><span className="bg-amber-200 text-amber-800 font-black w-6 h-6 rounded-full flex items-center justify-center shrink-0">3</span> Paste the code below exactly into your <strong>First Name</strong> or <strong>Username</strong> field and hit Save.</p>
+              </div>
+
+              <div className="bg-slate-900 py-8 rounded-2xl text-center mb-8 shadow-inner border border-slate-700 relative overflow-hidden">
+                <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10 pointer-events-none"></div>
+                <span className="text-xs text-slate-400 uppercase tracking-widest font-bold mb-2 block relative z-10">Your Secure Code</span>
+                <span className="text-5xl font-mono font-black tracking-widest text-emerald-400 relative z-10 select-all">
+                  {verificationCode}
+                </span>
+              </div>
+
+              <div className="flex flex-col items-center">
+                <button type="button" onClick={confirmVerification} disabled={isVerifying || (verifyLockout !== null && Date.now() < verifyLockout)} className="w-full bg-blue-600 hover:bg-blue-500 text-white py-4 rounded-xl font-black shadow-lg transition-transform hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 flex items-center justify-center text-lg">
+                  {isVerifying ? <><RefreshCw className="w-5 h-5 animate-spin mr-2"/> Checking Athletic.net...</> : (verifyLockout && Date.now() < verifyLockout) ? 'Locked for 3 Hours' : 'I Saved It - Verify Me!'}
+                </button>
+                <p className="text-xs text-slate-500 font-medium mt-4">You can safely delete the code from your Athletic.net profile right after we verify you.</p>
+              </div>
+           </div>
+         </div>
       )}
     </main>
   );
