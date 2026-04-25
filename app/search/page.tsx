@@ -559,7 +559,7 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-[#F8FAFC] font-sans">
-      <div className="relative bg-gradient-to-br from-slate-900 via-[#0f172a] to-blue-950 pt-24 pb-32 px-8 overflow-hidden rounded-b-[2.5rem] shadow-2xl">
+      <div className="relative bg-gradient-to-br from-slate-900 via-[#0f172a] to-blue-950 pt-24 pb-40 md:pb-32 px-5 md:px-8 overflow-hidden rounded-b-[2.5rem] shadow-2xl">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-blue-600/20 blur-[120px] rounded-full pointer-events-none"></div>
         <div className="max-w-5xl mx-auto relative z-10 text-center space-y-6">
           <div className="inline-flex items-center px-4 py-2 rounded-full bg-blue-500/10 border border-blue-400/20 text-blue-400 text-sm font-bold tracking-wide mb-4">
@@ -577,7 +577,7 @@ export default function Home() {
 
       <div className="max-w-7xl mx-auto px-6 pb-24">
         {/* The Control Panel */}
-        <div className="relative -mt-16 bg-white/90 backdrop-blur-2xl p-8 rounded-3xl shadow-xl shadow-blue-900/5 border border-white mb-16 transition-all duration-500">
+        <div className="relative -mt-6 md:-mt-16 bg-white/90 backdrop-blur-2xl p-6 md:p-8 rounded-3xl shadow-xl shadow-blue-900/5 border border-white mb-16 transition-all duration-500">
           
           {/* --- BASIC SETTINGS (Always Visible) --- */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
