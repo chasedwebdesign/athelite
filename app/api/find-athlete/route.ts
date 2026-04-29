@@ -1,8 +1,18 @@
 import { NextResponse } from 'next/server';
 import puppeteerCore from 'puppeteer-core';
+import { createClient } from '@supabase/supabase-js';
 
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
+
+// 🚨 ADMIN SUPABASE CLIENT (Bypasses RLS) 🚨
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!, 
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
+// Set your global limit (e.g., 300 scrapes per day)
+const DAILY_GLOBAL_LIMIT = 500; 
 
 export async function POST(req: Request) {
   const { firstName, lastName, state, city } = await req.json();
@@ -18,6 +28,33 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'ZenRows API key is missing.' }, { status: 500 });
   }
 
+  // ==========================================
+  // 🚨 1. CHECK THE KILL SWITCH (THE TRAP DOOR)
+  // ==========================================
+  try {
+    const { data: isAllowed, error } = await supabaseAdmin.rpc('check_and_increment_usage', {
+      limit_amount: DAILY_GLOBAL_LIMIT
+    });
+
+    if (error) {
+      console.error("Supabase RPC Error:", error);
+      return NextResponse.json({ error: "Internal Server Error verifying limits." }, { status: 500 });
+    }
+
+    if (!isAllowed) {
+      console.warn("🛑 TRAP DOOR ACTIVATED: Global daily search limit reached.");
+      return NextResponse.json({ 
+        error: "Global daily limit reached to protect platform stability. Please try again tomorrow." 
+      }, { status: 429 });
+    }
+  } catch (err) {
+    console.error("Kill switch error:", err);
+    return NextResponse.json({ error: "Failed to verify usage limits." }, { status: 500 });
+  }
+
+  // ==========================================
+  // 🚀 2. PROCEED WITH ZENROWS SCRAPING
+  // ==========================================
   let browser: any = null;
 
   try {
