@@ -3,7 +3,16 @@
 import { useEffect, useState, useRef } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
-import { Activity, ShieldCheck, Link as LinkIcon, Trophy, BookOpen, LogOut, Medal, Timer, TrendingUp, CheckCircle2, Search, AlertCircle, Zap, Calendar, MapPin, Camera, Mail, RefreshCw, School, Lock, AlertTriangle, ExternalLink, ChevronRight, Check, Clock, Edit2, MousePointer2, Flame, Bookmark, BookmarkPlus, Share2, Instagram, X, Users, Gift, Paintbrush, ArrowDown, HelpCircle, Globe, UserCircle2, Eye, BarChart3, Rocket, FileText, Save, Crown, Target, Swords, ArrowRight, Trash2, Download, ChevronDown, ChevronUp } from 'lucide-react';
+import { 
+  Activity, ShieldCheck, Link as LinkIcon, Trophy, BookOpen, LogOut, 
+  Medal, Timer, TrendingUp, CheckCircle2, Search, AlertCircle, Zap, 
+  Calendar, MapPin, Camera, Mail, RefreshCw, School, Lock, AlertTriangle, 
+  ExternalLink, ChevronRight, Check, Clock, Edit2, MousePointer2, Flame, 
+  Bookmark, BookmarkPlus, Share2, Instagram, X, Users, Gift, Paintbrush, 
+  ArrowDown, HelpCircle, Globe, UserCircle2, Eye, BarChart3, Rocket, 
+  FileText, Save, Crown, Target, Swords, ArrowRight, Trash2, Download, 
+  ChevronDown, ChevronUp, Landmark, Percent, Award, Gem, RotateCcw
+} from 'lucide-react';
 import Link from 'next/link';
 import imageCompression from 'browser-image-compression';
 
@@ -178,6 +187,12 @@ const formatMarkFromNumber = (val: number, isField: boolean): string => {
   }
 };
 
+// 🚨 ADDED FORMAT CURRENCY HELPER 🚨
+function formatCurrency(num: number | null | undefined) {
+  if (!num) return 'N/A';
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(num);
+}
+
 const parseMarkForSorting = (mark: string, event: string): number => {
   const isField = FIELD_EVENTS.includes(event);
   const val = convertMarkToNumber(mark, isField);
@@ -277,8 +292,12 @@ export default function DashboardPage() {
   const [showVerificationStep, setShowVerificationStep] = useState(false);
   const [verificationCode, setVerificationCode] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
+  
+  // 🚨 MASTER RESUME STATES 🚨
   const [resumeText, setResumeText] = useState('');
   const [isSavingResume, setIsSavingResume] = useState(false);
+  const [lastSaved, setLastSaved] = useState<string | null>(null);
+
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'error' | 'success' } | null>(null);
 
@@ -293,7 +312,6 @@ export default function DashboardPage() {
   const [equippedBorder, setEquippedBorder] = useState<string>('none');
   const [isEquipping, setIsEquipping] = useState(false);
   const [isTitleDropdownOpen, setIsTitleDropdownOpen] = useState(false);
-  const [streak, setStreak] = useState(0);
   const [savedColleges, setSavedColleges] = useState<any[]>([]);
   const [activeRivals, setActiveRivals] = useState<any[]>([]); 
   const [inviteCodeInput, setInviteCodeInput] = useState('');
@@ -324,14 +342,6 @@ export default function DashboardPage() {
   const showToast = (message: string, type: 'error' | 'success' = 'error') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 4000);
-  };
-
-  const giveDailyReward = async (userId: string, currentCoins: number) => {
-    try {
-      const newBalance = currentCoins + 10;
-      await supabase.from('athletes').update({ coins: newBalance }).eq('id', userId);
-      showToast("You earned 10 Coins for your daily login streak!", "success");
-    } catch (e) {}
   };
 
   useEffect(() => {
@@ -544,23 +554,6 @@ export default function DashboardPage() {
         if (aData.created_at) {
           const diffTime = Math.abs(new Date().getTime() - new Date(aData.created_at).getTime());
           setDaysSinceJoin(Math.floor(diffTime / (1000 * 60 * 60 * 24)));
-        }
-        
-        const todayStr = new Date().toLocaleDateString('en-CA');
-        let currentStreak = aData.current_login_streak || 0;
-        const lastLoginStr = aData.last_login_date;
-
-        if (lastLoginStr === todayStr) {
-          setStreak(currentStreak);
-        } else {
-          let newStreak = 1; 
-          if (lastLoginStr) {
-            const diffDays = Math.ceil(Math.abs(new Date(todayStr).getTime() - new Date(lastLoginStr).getTime()) / (1000 * 60 * 60 * 24));
-            if (diffDays === 1) newStreak = currentStreak + 1;
-          }
-          setStreak(newStreak);
-          await supabase.from('athletes').update({ current_login_streak: newStreak, last_login_date: todayStr }).eq('id', aData.id);
-          giveDailyReward(aData.id, aData.coins || 0);
         }
 
         let bestPercentileFound = 1.0;
@@ -1048,14 +1041,6 @@ export default function DashboardPage() {
     }
   };
 
-  const getStreakStyle = () => {
-    if (streak >= 30) return { bg: 'bg-slate-900 border-slate-700 shadow-[0_0_15px_rgba(217,70,239,0.5)]', text: 'bg-gradient-to-r from-fuchsia-400 via-cyan-400 to-fuchsia-400 text-transparent bg-clip-text animate-pulse', icon: 'text-cyan-400 fill-fuchsia-500 animate-bounce' }; 
-    if (streak >= 14) return { bg: 'bg-purple-50 border-purple-200', text: 'text-purple-700', icon: 'text-purple-500 fill-purple-400 animate-pulse' }; 
-    if (streak >= 7) return { bg: 'bg-cyan-50 border-cyan-200', text: 'text-cyan-800', icon: 'text-cyan-500 fill-cyan-400' }; 
-    if (streak >= 3) return { bg: 'bg-red-50 border-red-200', text: 'text-red-700', icon: 'text-red-500 fill-red-500 animate-pulse' }; 
-    return { bg: 'bg-orange-50 border-orange-200', text: 'text-orange-700', icon: 'text-orange-500 fill-orange-400' }; 
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen bg-[#F8FAFC] flex flex-col items-center justify-center">
@@ -1076,7 +1061,6 @@ export default function DashboardPage() {
   const projection = getAthleteProjection(athleteProfile?.prs || [], athleteProfile?.gender || 'Boys');
   const myReferralCode = athleteProfile?.athletic_net_url?.match(/\d{5,}/)?.[0] || null;
   const showCodeEntry = daysSinceJoin <= 7 && !athleteProfile?.referred_by && !isSkipped;
-  const streakTheme = getStreakStyle();
   const hasPRs = athleteProfile?.prs && athleteProfile.prs.length > 0;
   const activeTitle = EARNED_TITLES.find(t => t.id === equippedTitle) || EARNED_TITLES[6];
 
@@ -1280,13 +1264,6 @@ export default function DashboardPage() {
                     : (athleteProfile?.high_school || 'Set up your profile')
                   }
                 </p>
-
-                {/* VERIFICATION BUTTON MOVED TO HERO */}
-                {isUnverified && (
-                  <button type="button" onClick={beginVerification} className="bg-amber-500 hover:bg-amber-400 text-amber-950 font-black px-4 py-1.5 rounded-lg text-xs transition-transform hover:scale-105 shadow-md flex items-center gap-2 mx-auto md:mx-0 relative z-50 cursor-pointer pointer-events-auto">
-                    <ShieldCheck className="w-4 h-4" /> Verify Ownership to Unlock Features
-                  </button>
-                )}
               </div>
             </div>
           </div>
@@ -1599,10 +1576,24 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* 🚨 MAIN DASHBOARD CONTENT (ONLY VISIBLE IF VERIFIED + TRACK) 🚨 */}
-        {athleteProfile && !isUnverified && !isSkipped && (
+        {/* 🚨 MAIN DASHBOARD CONTENT (VISIBLE TO ALL TRACK ATHLETES, UNVERIFIED HIDDEN RANKS) 🚨 */}
+        {athleteProfile && !isSkipped && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-8 animate-in fade-in slide-in-from-bottom-4">
             
+            {/* 🚨 PERSISTENT VERIFICATION BANNER 🚨 */}
+            {isUnverified && (
+              <div className="lg:col-span-3 bg-amber-500 rounded-2xl p-6 shadow-lg border border-amber-600 text-amber-950 flex flex-col md:flex-row items-center justify-between gap-6 mb-2 relative z-10">
+                <div className="flex items-center gap-4 text-center md:text-left">
+                  <ShieldCheck className="w-10 h-10 shrink-0" />
+                  <div>
+                    <h3 className="text-xl font-black">Verify Ownership Required</h3>
+                    <p className="font-medium text-sm">You can view your recruiting score, but you must verify to unlock the community feed, leaderboards, and discovery searches.</p>
+                  </div>
+                </div>
+                <button type="button" onClick={beginVerification} className="w-full md:w-auto bg-slate-900 hover:bg-black text-white font-black px-8 py-3 rounded-xl shadow-md shrink-0 transition-colors cursor-pointer pointer-events-auto">Start Verification</button>
+              </div>
+            )}
+
             {/* ================= LEFT COLUMN: PERMANENT SIDEBAR ================= */}
             <div className="lg:col-span-1 space-y-6">
               
@@ -1613,21 +1604,17 @@ export default function DashboardPage() {
                       borderId={equippedBorder ?? null} 
                       sizeClasses="w-28 h-28"
                   />
-                  <label className="absolute inset-0 bg-black/40 rounded-full flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer z-30">
-                    <Camera className="w-6 h-6 text-white mb-1" />
-                    <span className="text-[10px] text-white font-bold uppercase tracking-wider">Upload</span>
-                    <input type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} disabled={isUploadingAvatar} />
-                  </label>
+                  {!isUnverified && (
+                    <label className="absolute inset-0 bg-black/40 rounded-full flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer z-30">
+                      <Camera className="w-6 h-6 text-white mb-1" />
+                      <span className="text-[10px] text-white font-bold uppercase tracking-wider">Upload</span>
+                      <input type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} disabled={isUploadingAvatar} />
+                    </label>
+                  )}
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3 mb-1">
                   <h1 className="text-2xl font-black text-slate-900">{athleteProfile.first_name} {athleteProfile.last_name}</h1>
-                  {streak > 0 && (
-                    <div className={`flex items-center px-2.5 py-1 rounded-lg border text-[10px] font-black tracking-widest uppercase ${streakTheme.bg}`}>
-                      <Flame className={`w-3.5 h-3.5 mr-1 ${streakTheme.icon}`} />
-                      <span className={streakTheme.text}>{streak} Day Login Streak</span>
-                    </div>
-                  )}
                 </div>
                 
                 <p className="text-slate-500 font-medium leading-relaxed mt-2 mb-6">
@@ -2019,7 +2006,7 @@ export default function DashboardPage() {
 
                           return (
                             <div key={index} className={`flex flex-col sm:flex-row sm:items-center justify-between p-5 rounded-2xl border border-slate-200 bg-slate-50 gap-4 group cursor-pointer relative overflow-hidden transition-colors hover:bg-blue-50 hover:border-blue-300`}>
-                              <Link href={leaderboardLink} className="absolute inset-0 z-10" aria-label={`View ${pr.event} Leaderboard`}></Link>
+                              {!isUnverified && <Link href={leaderboardLink} className="absolute inset-0 z-10" aria-label={`View ${pr.event} Leaderboard`}></Link>}
                               
                               <div className="flex-1 relative z-0">
                                 <span className={`text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-widest transition-colors group-hover:text-blue-500`}>Event</span>
