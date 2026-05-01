@@ -4,13 +4,6 @@ import { useEffect, useState, useMemo } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { MapPin, Trophy, Search, Activity, ChevronRight, BookOpen, Users, SearchIcon, TrendingUp, Landmark, SlidersHorizontal, ChevronDown, ChevronUp, DollarSign, Percent, Award, Gem, RotateCcw, Bookmark, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
-// import dynamic from 'next/dynamic';
-
-// 🚨 DYNAMIC MAP IMPORT (Temporarily Disabled)
-// const CollegeMap = dynamic(() => import('@/components/Map/CollegeMap'), { 
-//   ssr: false, 
-//   loading: () => <div className="w-full h-[500px] bg-slate-200 animate-pulse rounded-[2rem] mb-8 flex items-center justify-center font-bold text-slate-400 border border-slate-300">Loading Interactive Map...</div>
-// });
 
 interface University {
   id: string;
@@ -305,8 +298,8 @@ export default function Home() {
   };
 
   async function handleSearch() {
-    if (!selectedSport && !schoolName) {
-      alert("Please enter a school name or select a sport to begin.");
+    if (!selectedSport && !schoolName && !selectedGender && !selectedDivision && !selectedState && !selectedMajor) {
+      alert("Please select at least one filter or enter a school name to begin.");
       return;
     }
 
@@ -446,7 +439,6 @@ export default function Home() {
       );
     }
 
-    // 🚨 Map filtering logic bypassed while map is hidden
     const listToRender = validUniversities;
 
     return (
@@ -582,7 +574,7 @@ export default function Home() {
           {/* --- BASIC SETTINGS (Always Visible) --- */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
             <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-400 uppercase tracking-widest pl-1">Sport *</label>
+              <label className="text-xs font-bold text-slate-400 uppercase tracking-widest pl-1">Sport</label>
               <select 
                 value={selectedSport}
                 onChange={(e) => setSelectedSport(e.target.value)}
@@ -813,7 +805,7 @@ export default function Home() {
             {/* SEARCH BUTTON */}
             <button 
               onClick={handleSearch}
-              disabled={(!selectedSport && !schoolName) || loading}
+              disabled={(!selectedSport && !schoolName && !selectedGender && !selectedDivision && !selectedState && !selectedMajor) || loading}
               className="group bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 disabled:from-slate-300 disabled:to-slate-300 disabled:cursor-not-allowed text-white px-10 py-3.5 rounded-xl font-bold transition-all shadow-lg shadow-blue-500/25 flex items-center"
             >
               {loading ? 'Scanning Database...' : (
@@ -987,27 +979,6 @@ export default function Home() {
               )}
             </div>
 
-            {/* 🚨 THE INTERACTIVE MAP (Temporarily Hidden) */}
-            {/* {!loading && validUniversities.length > 0 && (
-              <CollegeMap 
-                universities={validUniversities} 
-                onCollegeSelect={(uni) => setSelectedMapCollege(uni)} 
-              />
-            )} */}
-
-            {/* SHOW EITHER THE SELECTED MAP COLLEGE OR THE FULL LIST (Temporarily Hidden) */}
-            {/* {selectedMapCollege && (
-              <div className="flex justify-between items-center mb-6 bg-slate-100 p-4 rounded-2xl border border-slate-200">
-                <h3 className="text-lg font-bold text-slate-700">Selected from Map</h3>
-                <button 
-                  onClick={() => setSelectedMapCollege(null)} 
-                  className="text-sm font-bold text-white bg-slate-800 hover:bg-slate-900 transition-colors flex items-center px-4 py-2 rounded-xl shadow-sm"
-                >
-                  <RotateCcw className="w-4 h-4 mr-2" /> Show All Results
-                </button>
-              </div>
-            )} */}
-            
             {renderedCollegeCards}
           </div>
         )}

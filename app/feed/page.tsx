@@ -8,6 +8,10 @@ import Link from 'next/link';
 
 import { AvatarWithBorder } from '@/components/AnimatedBorders';
 
+// 🚨 MASTER PROMOTION SWITCH 🚨
+// Change to false to disable the 1-Month Free Pro promotion for a user's first post.
+const PROMOTION_FIRST_POST_FREE_MONTH = true;
+
 const BAD_WORDS = ['fuck', 'shit', 'bitch', 'ass', 'asshole', 'dick', 'pussy', 'cunt', 'slut', 'whore', 'fag', 'faggot', 'nigger', 'nigga', 'retard', 'bastard', 'motherfucker'];
 
 const containsBadWords = (text: string) => {
@@ -161,6 +165,12 @@ const formatMarkFromNumber = (val: number, isField: boolean): string => {
     }
     return val.toFixed(2);
   }
+};
+
+const parseMarkForSorting = (mark: string, event: string): number => {
+  const isField = FIELD_EVENTS.includes(event);
+  const val = convertMarkToNumber(mark, isField);
+  return isField ? -val : val;
 };
 
 const getEventScore = (markStr: string, event: string, gender: string): number => {
@@ -488,10 +498,38 @@ export default function FeedPage() {
     
     setIsPosting(true);
     try {
+      let grantedPremiumNow = false;
+      const hasPostedBefore = posts.some(p => p.athlete_id === currentUserId);
+      
+      let updates: any = {};
       if (feedTab === 'recruiting') {
-        const updates: any = { majors: myMajors };
+        updates.majors = myMajors;
         if (isPremium && showResumeInput) updates.saved_resume = resumeText;
-        await supabase.from('athletes').update(updates).eq('id', currentUserId);
+      }
+
+      // 🚨 PROMOTION LOGIC: FIRST POST GIVES PREMIUM 🚨
+      if (PROMOTION_FIRST_POST_FREE_MONTH && !hasPostedBefore && !isPremium) {
+        updates.is_premium = true;
+        
+        // Calculate 30 days from now for expiration
+        const expiryDate = new Date();
+        expiryDate.setDate(expiryDate.getDate() + 30);
+        updates.premium_expires_at = expiryDate.toISOString();
+        
+        grantedPremiumNow = true;
+      }
+
+      if (Object.keys(updates).length > 0) {
+        // 🚨 EXPLICIT ERROR CATCHING ADDED HERE 🚨
+        const { error: profileUpdateError } = await supabase
+          .from('athletes')
+          .update(updates)
+          .eq('id', currentUserId);
+          
+        if (profileUpdateError) {
+          console.error("Supabase rejected the profile update:", profileUpdateError);
+          throw new Error(`Failed to apply premium: ${profileUpdateError.message}`);
+        }
       }
 
       let uploadedMediaUrl = null;
@@ -520,8 +558,14 @@ export default function FeedPage() {
       
       setNewPostContent(''); setSelectedPRIndex(''); setSelectedPRs([]); setMediaFile(null); setSelectedProBadge(null); setHideRank(false); setShowResumeInput(false);
       if (feedTab === 'recruiting') setTimeUntilNextPost('24h remaining');
+      
+      if (grantedPremiumNow) {
+        showToast("🎉 Promo Unlocked: You earned 1 Month of Free Pro for your first post!", "success");
+      } else {
+        showToast("Posted successfully!", "success");
+      }
+      
       fetchFeedAndUser(); 
-      showToast("Posted successfully!", "success");
     } catch (err: any) { showToast(`Error posting: ${err.message}`); } finally { setIsPosting(false); }
   };
 
@@ -1294,7 +1338,7 @@ export default function FeedPage() {
                               </h3>
                               {post.athletes.trust_level > 0 && (
                                 <span title="Verified" className="flex items-center shrink-0">
-                                  <CheckCircle2 className="w-4 h-4 text-green-500" />
+                                  <CheckCircle2 className="w-6 h-6 text-green-400" />
                                 </span>
                               )}
                               {post.athletes.is_premium && (
