@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
-import { Target, TrendingUp, Crosshair, Crown, Lock, Activity, Zap, Medal, Swords, ScrollText, X, ChevronRight, Flame, Trophy, CheckCircle2, RefreshCw, AlertCircle, Search, MapPin, Skull, Gift, Share2, ShieldCheck, School } from 'lucide-react';
+import { Target, TrendingUp, Crosshair, Crown, Lock, Activity, Zap, Medal, Swords, ScrollText, X, ChevronRight, Flame, Trophy, CheckCircle2, RefreshCw, AlertCircle, Search, MapPin, Skull, Gift, Share2, ShieldCheck, School, Users } from 'lucide-react';
 import Link from 'next/link';
 
 // 🚨 IMPORT REUSABLE COMPONENTS
@@ -128,7 +128,6 @@ const RECRUITING_STANDARDS: Record<string, Record<string, { t1: number, t2: numb
   }
 };
 
-// 🚨 FIXED PARSEMARKTONUMBER ARGUMENT
 const getEventScore = (markStr: string, event: string, gender: string): number => {
   const standards = RECRUITING_STANDARDS[gender] || RECRUITING_STANDARDS['Boys'];
   
@@ -181,6 +180,14 @@ interface TeamEntry {
   rank: number;
 }
 
+interface TeamChampEntry {
+  name: string;
+  score: number;
+  contributors: number;
+  totalAthletes: number;
+  rank: number;
+}
+
 interface PR { event: string; mark: string; }
 
 interface AthleteProfile {
@@ -199,13 +206,14 @@ export default function CompetePage() {
   const [athleteId, setAthleteId] = useState<string | null>(null);
   const [userCoins, setUserCoins] = useState(0);
   const [isVerified, setIsVerified] = useState(false);
-  const [activeTab, setActiveTab] = useState<'bounties' | 'leaderboard' | 'rivals' | 'teams'>('bounties');
+  const [activeTab, setActiveTab] = useState<'bounties' | 'leaderboard' | 'team_improvement' | 'team_champs' | 'rivals'>('bounties');
   
   const [currentUser, setCurrentUser] = useState<AthleteProfile | null>(null);
   const [athletePrs, setAthletePrs] = useState<any[]>([]);
   const [bountyTargets, setBountyTargets] = useState<any[]>([]);
   const [leaderboardData, setLeaderboardData] = useState<LeaderboardEntry[]>([]);
-  const [teamLeaderboard, setTeamLeaderboard] = useState<TeamEntry[]>([]);
+  const [teamImprovementData, setTeamImprovementData] = useState<TeamEntry[]>([]);
+  const [teamChampsData, setTeamChampsData] = useState<TeamChampEntry[]>([]);
   
   const [activeRivals, setActiveRivals] = useState<AthleteProfile[]>([]);
   const [recommendedRivals, setRecommendedRivals] = useState<AthleteProfile[]>([]);
@@ -297,15 +305,21 @@ export default function CompetePage() {
         console.error("Error loading user data:", err.message);
       }
 
-      // Leaderboard & Team Battle Math
+      // 🚨 DATA FETCH FOR ALL LEADERBOARDS
+      // Removed the .not('base_prs') so we can catch all athletes for Team Champs
       const { data: allAthletes } = await supabase
         .from('athletes')
-        .select('id, first_name, last_name, high_school, avatar_url, equipped_border, prs, base_prs, trust_level')
-        .not('base_prs', 'is', null)
+        .select('id, first_name, last_name, high_school, avatar_url, equipped_border, prs, base_prs, trust_level, gender, grad_year')
         .gt('trust_level', 0);
 
       if (allAthletes) {
+        const currentYear = new Date().getFullYear();
+        const currentMonth = new Date().getMonth();
+        const activeGradYearCutoff = currentMonth > 5 ? currentYear + 1 : currentYear;
+
+        // 1. INDIVIDUAL & TEAM IMPROVEMENT MATH
         const processedBoard: Omit<LeaderboardEntry, 'rank'>[] = [];
+        const improvementTeamsMap: Record<string, { name: string; score: number; athletes: number }> = {};
 
         for (const ath of allAthletes) {
           let eventImprovements: { event: string; pct: number; oldMark: string; newMark: string }[] = [];
@@ -353,21 +367,65 @@ export default function CompetePage() {
 
         setLeaderboardData(rankedBoard);
 
-        // 🚨 PROCESS TEAM STANDINGS 🚨
-        const teamsMap: Record<string, { name: string; score: number; athletes: number }> = {};
-        
         rankedBoard.forEach(ath => {
           const hs = ath.high_school;
-          if (!teamsMap[hs]) teamsMap[hs] = { name: hs, score: 0, athletes: 0 };
-          teamsMap[hs].score += ath.improvementValue;
-          teamsMap[hs].athletes += 1;
+          if (!improvementTeamsMap[hs]) improvementTeamsMap[hs] = { name: hs, score: 0, athletes: 0 };
+          improvementTeamsMap[hs].score += ath.improvementValue;
+          improvementTeamsMap[hs].athletes += 1;
         });
 
-        const rankedTeams = Object.values(teamsMap)
+        const rankedImprovementTeams = Object.values(improvementTeamsMap)
           .sort((a, b) => b.score - a.score)
           .map((t, idx) => ({ ...t, rank: idx + 1 }));
           
-        setTeamLeaderboard(rankedTeams);
+        setTeamImprovementData(rankedImprovementTeams);
+
+        // 2. TEAM CHAMPS MATH (Recruiting Scores)
+        const teamChampsMap: Record<string, { name: string; athleteScores: number[]; totalAthletes: number }> = {};
+
+        for (const ath of allAthletes) {
+          // Filter out graduated athletes
+          const isActive = !ath.grad_year || ath.grad_year >= activeGradYearCutoff;
+          if (!isActive) continue;
+
+          const hs = ath.high_school;
+          if (!hs) continue;
+
+          if (!teamChampsMap[hs]) teamChampsMap[hs] = { name: hs, athleteScores: [], totalAthletes: 0 };
+
+          // Find this athlete's single best recruiting score
+          let bestScore = 0;
+          if (ath.prs && ath.prs.length > 0) {
+             ath.prs.forEach((pr: any) => {
+                const score = getEventScore(pr.mark, pr.event, ath.gender || 'Boys');
+                if (score > bestScore) bestScore = score;
+             });
+          }
+
+          teamChampsMap[hs].totalAthletes += 1;
+          if (bestScore > 0) {
+             teamChampsMap[hs].athleteScores.push(bestScore);
+          }
+        }
+
+        const processedTeamChamps = Object.values(teamChampsMap)
+          .map(team => {
+             // Sort individual scores descending, then slice top 30
+             team.athleteScores.sort((a, b) => b - a);
+             const top30 = team.athleteScores.slice(0, 30);
+             const teamScore = top30.reduce((sum, s) => sum + s, 0);
+             return {
+                name: team.name,
+                score: teamScore,
+                contributors: top30.length,
+                totalAthletes: team.totalAthletes
+             };
+          })
+          .filter(t => t.score > 0)
+          .sort((a, b) => b.score - a.score)
+          .map((t, idx) => ({ ...t, rank: idx + 1 }));
+
+        setTeamChampsData(processedTeamChamps);
       }
       setLoading(false);
     }
@@ -576,7 +634,7 @@ export default function CompetePage() {
         </div>
       )}
 
-      {/* 🚨 THE BOUNTY DETAILS MODAL */}
+      {/* THE BOUNTY DETAILS MODAL */}
       {selectedBounty && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
           <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md" onClick={() => setSelectedBounty(null)}></div>
@@ -671,7 +729,7 @@ export default function CompetePage() {
           </div>
         )}
 
-        {/* TABS */}
+        {/* 🚨 TABS 🚨 */}
         <div className="flex gap-2 mb-8 overflow-x-auto hide-scrollbar pb-2">
           <button onClick={() => setActiveTab('bounties')} className={`flex items-center gap-2 px-6 py-3.5 rounded-2xl font-bold whitespace-nowrap transition-all ${activeTab === 'bounties' ? 'bg-slate-900 text-white shadow-lg' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
             <Target className="w-5 h-5" /> PR Bounties
@@ -679,8 +737,11 @@ export default function CompetePage() {
           <button onClick={() => setActiveTab('leaderboard')} className={`flex items-center gap-2 px-6 py-3.5 rounded-2xl font-bold whitespace-nowrap transition-all ${activeTab === 'leaderboard' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'bg-white border border-slate-200 text-slate-500 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200'}`}>
             <TrendingUp className="w-5 h-5" /> Most Improved
           </button>
-          <button onClick={() => setActiveTab('teams')} className={`flex items-center gap-2 px-6 py-3.5 rounded-2xl font-bold whitespace-nowrap transition-all ${activeTab === 'teams' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/20' : 'bg-white border border-slate-200 text-slate-500 hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200'}`}>
-            <ShieldCheck className="w-5 h-5" /> Team Battle
+          <button onClick={() => setActiveTab('team_improvement')} className={`flex items-center gap-2 px-6 py-3.5 rounded-2xl font-bold whitespace-nowrap transition-all ${activeTab === 'team_improvement' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/20' : 'bg-white border border-slate-200 text-slate-500 hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200'}`}>
+            <ShieldCheck className="w-5 h-5" /> Team Improvement
+          </button>
+          <button onClick={() => setActiveTab('team_champs')} className={`flex items-center gap-2 px-6 py-3.5 rounded-2xl font-bold whitespace-nowrap transition-all ${activeTab === 'team_champs' ? 'bg-amber-500 text-amber-950 shadow-lg shadow-amber-500/20' : 'bg-white border border-slate-200 text-slate-500 hover:bg-amber-50 hover:text-amber-600 hover:border-amber-200'}`}>
+            <Crown className="w-5 h-5" /> Team Champs
           </button>
           <button onClick={() => setActiveTab('rivals')} className={`flex items-center gap-2 px-6 py-3.5 rounded-2xl font-bold whitespace-nowrap transition-all ${activeTab === 'rivals' ? 'bg-red-600 text-white shadow-lg shadow-red-600/20' : 'bg-white border border-slate-200 text-slate-500 hover:bg-red-50 hover:text-red-600 hover:border-red-200'}`}>
             <Swords className="w-5 h-5" /> Rivals ({activeRivals.length}/5)
@@ -944,9 +1005,9 @@ export default function CompetePage() {
         )}
 
         {/* =========================================
-            TAB 3: TEAM BATTLE 🚨
+            TAB 3: TEAM IMPROVEMENT 🚨
         ========================================= */}
-        {activeTab === 'teams' && (
+        {activeTab === 'team_improvement' && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
             
             <div className="bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-slate-900 rounded-[2rem] p-8 md:p-12 text-white shadow-2xl relative overflow-hidden border border-slate-800">
@@ -958,9 +1019,9 @@ export default function CompetePage() {
                   <ShieldCheck className="w-10 h-10 text-emerald-400" />
                 </div>
                 <div className="flex-1">
-                  <h2 className="text-4xl font-black mb-2 tracking-tight">High School Clash</h2>
+                  <h2 className="text-4xl font-black mb-2 tracking-tight">Team Improvement</h2>
                   <p className="text-slate-300 font-medium text-lg leading-relaxed max-w-2xl">
-                    Represent <strong className="text-emerald-400">{currentUser?.high_school || 'your school'}</strong>. Your individual percentage improvements are added to your school's total score. Dominate the state.
+                    Represent <strong className="text-emerald-400">{currentUser?.high_school || 'your school'}</strong>. Your individual percentage improvements are added to your school's total score.
                   </p>
                 </div>
               </div>
@@ -972,14 +1033,14 @@ export default function CompetePage() {
                   <School className="w-6 h-6 text-emerald-600" />
                 </div>
                 <div>
-                   <h3 className="text-2xl font-black text-slate-900">Team Standings</h3>
+                   <h3 className="text-2xl font-black text-slate-900">Weekly Improvement Standings</h3>
                    <p className="text-slate-500 font-medium text-sm">Combined percentage improvements from all verified athletes.</p>
                 </div>
               </div>
               
-              {teamLeaderboard.length > 0 ? (
+              {teamImprovementData.length > 0 ? (
                 <div className="flex flex-col divide-y divide-slate-100">
-                  {teamLeaderboard.map((team) => (
+                  {teamImprovementData.map((team) => (
                     <div key={team.name} className={`p-4 md:p-6 flex items-center justify-between transition-colors hover:bg-slate-50 ${team.name === currentUser?.high_school ? 'bg-emerald-50/50' : ''}`}>
                       <div className="flex items-center gap-4">
                         <div className="w-8 shrink-0 text-center">
@@ -1012,7 +1073,105 @@ export default function CompetePage() {
         )}
 
         {/* =========================================
-            TAB 4: THE RIVALS ARENA 🚨
+            TAB 4: TEAM CHAMPS (NEW) 🚨
+        ========================================= */}
+        {activeTab === 'team_champs' && (
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+            
+            <div className="bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-slate-900 rounded-[2rem] p-8 md:p-12 text-white shadow-2xl relative overflow-hidden border border-slate-800">
+              <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/20 blur-[100px] rounded-full pointer-events-none"></div>
+              <div className="absolute bottom-0 left-0 w-64 h-64 bg-orange-500/20 blur-[80px] rounded-full pointer-events-none"></div>
+              
+              <div className="relative z-10 flex flex-col md:flex-row items-center gap-8 text-center md:text-left">
+                <div className="w-20 h-20 bg-slate-800/80 border-2 border-slate-600 rounded-2xl flex items-center justify-center shrink-0 shadow-[0_0_30px_rgba(245,158,11,0.3)] transform rotate-3">
+                  <Crown className="w-10 h-10 text-amber-400" />
+                </div>
+                <div className="flex-1">
+                  <h2 className="text-4xl font-black mb-2 tracking-tight">Team Champs</h2>
+                  <p className="text-slate-300 font-medium text-lg leading-relaxed max-w-2xl">
+                    Ranked strictly by the cumulative Recruiting Score of the top 30 athletes on your team. No graduated athletes counted. Depth matters.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
+              <div className="p-6 md:p-8 border-b border-slate-100 bg-slate-50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center shrink-0">
+                    <Trophy className="w-6 h-6 text-amber-600" />
+                  </div>
+                  <div>
+                     <h3 className="text-2xl font-black text-slate-900">National Top Teams</h3>
+                     <p className="text-slate-500 font-medium text-sm">Accumulation of top 30 athlete recruiting scores.</p>
+                  </div>
+                </div>
+              </div>
+              
+              {teamChampsData.length > 0 ? (
+                <div className="flex flex-col divide-y divide-slate-100">
+                  {teamChampsData.map((team) => {
+                    const isFirst = team.rank === 1;
+                    return (
+                      <div key={team.name} className={`p-4 md:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors hover:bg-slate-50 relative overflow-hidden ${isFirst ? 'bg-amber-50/50' : team.name === currentUser?.high_school ? 'bg-blue-50/50' : ''}`}>
+                        
+                        {/* If 1st place, add a subtle golden glow border effect */}
+                        {isFirst && <div className="absolute inset-y-0 left-0 w-1 bg-amber-500"></div>}
+
+                        <div className="flex items-center gap-4 flex-1">
+                          <div className="w-8 shrink-0 text-center">
+                            <span className={`font-black text-lg ${team.rank === 1 ? 'text-yellow-500' : team.rank === 2 ? 'text-slate-400' : team.rank === 3 ? 'text-amber-600' : 'text-slate-300'}`}>
+                              #{team.rank}
+                            </span>
+                          </div>
+                          <div>
+                            <h4 className="font-black text-slate-900 text-lg flex items-center gap-2">
+                              {team.name} 
+                              {isFirst && <Crown className="w-4 h-4 text-amber-500" />}
+                            </h4>
+                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                              <Users className="w-3.5 h-3.5" /> 
+                              Top {team.contributors} counting <span className="opacity-50">/ {team.totalAthletes} total active</span>
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between sm:justify-end gap-6 sm:pl-0 pl-12">
+                          {isFirst && (
+                            <div className="inline-flex flex-col items-center bg-slate-900 text-white px-4 py-2 rounded-xl shadow-lg border border-slate-700 shrink-0 transform sm:-translate-y-1">
+                              <span className="text-[9px] font-black text-amber-400 uppercase tracking-widest leading-none mb-1">Projected Reward</span>
+                              <div className="flex items-center gap-1">
+                                <span className="text-base font-black">2,000</span>
+                                <ChasedCash className="w-5 h-4 text-amber-400" />
+                                <span className="text-xs font-bold text-slate-400">/ athlete</span>
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="text-right shrink-0">
+                            <div className={`inline-flex items-center px-4 py-2 rounded-xl font-black text-xl shadow-sm border ${isFirst ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-slate-100 text-slate-700 border-slate-200'}`}>
+                              {team.score.toLocaleString()} <span className="text-xs text-slate-400 ml-1.5 uppercase">PTS</span>
+                            </div>
+                          </div>
+                        </div>
+
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                 <div className="p-12 text-center text-slate-500 font-medium">
+                   <School className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+                   <h4 className="text-lg font-black text-slate-900">No Teams Found</h4>
+                   <p className="text-sm mt-1">Schools need active, verified athletes to appear on the team champs board.</p>
+                 </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* =========================================
+            TAB 5: THE RIVALS ARENA 🚨
         ========================================= */}
         {activeTab === 'rivals' && (
           <div className="animate-in fade-in slide-in-from-bottom-4">

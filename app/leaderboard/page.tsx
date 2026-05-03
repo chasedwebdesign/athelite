@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Suspense } from 'react';
 import { createClient } from '@/utils/supabase/client';
-import { Trophy, Medal, MapPin, Activity, Target, ChevronDown, TrendingUp, Users, Info, X } from 'lucide-react';
+import { Trophy, Medal, MapPin, Activity, Target, ChevronDown, Users, Info, X } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 
@@ -20,10 +20,9 @@ interface Athlete {
   gender?: string; 
   prs: { event: string; mark: string; date?: string; meet?: string }[];
   rank?: number;
-  tier?: { name: string; classes: string; border?: string; cardClass?: string };
+  tier?: { name: string; classes: string; border?: string; cardClass?: string; glow?: string };
   targetMark?: string;
   targetMeet?: string; 
-  improvementDelta?: number;
 }
 
 const FILTER_EVENTS = [
@@ -42,7 +41,6 @@ function LeaderboardContent() {
   const [loading, setLoading] = useState(true);
   const [isRankModalOpen, setIsRankModalOpen] = useState(false);
   
-  const [leaderboardMode, setLeaderboardMode] = useState<'overall' | 'improvement'>('overall');
   const [selectedGender, setSelectedGender] = useState(searchParams.get('gender') || 'Boys');
   const [selectedEvent, setSelectedEvent] = useState(searchParams.get('event') || '100 Meters');
   
@@ -105,24 +103,12 @@ function LeaderboardContent() {
       const eventMarks = a.prs.filter(pr => pr.event === selectedEvent);
       a.targetMark = eventMarks[0]?.mark || '';
       a.targetMeet = eventMarks[0]?.meet || ''; 
-      
-      if (eventMarks.length > 1) {
-        const newestVal = parseMarkForSorting(eventMarks[0].mark, selectedEvent);
-        const oldestVal = parseMarkForSorting(eventMarks[eventMarks.length - 1].mark, selectedEvent);
-        a.improvementDelta = Math.abs(oldestVal - newestVal); 
-      } else {
-        a.improvementDelta = 0;
-      }
     });
 
     globalPool.sort((a, b) => {
-      if (leaderboardMode === 'improvement') {
-        return (b.improvementDelta || 0) - (a.improvementDelta || 0);
-      } else {
-        const valA = parseMarkForSorting(a.targetMark!, selectedEvent);
-        const valB = parseMarkForSorting(b.targetMark!, selectedEvent);
-        return valA - valB;
-      }
+      const valA = parseMarkForSorting(a.targetMark!, selectedEvent);
+      const valB = parseMarkForSorting(b.targetMark!, selectedEvent);
+      return valA - valB;
     });
 
     const globalTotal = globalPool.length;
@@ -130,19 +116,19 @@ function LeaderboardContent() {
       const percentile = index / globalTotal;
 
       if (percentile <= 0.01 || index === 0) {
-        athlete.tier = { name: 'LEGEND', classes: 'legend-badge', border: 'border-legend', cardClass: 'card-legend' };
+        athlete.tier = { name: 'LEGEND', classes: 'legend-badge', border: 'border-legend', cardClass: 'card-legend', glow: 'from-fuchsia-600/30' };
       } else if (percentile <= 0.05) {
-        athlete.tier = { name: 'CHAMPION', classes: 'champion-badge', border: 'border-champion', cardClass: 'card-champion' };
+        athlete.tier = { name: 'CHAMPION', classes: 'champion-badge', border: 'border-champion', cardClass: 'card-champion', glow: 'from-red-600/30' };
       } else if (percentile <= 0.15) {
-        athlete.tier = { name: 'ELITE', classes: 'elite-badge', border: 'border-elite', cardClass: 'card-elite' };
+        athlete.tier = { name: 'ELITE', classes: 'elite-badge', border: 'border-elite', cardClass: 'card-elite', glow: 'from-slate-500/30' };
       } else if (percentile <= 0.30) {
-        athlete.tier = { name: 'MASTER', classes: 'bg-blue-900 text-blue-100 border border-blue-500' };
+        athlete.tier = { name: 'MASTER', classes: 'bg-blue-900 text-blue-100 border border-blue-500', glow: 'from-blue-600/20' };
       } else if (percentile <= 0.50) {
-        athlete.tier = { name: 'CONTENDER', classes: 'bg-emerald-900 text-emerald-100 border border-emerald-500' };
+        athlete.tier = { name: 'CONTENDER', classes: 'bg-emerald-900 text-emerald-100 border border-emerald-500', glow: 'from-emerald-600/20' };
       } else if (percentile <= 0.75) {
-        athlete.tier = { name: 'CHALLENGER', classes: 'bg-orange-900 text-orange-100 border border-orange-500' };
+        athlete.tier = { name: 'CHALLENGER', classes: 'bg-orange-900 text-orange-100 border border-orange-500', glow: 'from-orange-600/20' };
       } else {
-        athlete.tier = { name: 'PROSPECT', classes: 'bg-slate-800 text-slate-300 border border-slate-600' };
+        athlete.tier = { name: 'PROSPECT', classes: 'bg-slate-800 text-slate-300 border border-slate-600', glow: 'from-slate-600/20' };
       }
     });
 
@@ -345,17 +331,8 @@ function LeaderboardContent() {
             </button>
           </div>
 
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 md:gap-4 mb-6 md:mb-8">
-            <div className="flex bg-slate-800/80 p-1.5 rounded-2xl w-full sm:w-[280px] border border-slate-700/50 backdrop-blur-sm">
-              <button onClick={() => setLeaderboardMode('overall')} className={`flex-1 py-2.5 md:py-3 rounded-xl text-xs md:text-sm font-bold transition-all flex items-center justify-center ${leaderboardMode === 'overall' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>
-                <Trophy className="w-3.5 h-3.5 md:w-4 md:h-4 mr-1.5 md:mr-2"/> PRs
-              </button>
-              <button onClick={() => setLeaderboardMode('improvement')} className={`flex-1 py-2.5 md:py-3 rounded-xl text-xs md:text-sm font-bold transition-all flex items-center justify-center ${leaderboardMode === 'improvement' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>
-                <TrendingUp className="w-3.5 h-3.5 md:w-4 md:h-4 mr-1.5 md:mr-2"/> Growth
-              </button>
-            </div>
-            
-            <div className="flex bg-slate-900/80 p-1.5 rounded-2xl w-full sm:w-[280px] border border-slate-700 shadow-inner">
+          <div className="flex items-center justify-center mb-6 md:mb-8">
+            <div className="flex bg-slate-900/80 p-1.5 rounded-2xl w-full sm:w-[320px] border border-slate-700 shadow-inner">
               <button onClick={() => setSelectedGender('Boys')} className={`flex-1 py-2.5 md:py-3 rounded-xl text-xs md:text-sm font-black tracking-widest uppercase transition-all ${selectedGender === 'Boys' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-300'}`}>
                 Boys
               </button>
@@ -425,31 +402,42 @@ function LeaderboardContent() {
           </div>
         ) : (
           <div className="space-y-6 md:space-y-8">
-            {/* 🚨 RESPONSIVE PODIUM (H-AUTO ON MOBILE) 🚨 */}
+            
+            {/* 🚨 THE OLYMPIC PODIUM 🚨 */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5 md:gap-6 mb-10 md:mb-16 items-end">
               {topThree.map((athlete, idx) => {
                 const isFirst = idx === 0;
-                const podiumHeight = isFirst ? 'md:h-[380px] h-auto py-6' : idx === 1 ? 'md:h-[320px] h-auto py-6' : 'md:h-[280px] h-auto py-6';
-                const medalColor = isFirst ? 'text-yellow-400' : idx === 1 ? 'text-slate-300' : 'text-amber-600';
                 
+                // Set custom heights for the pedestal look
+                const podiumHeight = isFirst ? 'md:min-h-[420px] h-auto pt-8 pb-10' : idx === 1 ? 'md:min-h-[360px] h-auto pt-8 pb-10' : 'md:min-h-[320px] h-auto pt-8 pb-10';
+                const medalColor = isFirst ? 'text-yellow-400' : idx === 1 ? 'text-slate-300' : 'text-amber-600';
                 const cardGlowClass = athlete.tier?.cardClass || 'border-slate-700 shadow-2xl';
+                const pedestalColor = athlete.tier?.glow || 'from-slate-600/20';
+
+                // Re-arrange the HTML grid order for desktop so 1st is in the middle
+                const flexOrder = isFirst ? 'order-1 md:order-2 z-30' : idx === 1 ? 'order-2 md:order-1 z-20' : 'order-3 md:order-3 z-10';
 
                 return (
-                  <Link href={`/athlete/${athlete.id}`} id={`athlete-${athlete.id}`} key={athlete.id} className={`relative bg-slate-800/50 rounded-[2rem] border flex flex-col items-center justify-start px-4 md:px-6 text-center transition-all duration-300 hover:-translate-y-2 md:hover:-translate-y-4 hover:bg-slate-800 cursor-pointer group scroll-mt-32 ${podiumHeight} ${cardGlowClass} ${isFirst ? 'md:-translate-y-8 mt-4 md:mt-0' : 'mt-4 md:mt-0'}`}>
-                    <div className={`absolute -top-4 md:-top-6 w-10 h-10 md:w-12 md:h-12 rounded-full border-[3px] md:border-4 border-[#0f172a] flex items-center justify-center font-black text-lg md:text-xl z-20 transition-transform group-hover:scale-110 ${isFirst ? 'bg-gradient-to-br from-yellow-300 to-yellow-500 text-yellow-900' : 'bg-slate-700 text-white'}`}>
+                  <Link href={`/athlete/${athlete.id}`} id={`athlete-${athlete.id}`} key={athlete.id} className={`relative bg-slate-800/50 rounded-[2rem] border flex flex-col items-center justify-start px-4 md:px-6 text-center transition-all duration-300 hover:-translate-y-2 hover:bg-slate-800 cursor-pointer group scroll-mt-32 ${podiumHeight} ${cardGlowClass} ${flexOrder}`}>
+                    
+                    {/* Pedestal Glow Base with overflow hidden wrapper to prevent badge cutoff */}
+                    <div className="absolute inset-0 overflow-hidden rounded-[2rem] pointer-events-none">
+                      <div className={`absolute bottom-0 w-full h-1/2 bg-gradient-to-t ${pedestalColor} to-transparent opacity-40`}></div>
+                    </div>
+
+                    <div className={`absolute -top-4 md:-top-6 w-10 h-10 md:w-12 md:h-12 rounded-full border-[3px] md:border-4 border-[#0f172a] flex items-center justify-center font-black text-lg md:text-xl z-20 transition-transform group-hover:scale-110 shadow-lg shrink-0 ${isFirst ? 'bg-gradient-to-br from-yellow-300 to-yellow-500 text-yellow-900' : idx === 1 ? 'bg-gradient-to-br from-slate-200 to-slate-400 text-slate-900' : 'bg-gradient-to-br from-amber-600 to-amber-800 text-amber-100'}`}>
                       #{athlete.rank}
                     </div>
                     
-                    <div className={`${athlete.tier?.border || 'border-[3px] md:border-4 border-slate-700'} rounded-full mt-2 md:mt-4 mb-3 md:mb-4 shrink-0 transition-colors`}>
-                      <div className="w-20 h-20 md:w-24 md:h-24 rounded-full overflow-hidden bg-slate-900 shadow-inner">
+                    <div className={`${athlete.tier?.border || 'border-[3px] md:border-4 border-slate-700'} rounded-full mt-2 md:mt-4 mb-3 md:mb-4 shrink-0 transition-colors z-10 relative bg-[#0f172a]`}>
+                      <div className="w-20 h-20 md:w-28 md:h-28 rounded-full overflow-hidden bg-slate-900 shadow-inner">
                         {athlete.avatar_url ? <img src={athlete.avatar_url} alt="Profile" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><Medal className={`w-8 h-8 md:w-10 md:h-10 ${medalColor}`} /></div>}
                       </div>
                     </div>
                     
-                    {/* 🚨 REMOVED TRUNCATE SO LONG NAMES WRAP ON MOBILE 🚨 */}
-                    <h3 className="text-lg md:text-xl font-black text-white leading-tight mb-1 line-clamp-2 w-full px-1 md:px-2 group-hover:text-blue-400 transition-colors">{athlete.first_name} {athlete.last_name}</h3>
+                    <h3 className="text-lg md:text-2xl font-black text-white leading-snug mb-1 w-full px-1 md:px-2 group-hover:text-blue-400 transition-colors z-10 shrink-0 break-words">{athlete.first_name} {athlete.last_name}</h3>
                     
-                    <div className="text-xs md:text-sm font-semibold text-slate-400 truncate w-full px-2 mb-3 md:mb-2 flex flex-col gap-0.5">
+                    <div className="text-xs md:text-sm font-semibold text-slate-400 w-full px-2 mb-3 md:mb-2 flex flex-col gap-0.5 z-10 shrink-0">
                       <span>{athlete.high_school}</span>
                       <span className="text-[10px] md:text-xs font-medium opacity-80">
                         {athlete.school_size && `${athlete.school_size}`}
@@ -458,11 +446,11 @@ function LeaderboardContent() {
                       </span>
                     </div>
                     
-                    <div className={`mt-auto w-full py-1.5 md:py-2 rounded-xl text-[10px] md:text-xs font-black tracking-widest uppercase mb-6 md:mb-4 ${athlete.tier?.classes}`}>
+                    <div className={`mt-auto w-full py-1.5 md:py-2 rounded-xl text-[10px] md:text-xs font-black tracking-widest uppercase mb-6 md:mb-4 z-10 shadow-md shrink-0 ${athlete.tier?.classes}`}>
                       {athlete.tier?.name}
                     </div>
 
-                    <div className="absolute -bottom-4 md:-bottom-5 bg-[#0f172a] border-2 border-slate-700 px-5 md:px-6 py-1.5 md:py-2 rounded-full font-black text-xl md:text-2xl text-white shadow-xl group-hover:border-blue-500/50 group-hover:text-blue-400 transition-colors">
+                    <div className="absolute -bottom-4 md:-bottom-5 bg-[#0f172a] border-2 border-slate-700 px-5 md:px-6 py-1.5 md:py-2 rounded-full font-black text-xl md:text-2xl text-white shadow-xl group-hover:border-blue-500/50 group-hover:text-blue-400 transition-colors z-20 shrink-0">
                       {athlete.targetMark}
                     </div>
                   </Link>
@@ -475,11 +463,9 @@ function LeaderboardContent() {
                 {theRest.map((athlete) => (
                   <Link href={`/athlete/${athlete.id}`} id={`athlete-${athlete.id}`} key={athlete.id} className="flex items-center justify-between p-3 sm:p-6 border-b border-slate-700/50 hover:bg-slate-700/50 transition-colors last:border-0 group cursor-pointer scroll-mt-32">
                     
-                    {/* 🚨 CHANGED w-1/2 TO flex-1 min-w-0 TO FIX TRUNCATION BUG 🚨 */}
                     <div className="flex items-center gap-3 sm:gap-6 flex-1 min-w-0">
                       <span className="text-xl sm:text-2xl font-black text-slate-500 w-6 sm:w-8 text-center shrink-0">{athlete.rank}</span>
                       
-                      {/* 🚨 RE-ENABLED AVATAR FOR MOBILE 🚨 */}
                       <div className={`${athlete.tier?.border || 'border border-slate-600'} rounded-full shrink-0 transition-colors`}>
                         <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden bg-slate-900">
                           {athlete.avatar_url ? <img src={athlete.avatar_url} alt="Profile" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><Activity className="w-4 h-4 sm:w-5 sm:h-5 text-slate-500" /></div>}
@@ -499,7 +485,6 @@ function LeaderboardContent() {
                       </div>
                     </div>
                     
-                    {/* Right side constraints */}
                     <div className="flex items-center gap-3 sm:gap-8 justify-end shrink-0 pl-2">
                       {athlete.targetMeet && athlete.targetMeet.trim() !== '' && (
                         <span className="hidden md:flex items-center text-xs font-medium text-slate-400 truncate max-w-[150px] lg:max-w-[200px]">
@@ -509,7 +494,9 @@ function LeaderboardContent() {
                       <span className={`hidden md:inline-block px-3 py-1 rounded-lg text-[10px] font-black tracking-widest uppercase ${athlete.tier?.classes}`}>
                         {athlete.tier?.name}
                       </span>
-                      <span className="text-lg sm:text-2xl font-black text-white text-right shrink-0 min-w-[64px] sm:w-24 group-hover:text-blue-400 transition-colors truncate">{athlete.targetMark}</span>
+                      <span className="text-lg sm:text-2xl font-black text-white text-right shrink-0 min-w-[80px] sm:min-w-[120px] whitespace-nowrap group-hover:text-blue-400 transition-colors">
+                        {athlete.targetMark}
+                      </span>
                     </div>
                   </Link>
                 ))}

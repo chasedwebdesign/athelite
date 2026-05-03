@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
-import { Crown, Rocket, FileText, BarChart3, ShieldCheck, Trophy, Mail, Zap, ArrowRight, Loader2, Search, CheckCircle2, ChevronLeft, Tag } from 'lucide-react';
+import { Crown, Rocket, FileText, BarChart3, ShieldCheck, Trophy, Mail, Zap, ArrowRight, Loader2, Search, CheckCircle2, ChevronLeft, Tag, Settings } from 'lucide-react';
 import Link from 'next/link';
 
 export default function PremiumPage() {
@@ -16,8 +16,7 @@ export default function PremiumPage() {
   const [isPremium, setIsPremium] = useState(false);
   
   const [isRedirecting, setIsRedirecting] = useState(false);
-  
-  const spotsLeft = 14; 
+  const [isManaging, setIsManaging] = useState(false);
 
   useEffect(() => {
     async function loadUser() {
@@ -57,29 +56,37 @@ export default function PremiumPage() {
       router.push('/login'); 
       return;
     }
-
     setIsRedirecting(true);
-
     try {
       const response = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          athleteId: athleteId,
-          email: userEmail 
-        }),
+        body: JSON.stringify({ athleteId: athleteId, email: userEmail }),
       });
-
       const { url, error } = await response.json();
-
       if (error) throw new Error(error);
-
-      if (url) {
-        window.location.href = url;
-      }
+      if (url) window.location.href = url;
     } catch (err: any) {
       alert("Failed to connect to billing provider: " + err.message);
       setIsRedirecting(false);
+    }
+  };
+
+  // 🚨 NEW PORTAL REDIRECT LOGIC 🚨
+  const handleManageBilling = async () => {
+    setIsManaging(true);
+    try {
+      const response = await fetch('/api/portal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: userEmail }),
+      });
+      const { url, error } = await response.json();
+      if (error) throw new Error(error);
+      if (url) window.location.href = url;
+    } catch (err: any) {
+      alert("Could not load billing portal: " + err.message);
+      setIsManaging(false);
     }
   };
 
@@ -126,10 +133,22 @@ export default function PremiumPage() {
              <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-amber-400 to-amber-600"></div>
              <CheckCircle2 className="w-16 h-16 text-amber-500 mx-auto mb-4" />
              <h2 className="text-3xl font-black text-white mb-2">You are a Pro Member</h2>
-             <p className="text-slate-400 font-medium mb-6">Your profile is currently boosted with Pro features. Go make some noise in the Recruiting feed!</p>
-             <Link href="/dashboard/track" className="inline-block bg-white text-slate-900 font-black px-8 py-3.5 rounded-xl hover:bg-slate-100 transition-colors">
-               Go to Dashboard
-             </Link>
+             <p className="text-slate-400 font-medium mb-8">Your profile is currently boosted with Pro features. Go make some noise in the Recruiting feed!</p>
+             
+             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+               <Link href="/dashboard/track" className="w-full sm:w-auto inline-flex justify-center bg-white text-slate-900 font-black px-8 py-3.5 rounded-xl hover:bg-slate-100 transition-colors">
+                 Go to Dashboard
+               </Link>
+               {/* 🚨 NEW MANAGE SUBSCRIPTION BUTTON 🚨 */}
+               <button 
+                 onClick={handleManageBilling}
+                 disabled={isManaging}
+                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-slate-800 text-white font-bold px-8 py-3.5 rounded-xl hover:bg-slate-700 transition-colors disabled:opacity-70"
+               >
+                 {isManaging ? <Loader2 className="w-5 h-5 animate-spin" /> : <Settings className="w-5 h-5" />}
+                 Manage Subscription
+               </button>
+             </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
@@ -193,17 +212,10 @@ export default function PremiumPage() {
             <div className="lg:col-span-5 relative">
               <div className="sticky top-8">
                 
-                <div className="bg-gradient-to-r from-amber-500 to-yellow-500 rounded-t-[2.5rem] p-4 text-center relative overflow-hidden shadow-2xl">
-                  <div className="absolute inset-0 bg-white/20 skew-x-[45deg] animate-[shine_3s_ease-in-out_infinite]"></div>
-                  <h3 className="text-amber-950 font-black text-lg uppercase tracking-widest relative z-10 flex items-center justify-center gap-2">
-                    <Zap className="w-5 h-5 fill-current" /> Early Adopter Program
-                  </h3>
-                </div>
-
-                <div className="bg-slate-900/90 backdrop-blur-xl border border-slate-700 rounded-b-[2.5rem] p-8 shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+                <div className="bg-slate-900/90 backdrop-blur-xl border border-slate-700 rounded-[2.5rem] p-8 shadow-[0_0_50px_rgba(0,0,0,0.5)]">
                   
-                  {/* 🚨 UPDATED PRICING SECTION WITH PROMO HINT 🚨 */}
                   <div className="text-center mb-8 pb-8 border-b border-slate-800">
+                    <h3 className="text-xl font-black text-white mb-4">ChasedSports Pro</h3>
                     <div className="flex items-center justify-center gap-3 mb-2">
                       <span className="text-6xl font-black text-white tracking-tighter">$7.99<span className="text-3xl text-slate-400">/mo</span></span>
                     </div>
@@ -212,20 +224,7 @@ export default function PremiumPage() {
                     </p>
                     
                     <div className="flex items-center justify-center gap-2 text-slate-400 text-xs sm:text-sm font-medium bg-slate-950 py-2.5 px-4 rounded-xl border border-slate-800 w-fit mx-auto">
-                      <Tag className="w-4 h-4 text-emerald-400 shrink-0" /> Have a promo code? Enter it at checkout!
-                    </div>
-                  </div>
-
-                  <div className="mb-8">
-                    <div className="flex justify-between items-end mb-2">
-                      <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Founder Spots Left</span>
-                      <span className="text-sm font-black text-amber-400">{spotsLeft} / 100</span>
-                    </div>
-                    <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden shadow-inner">
-                      <div 
-                        className="bg-gradient-to-r from-amber-600 to-yellow-400 h-full rounded-full"
-                        style={{ width: `${((100 - spotsLeft) / 100) * 100}%` }}
-                      ></div>
+                      <Tag className="w-4 h-4 text-emerald-400 shrink-0" /> Have a promo code? Enter it at checkout.
                     </div>
                   </div>
 

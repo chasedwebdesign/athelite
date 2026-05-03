@@ -5,7 +5,7 @@ import { createClient } from '@/utils/supabase/client';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter, usePathname } from 'next/navigation';
-import { Activity, Mail, Search, LogOut, LayoutDashboard, User, School, Trophy, Globe, Medal, Menu, X, ShoppingCart, Target, ChevronDown } from 'lucide-react'; 
+import { Activity, Mail, Search, LogOut, LayoutDashboard, User, School, Trophy, Globe, Medal, Menu, X, ShoppingCart, Target, ChevronDown, Crown, Zap, Shield } from 'lucide-react'; 
 
 // 🚨 IMPORTED CHASEDCASH COMPONENT
 import { ChasedCash } from '@/components/ChasedCash';
@@ -19,10 +19,11 @@ export default function Navbar() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   
-  // --- ECONOMY & ROLE STATE ---
+  // --- ECONOMY, ROLE & BILLING STATE ---
   const [coins, setCoins] = useState(0);
   const [isAthlete, setIsAthlete] = useState(false);
   const [viewerRole, setViewerRole] = useState<'guest' | 'athlete' | 'coach'>('guest');
+  const [isPremium, setIsPremium] = useState(false);
   
   // --- UI STATE ---
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false); 
@@ -31,24 +32,24 @@ export default function Navbar() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false); 
+  
   const searchRef = useRef<HTMLDivElement>(null);
   const mobileSearchRef = useRef<HTMLDivElement>(null);
   
-  // Close search results if clicked outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
-        setSearchResults([]);
+        setIsSearchOpen(false);
       }
       if (mobileSearchRef.current && !mobileSearchRef.current.contains(event.target as Node)) {
-        setSearchResults([]);
+        setIsSearchOpen(false);
       }
     };
-    document.addEventListener('click', handleClickOutside);
-    return () => document.removeEventListener('click', handleClickOutside);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Lock body scroll when mobile menu is open
   useEffect(() => {
     if (isMobileMenuOpen) {
       document.body.style.overflow = 'hidden';
@@ -57,28 +58,39 @@ export default function Navbar() {
     }
   }, [isMobileMenuOpen]);
 
-  // Handle live search typing & 🚨 LOG COACH SEARCH APPEARANCES 🚨
+  // SMARTER FULL-NAME SEARCH LOGIC
   useEffect(() => {
     const fetchSearch = async () => {
-      if (searchQuery.length < 2) {
+      const queryText = searchQuery.trim();
+      
+      if (queryText.length < 2) {
         setSearchResults([]);
         return;
       }
       setIsSearching(true);
-      const { data } = await supabase
+
+      let query = supabase
         .from('athletes')
         .select('id, first_name, last_name, avatar_url, high_school')
-        .or(`first_name.ilike.%${searchQuery}%,last_name.ilike.%${searchQuery}%`)
         .gt('trust_level', 0)
         .limit(5);
+
+      const searchTerms = queryText.split(/\s+/);
+      
+      if (searchTerms.length > 1) {
+        query = query
+          .ilike('first_name', `%${searchTerms[0]}%`)
+          .ilike('last_name', `%${searchTerms.slice(1).join(' ')}%`);
+      } else {
+        query = query.or(`first_name.ilike.%${queryText}%,last_name.ilike.%${queryText}%`);
+      }
         
+      const { data } = await query;
+
       if (data) {
         setSearchResults(data);
-        
-        // 🚨 IF A COACH SEARCHES, GIVE THE ATHLETES CREDIT FOR APPEARING 🚨
         if (viewerRole === 'coach' && data.length > 0) {
            const idsToUpdate = data.map(athlete => athlete.id);
-           // Fire and forget RPC
            supabase.rpc('increment_search_appearances', { athlete_ids: idsToUpdate }).then();
         }
       }
@@ -89,17 +101,15 @@ export default function Navbar() {
     return () => clearTimeout(delayDebounceFn);
   }, [searchQuery, supabase, viewerRole]);
 
-  // Check auth and load avatar/messages/coins
   useEffect(() => {
     async function loadNavData() {
       const { data: { session } } = await supabase.auth.getSession();
       setSession(session);
 
       if (session) {
-        // Smart fetch to determine if user is athlete or coach
         const { data: athleteProfile } = await supabase
           .from('athletes')
-          .select('avatar_url, coins')
+          .select('avatar_url, coins, is_premium')
           .eq('id', session.user.id)
           .maybeSingle();
 
@@ -108,8 +118,8 @@ export default function Navbar() {
           setViewerRole('athlete');
           setAvatarUrl(athleteProfile.avatar_url);
           setCoins(athleteProfile.coins || 0);
+          setIsPremium(athleteProfile.is_premium || false);
         } else {
-          // If not an athlete, check if they are a coach
           const { data: coachProfile } = await supabase
             .from('coaches')
             .select('id, avatar_url')
@@ -122,7 +132,6 @@ export default function Navbar() {
           }
         }
 
-        // "Smart" Unread Counter
         const { data: messageData } = await supabase
           .from('messages')
           .select('id, athlete_id, chat_history')
@@ -153,7 +162,6 @@ export default function Navbar() {
     };
   }, [pathname, supabase]);
 
-  // 🚨 BULLETPROOF COIN TRACKER 🚨
   useEffect(() => {
     if (!session?.user?.id || !isAthlete) return;
 
@@ -184,6 +192,7 @@ export default function Navbar() {
     setIsMobileMenuOpen(false);
     setSearchQuery('');
     setSearchResults([]);
+    setIsSearchOpen(false);
   };
 
   if (pathname === '/login') return null;
@@ -200,7 +209,6 @@ export default function Navbar() {
       <nav className="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-[60]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
           
-          {/* LOGO - UPDATED TO ICON.PNG */}
           <Link href="/" onClick={closeMobileMenu} className="flex items-center gap-2 group shrink-0">
             <div className="relative w-8 h-8 sm:w-10 sm:h-10 overflow-hidden group-hover:scale-105 transition-transform">
               <Image 
@@ -217,23 +225,29 @@ export default function Navbar() {
             </span>
           </Link>
 
-          {/* DESKTOP GLOBAL SEARCH BAR */}
           <div className="flex-1 max-w-md relative hidden md:block" ref={searchRef}>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input 
-                type="text" placeholder="Search athletes..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+                type="text" 
+                placeholder="Search athletes..." 
+                value={searchQuery} 
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setIsSearchOpen(true);
+                }}
+                onFocus={() => setIsSearchOpen(true)}
                 className="w-full bg-slate-100 border border-transparent focus:border-blue-300 focus:bg-white text-sm font-medium text-slate-900 rounded-full pl-10 pr-4 py-2 transition-all outline-none"
               />
             </div>
-            {/* DESKTOP SEARCH RESULTS */}
-            {searchQuery.length >= 2 && (
+            
+            {isSearchOpen && searchQuery.length >= 2 && (
               <div className="absolute top-full mt-2 w-full bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden flex flex-col z-50">
                 {isSearching ? (
                   <div className="p-4 text-center text-sm font-bold text-slate-400">Searching...</div>
                 ) : searchResults.length > 0 ? (
                   searchResults.map(result => (
-                    <Link key={result.id} href={`/athlete/${result.id}`} onClick={() => { setSearchQuery(''); setSearchResults([]); }} className="flex items-center gap-3 p-3 hover:bg-slate-50 border-b border-slate-100 last:border-0 transition-colors">
+                    <Link key={result.id} href={`/athlete/${result.id}`} onClick={() => { setSearchQuery(''); setSearchResults([]); setIsSearchOpen(false); }} className="flex items-center gap-3 p-3 hover:bg-slate-50 border-b border-slate-100 last:border-0 transition-colors">
                       <div className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center">
                         {result.avatar_url ? <img src={result.avatar_url} alt="" className="w-full h-full object-cover"/> : <Medal className="w-4 h-4 text-slate-400"/>}
                       </div>
@@ -250,11 +264,16 @@ export default function Navbar() {
             )}
           </div>
 
-          {/* 🚨 DESKTOP NAVIGATION (ORGANIZED INTO HUB & SPOKES) 🚨 */}
           <div className="hidden md:flex items-center space-x-6 shrink-0">
             <Link href="/search" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors flex items-center"><School className="w-4 h-4 mr-1.5" /> College Finder</Link>
             
-            {/* 🚨 NEW TRACK & FIELD DROPDOWN MENU 🚨 */}
+            {/* 🚨 NEW: Teams Link added specifically for Desktop 🚨 */}
+            {session && (
+              <Link href="/dashboard/team" className="text-sm font-bold text-slate-500 hover:text-emerald-600 transition-colors flex items-center">
+                <Shield className="w-4 h-4 mr-1.5" /> Teams
+              </Link>
+            )}
+            
             <div className="relative group">
               <button className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors flex items-center py-2">
                 <Activity className="w-4 h-4 mr-1.5" /> Track & Field <ChevronDown className="w-3 h-3 ml-1 opacity-50 group-hover:rotate-180 transition-transform duration-300" />
@@ -281,18 +300,31 @@ export default function Navbar() {
                   {unreadCount > 0 && <span className="absolute -top-2.5 -right-3.5 bg-red-500 text-white text-[10px] leading-none font-black min-w-[18px] h-[18px] flex items-center justify-center rounded-full border-2 border-white shadow-sm px-1">{unreadCount}</span>}
                 </Link>
                 
-                {/* 🪙 COIN BADGE & SHOP LINK (Athletes Only) */}
                 {isAthlete && (
                   <Link href="/shop" className="flex items-center gap-1 hover:-translate-y-0.5 transition-transform">
                     <ShoppingCart className="w-5 h-5 text-blue-600" />
                     <CoinBadge />
                   </Link>
                 )}
+
+                {isAthlete && (
+                  isPremium ? (
+                    <Link href="/pro" title="Manage Subscription" className="ml-2 flex items-center gap-1.5 text-xs font-black bg-gradient-to-r from-amber-400 to-amber-500 text-amber-950 px-3 py-1.5 rounded-full hover:scale-105 transition-transform shadow-sm">
+                      <Crown className="w-3 h-3" />
+                      PRO
+                    </Link>
+                  ) : (
+                    <Link href="/pro" className="ml-2 flex items-center gap-1.5 text-xs font-black bg-slate-800 text-amber-400 px-3 py-1.5 rounded-full hover:scale-105 transition-transform shadow-sm">
+                      <Zap className="w-3 h-3" />
+                      UPGRADE
+                    </Link>
+                  )
+                )}
                 
                 <button 
                   onClick={handleSignOut} 
                   title="Log Out" 
-                  className="relative ml-2 w-10 h-10 rounded-full border-2 border-slate-200 hover:border-red-400 transition-all overflow-hidden flex items-center justify-center bg-slate-100 group shadow-sm"
+                  className="relative ml-2 w-10 h-10 rounded-full border-2 border-slate-200 hover:border-red-400 transition-all overflow-hidden flex items-center justify-center bg-slate-100 group shadow-sm shrink-0"
                 >
                   {avatarUrl ? <img src={avatarUrl} alt="Profile" className="w-full h-full object-cover group-hover:opacity-30 transition-opacity" /> : <User className="w-5 h-5 text-slate-400 group-hover:opacity-30 transition-opacity" />}
                   <div className="absolute inset-0 bg-red-500/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
@@ -305,7 +337,6 @@ export default function Navbar() {
             )}
           </div>
 
-          {/* MOBILE HAMBURGER BUTTON */}
           <div className="flex items-center gap-4 md:hidden">
             {session && isAthlete && (
               <Link href="/shop" className="flex items-center">
@@ -326,22 +357,27 @@ export default function Navbar() {
         </div>
       </nav>
 
-      {/* 🚨 MOBILE FULL-SCREEN MENU 🚨 */}
       {isMobileMenuOpen && (
         <div className="fixed inset-0 top-[64px] z-[50] bg-white overflow-y-auto animate-in slide-in-from-top-5 duration-200 md:hidden">
           <div className="p-6 flex flex-col gap-6">
             
-            {/* MOBILE SEARCH BAR */}
             <div className="relative w-full" ref={mobileSearchRef}>
               <div className="relative">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                 <input 
-                  type="text" placeholder="Search athletes..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+                  type="text" 
+                  placeholder="Search athletes..." 
+                  value={searchQuery} 
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setIsSearchOpen(true);
+                  }}
+                  onFocus={() => setIsSearchOpen(true)}
                   className="w-full bg-slate-100 border border-transparent focus:border-blue-300 focus:bg-white text-base font-medium text-slate-900 rounded-2xl pl-12 pr-4 py-4 transition-all outline-none"
                 />
               </div>
-              {/* MOBILE SEARCH RESULTS */}
-              {searchQuery.length >= 2 && (
+              
+              {isSearchOpen && searchQuery.length >= 2 && (
                 <div className="absolute top-full mt-2 w-full bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden flex flex-col z-50">
                   {isSearching ? (
                     <div className="p-4 text-center text-sm font-bold text-slate-400">Searching...</div>
@@ -364,14 +400,26 @@ export default function Navbar() {
               )}
             </div>
 
-            {/* MOBILE MENU LINKS */}
-            <div className="flex flex-col gap-2">
-              
-              <Link href="/search" onClick={closeMobileMenu} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-50 text-slate-700 font-bold text-lg transition-colors">
-                <School className="w-6 h-6 text-blue-500" /> College Finder
+            {/* 🚨 NEW: 2-COLUMN GRID FOR PHONE NAVIGATION 🚨 */}
+            <div className="grid grid-cols-2 gap-3 mb-2">
+              <Link href="/search" onClick={closeMobileMenu} className="bg-slate-50 hover:bg-blue-50 border border-slate-100 p-4 rounded-2xl flex flex-col items-center justify-center gap-2 transition-colors">
+                <School className="w-6 h-6 text-blue-500" />
+                <span className="font-bold text-slate-700 text-sm">College Finder</span>
               </Link>
-              
-              {/* 🚨 NEW MOBILE TRACK CATEGORY BLOCK 🚨 */}
+              {session ? (
+                <Link href="/dashboard/team" onClick={closeMobileMenu} className="bg-slate-50 hover:bg-emerald-50 border border-slate-100 p-4 rounded-2xl flex flex-col items-center justify-center gap-2 transition-colors">
+                  <Shield className="w-6 h-6 text-emerald-500" />
+                  <span className="font-bold text-slate-700 text-sm">Team HQ</span>
+                </Link>
+              ) : (
+                <Link href="/login" onClick={closeMobileMenu} className="bg-slate-50 hover:bg-emerald-50 border border-slate-100 p-4 rounded-2xl flex flex-col items-center justify-center gap-2 transition-colors">
+                  <Shield className="w-6 h-6 text-emerald-500" />
+                  <span className="font-bold text-slate-700 text-sm">Teams</span>
+                </Link>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-2">
               <div className="bg-slate-50 rounded-2xl p-2 border border-slate-100 my-2">
                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 mt-2 pl-3">Track & Field</h4>
                 {session && (
@@ -394,6 +442,19 @@ export default function Navbar() {
                     </Link>
                   )}
                   <Link href="/dashboard/messages" onClick={closeMobileMenu} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-50 text-slate-700 font-bold text-lg transition-colors"><Mail className="w-6 h-6 text-slate-500" /> Inbox {unreadCount > 0 && <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full ml-auto">{unreadCount} new</span>}</Link>
+                  
+                  {isAthlete && (
+                    isPremium ? (
+                      <Link href="/pro" onClick={closeMobileMenu} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-50 text-amber-600 font-bold text-lg transition-colors text-left w-full">
+                        <Crown className="w-6 h-6" /> Manage Pro
+                      </Link>
+                    ) : (
+                      <Link href="/pro" onClick={closeMobileMenu} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-50 text-amber-500 font-bold text-lg transition-colors text-left w-full">
+                        <Zap className="w-6 h-6" /> Upgrade to Pro
+                      </Link>
+                    )
+                  )}
+
                   <button onClick={handleSignOut} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-red-50 text-red-600 font-bold text-lg transition-colors text-left w-full"><LogOut className="w-6 h-6" /> Log Out</button>
                 </>
               ) : (

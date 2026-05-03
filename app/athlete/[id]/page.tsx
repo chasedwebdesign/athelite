@@ -20,6 +20,7 @@ interface AthleteProfile {
   prs: { event: string; mark: string; date?: string; meet?: string }[];
   avatar_url?: string;
   equipped_border?: string | null;
+  equipped_banner?: string | null; // 🚨 NEW BANNER PROPERTY
   equipped_title?: string | null; 
   profile_views?: number; 
 }
@@ -107,23 +108,13 @@ export default function PublicAthleteProfile() {
           const { data: savedData } = await supabase.from('saved_recruits').select('id').eq('coach_id', session.user.id).eq('athlete_id', athleteId).maybeSingle();
           if (savedData) setIsSaved(true);
 
-          // 🚨 THE UNBLOCKED RPC TRACKER 🚨
           if (athleteData && !hasLoggedView.current) {
              hasLoggedView.current = true; // Lock it to prevent React Strict Mode from firing twice
-             
-             console.log("🚀 Firing RPC to log view for athlete:", athleteId);
-             
              const { error: rpcError } = await supabase.rpc('log_profile_view', {
                 target_athlete_id: athleteId,
                 viewing_coach_id: session.user.id
              });
-
-             if (rpcError) {
-                console.error("❌ RPC ERROR:", rpcError);
-                alert("Database Error: " + rpcError.message);
-             } else {
-                console.log("✅ RPC SUCCESS! Coach Click and Master Bump logged successfully.");
-             }
+             if (rpcError) console.error("❌ RPC ERROR:", rpcError);
           }
 
         } else {
@@ -265,14 +256,91 @@ export default function PublicAthleteProfile() {
 
   const activeTitle = EARNED_TITLES.find(t => t.id === athlete.equipped_title) || EARNED_TITLES[6];
 
+  // =========================================
+  // 🚨 DYNAMIC BANNER LOGIC & CLASSES 🚨
+  // =========================================
+  const bannerType = athlete.equipped_banner || 'default';
+  
+  let containerClass = "bg-white border-slate-200 text-slate-900";
+  let nameClass = "text-slate-900";
+  let metaClass = "text-slate-500";
+  let dividerClass = "text-slate-300";
+  let primaryBtnClass = "bg-slate-900 hover:bg-blue-600 text-white shadow-lg";
+  let secondaryBtnClass = "bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 hover:border-blue-300 text-blue-700 shadow-sm";
+  let loginBtnClass = "bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200";
+  let badgeClass = "bg-green-50 border-green-200 text-green-700";
+  let saveBtnBaseClass = "bg-white text-slate-600 border-slate-200 hover:border-yellow-400 hover:text-yellow-600";
+  
+  let backgroundEffects = <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 blur-[80px] rounded-full pointer-events-none z-0"></div>;
+
+  if (bannerType === 'blue-tech') {
+    containerClass = "banner-blue-tech border-blue-500/50 shadow-[0_0_40px_rgba(59,130,246,0.3)] text-white";
+    nameClass = "text-white drop-shadow-[0_2px_10px_rgba(59,130,246,0.8)]";
+    metaClass = "text-blue-100 font-medium";
+    dividerClass = "text-blue-400/50";
+    primaryBtnClass = "bg-blue-600 hover:bg-blue-500 text-white shadow-[0_0_20px_rgba(59,130,246,0.5)] border border-blue-400/50";
+    secondaryBtnClass = "bg-slate-900/50 border border-blue-500/30 hover:border-blue-400 text-blue-300 shadow-sm backdrop-blur-sm";
+    loginBtnClass = "bg-slate-900/50 hover:bg-slate-800 text-blue-200 border border-blue-500/30 backdrop-blur-sm";
+    badgeClass = "bg-green-900/30 border-green-500/50 text-green-400 backdrop-blur-sm";
+    saveBtnBaseClass = "bg-slate-900/50 text-slate-300 border-slate-700 hover:border-yellow-400 hover:text-yellow-400 backdrop-blur-sm";
+    backgroundEffects = (
+      <>
+        <div className="absolute inset-0 bg-slate-900/50 pointer-events-none z-0"></div>
+        <div className="absolute top-0 right-0 w-96 h-96 bg-blue-600/30 blur-[100px] rounded-full pointer-events-none z-0"></div>
+      </>
+    );
+  } else if (bannerType === 'shimmering-gold') {
+    containerClass = "banner-shimmer-gold border-amber-300 shadow-[0_0_40px_rgba(251,191,36,0.5)] text-amber-950";
+    nameClass = "text-amber-950 drop-shadow-[0_2px_10px_rgba(255,255,255,0.6)]";
+    metaClass = "text-amber-900 font-bold";
+    dividerClass = "text-amber-700/40";
+    primaryBtnClass = "bg-amber-900 hover:bg-amber-800 text-amber-100 shadow-[0_0_20px_rgba(180,83,9,0.5)] border border-amber-700/50";
+    secondaryBtnClass = "bg-amber-100/50 border border-amber-400 hover:border-amber-600 text-amber-900 shadow-sm backdrop-blur-sm";
+    loginBtnClass = "bg-amber-100/50 hover:bg-amber-200 text-amber-900 border border-amber-400 backdrop-blur-sm";
+    badgeClass = "bg-amber-100/50 border-amber-600/30 text-amber-900 backdrop-blur-sm";
+    saveBtnBaseClass = "bg-amber-100/50 text-amber-900 border-amber-400 hover:border-amber-600 hover:bg-amber-200 backdrop-blur-sm";
+    backgroundEffects = (
+      <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-20 mix-blend-overlay pointer-events-none z-0"></div>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-[#F8FAFC] font-sans pb-32">
       
+      {/* 🚨 DYNAMIC BANNER CSS KEYFRAMES 🚨 */}
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes shimmerSlow { 0% { background-position: -200% center; } 100% { background-position: 200% center; } }
+        @keyframes liquidPan { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+        @keyframes scanline { 0% { transform: translateY(-100%); } 100% { transform: translateY(100%); } }
+        
         .legend-badge { background: linear-gradient(90deg, #6b21a8 0%, #d946ef 20%, #6b21a8 40%, #d946ef 60%, #6b21a8 80%); background-size: 200% auto; animation: shimmerSlow 4s linear infinite; color: white; border: 1px solid #e879f9; box-shadow: 0 0 15px rgba(217, 70, 239, 0.5); font-weight: 900; }
         .champion-badge { background: linear-gradient(90deg, #991b1b 0%, #ef4444 20%, #991b1b 40%, #ef4444 60%, #991b1b 80%); background-size: 200% auto; animation: shimmerSlow 4s linear infinite; color: white; border: 1px solid #f87171; box-shadow: 0 0 15px rgba(239, 68, 68, 0.5); font-weight: 900; }
         .elite-badge { background: linear-gradient(90deg, #0f172a 0%, #475569 20%, #0f172a 40%, #475569 60%, #0f172a 80%); background-size: 200% auto; animation: shimmerSlow 4s linear infinite; color: white; border: 1px solid #94a3b8; box-shadow: 0 0 15px rgba(148, 163, 184, 0.3); font-weight: 900; }
+        
+        .banner-blue-tech {
+          background-color: #0f172a;
+          background-image: 
+            linear-gradient(rgba(59, 130, 246, 0.15) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(59, 130, 246, 0.15) 1px, transparent 1px);
+          background-size: 30px 30px;
+          position: relative;
+        }
+        .banner-blue-tech::before {
+          content: "";
+          position: absolute;
+          top: 0; left: 0; right: 0; bottom: 0;
+          background: linear-gradient(to bottom, transparent, rgba(59, 130, 246, 0.2), transparent);
+          animation: scanline 4s linear infinite;
+          pointer-events: none;
+          z-index: 1;
+        }
+        
+        .banner-shimmer-gold {
+          background: linear-gradient(135deg, #f59e0b 0%, #fef3c7 25%, #f59e0b 50%, #fef3c7 75%, #f59e0b 100%);
+          background-size: 300% 300%;
+          animation: liquidPan 8s ease-in-out infinite;
+          position: relative;
+        }
       `}} />
 
       <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-10">
@@ -281,8 +349,9 @@ export default function PublicAthleteProfile() {
           <ArrowLeft className="w-4 h-4 mr-2" /> Back
         </button>
 
-        <div className="bg-white rounded-[2.5rem] p-6 sm:p-8 md:p-12 border border-slate-200 shadow-xl relative overflow-hidden mb-6 transition-all duration-300">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 blur-[80px] rounded-full pointer-events-none"></div>
+        {/* 🚨 DYNAMIC BANNER CONTAINER 🚨 */}
+        <div className={`rounded-[2.5rem] p-6 sm:p-8 md:p-12 border shadow-xl relative overflow-hidden mb-6 transition-all duration-300 ${containerClass}`}>
+          {backgroundEffects}
           
           <div className="relative z-10 flex flex-col md:flex-row items-center md:items-start gap-6 md:gap-8">
             
@@ -294,28 +363,28 @@ export default function PublicAthleteProfile() {
 
             <div className="flex-1 text-center md:text-left w-full">
               <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3 mb-2 justify-center md:justify-start">
-                <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-slate-900 tracking-tight">
+                <h1 className={`text-3xl sm:text-4xl md:text-5xl font-black tracking-tight ${nameClass}`}>
                   {athlete.first_name} {athlete.last_name}
                 </h1>
                 {athlete.trust_level > 0 && (
-                  <div className="inline-flex items-center bg-green-50 border border-green-200 px-3 py-1 rounded-full w-max mx-auto md:mx-0">
-                    <CheckCircle2 className="w-4 h-4 text-green-500 mr-1.5" />
-                    <span className="text-xs font-bold text-green-700 uppercase tracking-widest">Verified</span>
+                  <div className={`inline-flex items-center border px-3 py-1 rounded-full w-max mx-auto md:mx-0 ${badgeClass}`}>
+                    <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                    <span className="text-xs font-bold uppercase tracking-widest">Verified</span>
                   </div>
                 )}
               </div>
 
               <div className="mb-4">
-                  <span className={`inline-block px-3 py-1 rounded-lg text-[10px] font-black tracking-widest uppercase text-white ${activeTitle.badgeClass}`}>
+                  <span className={`inline-block px-3 py-1 rounded-lg text-[10px] font-black tracking-widest uppercase text-white shadow-sm ${activeTitle.badgeClass}`}>
                     {activeTitle.name} Rank
                   </span>
               </div>
               
-              <p className="text-sm sm:text-base md:text-lg font-bold text-slate-500 mb-6 flex flex-col md:flex-row items-center gap-2 md:gap-4 justify-center md:justify-start text-balance">
+              <p className={`text-sm sm:text-base md:text-lg mb-6 flex flex-col md:flex-row items-center gap-2 md:gap-4 justify-center md:justify-start text-balance ${metaClass}`}>
                 <span className="flex items-center"><MapPin className="w-4 h-4 md:w-5 md:h-5 mr-1" /> {athlete.high_school} {athlete.state ? `, ${athlete.state}` : ''}</span>
-                <span className="hidden md:inline text-slate-300">•</span>
+                <span className={`hidden md:inline ${dividerClass}`}>•</span>
                 <span>Class of {athlete.grad_year || '202X'}</span>
-                <span className="hidden md:inline text-slate-300">•</span>
+                <span className={`hidden md:inline ${dividerClass}`}>•</span>
                 <span>{athlete.gender || 'Boys'} Division</span>
               </p>
 
@@ -323,15 +392,15 @@ export default function PublicAthleteProfile() {
                 {!isSelf && (
                   <>
                     {viewerRole === 'guest' ? (
-                      <Link href="/login" className="w-full sm:w-auto bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-3.5 px-6 rounded-xl transition-colors flex items-center justify-center gap-2 border border-slate-200">
+                      <Link href="/login" className={`w-full sm:w-auto font-bold py-3.5 px-6 rounded-xl transition-colors flex items-center justify-center gap-2 border ${loginBtnClass}`}>
                         <Lock className="w-5 h-5" /> Log in to Connect
                       </Link>
                     ) : (viewerRole === 'coach' && !isVerifiedCoach) ? (
-                      <div className="w-full sm:w-auto bg-slate-100 text-slate-400 font-bold py-3.5 px-6 rounded-xl flex items-center justify-center gap-2 border border-slate-200">
+                      <div className={`w-full sm:w-auto font-bold py-3.5 px-6 rounded-xl flex items-center justify-center gap-2 border ${loginBtnClass}`}>
                         <Lock className="w-5 h-5" /> Update Profile to Message
                       </div>
                     ) : (
-                      <button onClick={handleContactClick} className="w-full sm:w-auto bg-slate-900 hover:bg-blue-600 text-white font-black py-3.5 px-8 rounded-xl transition-colors flex items-center justify-center gap-2 shadow-lg">
+                      <button onClick={handleContactClick} className={`w-full sm:w-auto font-black py-3.5 px-8 rounded-xl transition-colors flex items-center justify-center gap-2 ${primaryBtnClass}`}>
                         <Mail className="w-5 h-5" /> Contact
                       </button>
                     )}
@@ -340,21 +409,21 @@ export default function PublicAthleteProfile() {
                       <button 
                         onClick={handleToggleSave} 
                         disabled={isSaving} 
-                        className={`w-full sm:w-auto border py-3.5 px-6 rounded-xl transition-all flex items-center justify-center gap-2 font-bold shadow-sm ${
+                        className={`w-full sm:w-auto py-3.5 px-6 rounded-xl transition-all flex items-center justify-center gap-2 font-bold ${
                           isSaved 
-                            ? 'bg-yellow-50 text-yellow-600 border-yellow-300 hover:bg-yellow-100 hover:border-yellow-400' 
-                            : 'bg-white text-slate-600 border-slate-200 hover:border-yellow-400 hover:text-yellow-600 hover:shadow-md'
+                            ? 'bg-yellow-50 text-yellow-600 border border-yellow-300 hover:bg-yellow-100 hover:border-yellow-400 shadow-sm' 
+                            : `${saveBtnBaseClass} border shadow-sm`
                         }`}
                       >
-                        <Star className={`w-5 h-5 transition-colors ${isSaved ? 'fill-yellow-500 text-yellow-500' : 'text-slate-400 group-hover:text-yellow-500'}`} />
+                        <Star className={`w-5 h-5 transition-colors ${isSaved ? 'fill-yellow-500 text-yellow-500' : 'opacity-70 group-hover:text-yellow-500'}`} />
                         {isSaved ? 'Saved to Watchlist' : 'Save Recruit'}
                       </button>
                     )}
                   </>
                 )}
                 
-                <button onClick={handleCopyLink} className="w-full sm:w-auto bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 hover:border-blue-300 text-blue-700 font-black py-3.5 px-6 rounded-xl transition-colors flex items-center justify-center gap-2 shadow-sm">
-                  {copySuccess ? <><CheckCircle2 className="w-5 h-5 text-green-500" /> Copied!</> : <><Share2 className="w-5 h-5" /> Share Profile</>}
+                <button onClick={handleCopyLink} className={`w-full sm:w-auto font-black py-3.5 px-6 rounded-xl transition-colors flex items-center justify-center gap-2 ${secondaryBtnClass}`}>
+                  {copySuccess ? <><CheckCircle2 className="w-5 h-5" /> Copied!</> : <><Share2 className="w-5 h-5" /> Share Profile</>}
                 </button>
               </div>
             </div>
@@ -454,6 +523,7 @@ export default function PublicAthleteProfile() {
 
       </div>
 
+      {/* MODAL */}
       {isMessageModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
