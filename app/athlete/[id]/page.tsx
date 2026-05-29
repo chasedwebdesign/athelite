@@ -3,7 +3,12 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
-import { Medal, CheckCircle2, MapPin, Mail, X, Send, MessageSquare, Lock, Trophy, Calendar, Share2, ArrowLeft, Activity, Globe, School, UserCircle2, Clock, Star, Instagram, Check } from 'lucide-react';
+import { 
+  CheckCircle2, MapPin, Mail, X, Send, Lock, Trophy, Calendar, 
+  Share2, ArrowLeft, Activity, Globe, School, UserCircle2, 
+  Clock, Star, ShieldCheck, AlertTriangle, Search, BookOpen, 
+  Eye, Link as LinkIcon, FileText, GraduationCap, Medal
+} from 'lucide-react';
 import Link from 'next/link';
 
 import { AvatarWithBorder } from '@/components/AnimatedBorders'; 
@@ -20,9 +25,11 @@ interface AthleteProfile {
   prs: { event: string; mark: string; date?: string; meet?: string }[];
   avatar_url?: string;
   equipped_border?: string | null;
-  equipped_banner?: string | null; // 🚨 NEW BANNER PROPERTY
+  equipped_card?: string | null;
   equipped_title?: string | null; 
   profile_views?: number; 
+  search_appearances?: number;
+  saved_resume?: string | null;
 }
 
 interface AthletePost {
@@ -43,7 +50,7 @@ const EARNED_TITLES = [
   { id: 'prospect', name: 'Prospect', reqPercentile: 1.0, badgeClass: 'bg-slate-100 text-slate-600 border border-slate-300', unlockText: 'Standard Rank' },
 ];
 
-export default function PublicAthleteProfile() {
+export default function PublicAthletePortfolio() {
   const params = useParams();
   const router = useRouter();
   const athleteId = params.id as string;
@@ -74,9 +81,14 @@ export default function PublicAthleteProfile() {
   const [isSending, setIsSending] = useState(false);
   const [sendSuccess, setSendSuccess] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
-  // 🚨 STRICT MODE DOUBLE-FIRE LOCK (No Session Storage!) 🚨
   const hasLoggedView = useRef(false);
+
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   useEffect(() => {
     async function fetchProfileAndUser() {
@@ -109,7 +121,7 @@ export default function PublicAthleteProfile() {
           if (savedData) setIsSaved(true);
 
           if (athleteData && !hasLoggedView.current) {
-             hasLoggedView.current = true; // Lock it to prevent React Strict Mode from firing twice
+             hasLoggedView.current = true;
              const { error: rpcError } = await supabase.rpc('log_profile_view', {
                 target_athlete_id: athleteId,
                 viewing_coach_id: session.user.id
@@ -168,7 +180,7 @@ export default function PublicAthleteProfile() {
     setIsMessageModalOpen(true);
   };
 
-  const handleSendMessage = async (e: React.FormEvent) => {
+  const handleSendMessage = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!athlete) return;
     setIsSending(true);
@@ -218,8 +230,8 @@ export default function PublicAthleteProfile() {
     if (navigator.share) {
       try {
         await navigator.share({
-          title: `${athlete?.first_name} ${athlete?.last_name} | ChasedSports`,
-          text: `Check out my verified Track & Field stats and national rank on ChasedSports! 🏃💨`,
+          title: `${athlete?.first_name} ${athlete?.last_name} | Official Athletic Portfolio`,
+          text: `Check out my verified Track & Field stats and national rank on my ChasedSports Portfolio! 📈🏃‍♂️`,
           url: url,
         });
         return; 
@@ -227,7 +239,7 @@ export default function PublicAthleteProfile() {
     } 
     navigator.clipboard.writeText(url);
     setCopySuccess(true);
-    setTimeout(() => setCopySuccess(false), 2000);
+    showToast("Portfolio link copied to clipboard!", "success");
   };
 
   const formatDate = (dateString: string) => {
@@ -239,6 +251,7 @@ export default function PublicAthleteProfile() {
     return (
       <div className="min-h-screen bg-[#F8FAFC] flex flex-col items-center justify-center">
         <div className="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+        <p className="text-slate-500 font-bold mt-4 animate-pulse">Loading Portfolio...</p>
       </div>
     );
   }
@@ -247,60 +260,75 @@ export default function PublicAthleteProfile() {
     return (
       <div className="min-h-screen bg-[#F8FAFC] flex flex-col items-center justify-center text-center p-6">
         <Activity className="w-16 h-16 text-slate-300 mb-4" />
-        <h1 className="text-3xl font-black text-slate-900 mb-2">Athlete Not Found</h1>
-        <p className="text-slate-500 mb-6">This profile may have been removed or does not exist.</p>
+        <h1 className="text-3xl font-black text-slate-900 mb-2">Portfolio Not Found</h1>
+        <p className="text-slate-500 mb-6">This athlete's portfolio may have been removed or does not exist.</p>
         <button onClick={() => router.push('/')} className="bg-blue-600 text-white font-bold px-6 py-3 rounded-xl">Return Home</button>
       </div>
     );
   }
 
   const activeTitle = EARNED_TITLES.find(t => t.id === athlete.equipped_title) || EARNED_TITLES[6];
+  const isVerified = athlete.trust_level > 0;
 
   // =========================================
-  // 🚨 DYNAMIC BANNER LOGIC & CLASSES 🚨
+  // 🚨 JSON PARSE RESUME LOGIC 🚨
   // =========================================
-  const bannerType = athlete.equipped_banner || 'default';
+  let parsedResume = { gpa: '', accolades: [] as string[], schoolPrefs: '' };
+  if (athlete.saved_resume) {
+    try {
+      const parsed = JSON.parse(athlete.saved_resume);
+      parsedResume = {
+         gpa: parsed.gpa || '',
+         accolades: parsed.accolades || [],
+         schoolPrefs: parsed.schoolPrefs || ''
+      };
+    } catch (e) {
+      parsedResume.schoolPrefs = athlete.saved_resume;
+    }
+  }
+
+  // =========================================
+  // 🚨 DYNAMIC CARD THEME LOGIC 🚨
+  // =========================================
   
-  let containerClass = "bg-white border-slate-200 text-slate-900";
-  let nameClass = "text-slate-900";
-  let metaClass = "text-slate-500";
-  let dividerClass = "text-slate-300";
-  let primaryBtnClass = "bg-slate-900 hover:bg-blue-600 text-white shadow-lg";
-  let secondaryBtnClass = "bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 hover:border-blue-300 text-blue-700 shadow-sm";
-  let loginBtnClass = "bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200";
-  let badgeClass = "bg-green-50 border-green-200 text-green-700";
-  let saveBtnBaseClass = "bg-white text-slate-600 border-slate-200 hover:border-yellow-400 hover:text-yellow-600";
+  // 🚨 CRITICAL FIX: Intercept older DB records that say 'default' instead of 'base'
+  let cardType = athlete.equipped_card || 'base';
+  if (cardType === 'default') cardType = 'base';
+  
+  // 🚨 Default to the slick dark mode slate theme
+  let containerClass = "bg-slate-900 border-slate-800 text-white shadow-2xl";
+  let nameClass = "text-white";
+  let metaClass = "text-slate-400";
+  let dividerClass = "text-slate-600";
+  let primaryBtnClass = "bg-blue-600 hover:bg-blue-500 text-white shadow-lg border-transparent";
+  let secondaryBtnClass = "bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white shadow-sm";
+  let loginBtnClass = "bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700";
+  let badgeClass = "bg-emerald-500/20 border-emerald-500/50 text-emerald-400";
+  let unverifiedBadgeClass = "bg-slate-800/80 border-slate-700 text-slate-400 backdrop-blur-sm";
+  let saveBtnBaseClass = "bg-slate-800 text-slate-300 border-slate-700 hover:border-yellow-400 hover:text-yellow-400";
   
   let backgroundEffects = <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 blur-[80px] rounded-full pointer-events-none z-0"></div>;
 
-  if (bannerType === 'blue-tech') {
-    containerClass = "banner-blue-tech border-blue-500/50 shadow-[0_0_40px_rgba(59,130,246,0.3)] text-white";
-    nameClass = "text-white drop-shadow-[0_2px_10px_rgba(59,130,246,0.8)]";
-    metaClass = "text-blue-100 font-medium";
-    dividerClass = "text-blue-400/50";
-    primaryBtnClass = "bg-blue-600 hover:bg-blue-500 text-white shadow-[0_0_20px_rgba(59,130,246,0.5)] border border-blue-400/50";
-    secondaryBtnClass = "bg-slate-900/50 border border-blue-500/30 hover:border-blue-400 text-blue-300 shadow-sm backdrop-blur-sm";
-    loginBtnClass = "bg-slate-900/50 hover:bg-slate-800 text-blue-200 border border-blue-500/30 backdrop-blur-sm";
-    badgeClass = "bg-green-900/30 border-green-500/50 text-green-400 backdrop-blur-sm";
-    saveBtnBaseClass = "bg-slate-900/50 text-slate-300 border-slate-700 hover:border-yellow-400 hover:text-yellow-400 backdrop-blur-sm";
+  const isAnimated = ['hype', 'premium', 'crimson', 'sapphire', 'amethyst', 'cyber'].includes(cardType);
+
+  if (cardType !== 'base') {
+    containerClass = `holo-card-${cardType} border-white/20 shadow-2xl text-white`;
+    if (isAnimated) containerClass += " animate-foil";
+    
+    nameClass = "text-white drop-shadow-md";
+    metaClass = "text-white/80 font-medium";
+    dividerClass = "text-white/40";
+    primaryBtnClass = "bg-white/10 hover:bg-white/20 text-white shadow-lg border-white/20 backdrop-blur-md";
+    secondaryBtnClass = "bg-black/20 hover:bg-black/30 border border-white/20 text-white shadow-sm backdrop-blur-md";
+    loginBtnClass = "bg-black/40 hover:bg-black/60 text-white border border-white/20 backdrop-blur-sm";
+    badgeClass = "bg-black/30 border-white/20 text-white backdrop-blur-sm";
+    saveBtnBaseClass = "bg-black/20 text-white border-white/20 hover:border-yellow-400 hover:text-yellow-400 backdrop-blur-md";
+    
     backgroundEffects = (
       <>
-        <div className="absolute inset-0 bg-slate-900/50 pointer-events-none z-0"></div>
-        <div className="absolute top-0 right-0 w-96 h-96 bg-blue-600/30 blur-[100px] rounded-full pointer-events-none z-0"></div>
+        {['hype', 'premium'].includes(cardType) && <div className="holo-glare rounded-[2.5rem]"></div>}
+        {isAnimated && <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-[0.03] mix-blend-overlay"></div>}
       </>
-    );
-  } else if (bannerType === 'shimmering-gold') {
-    containerClass = "banner-shimmer-gold border-amber-300 shadow-[0_0_40px_rgba(251,191,36,0.5)] text-amber-950";
-    nameClass = "text-amber-950 drop-shadow-[0_2px_10px_rgba(255,255,255,0.6)]";
-    metaClass = "text-amber-900 font-bold";
-    dividerClass = "text-amber-700/40";
-    primaryBtnClass = "bg-amber-900 hover:bg-amber-800 text-amber-100 shadow-[0_0_20px_rgba(180,83,9,0.5)] border border-amber-700/50";
-    secondaryBtnClass = "bg-amber-100/50 border border-amber-400 hover:border-amber-600 text-amber-900 shadow-sm backdrop-blur-sm";
-    loginBtnClass = "bg-amber-100/50 hover:bg-amber-200 text-amber-900 border border-amber-400 backdrop-blur-sm";
-    badgeClass = "bg-amber-100/50 border-amber-600/30 text-amber-900 backdrop-blur-sm";
-    saveBtnBaseClass = "bg-amber-100/50 text-amber-900 border-amber-400 hover:border-amber-600 hover:bg-amber-200 backdrop-blur-sm";
-    backgroundEffects = (
-      <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-20 mix-blend-overlay pointer-events-none z-0"></div>
     );
   }
 
@@ -310,47 +338,95 @@ export default function PublicAthleteProfile() {
       {/* 🚨 DYNAMIC BANNER CSS KEYFRAMES 🚨 */}
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes shimmerSlow { 0% { background-position: -200% center; } 100% { background-position: 200% center; } }
-        @keyframes liquidPan { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
-        @keyframes scanline { 0% { transform: translateY(-100%); } 100% { transform: translateY(100%); } }
+        @keyframes foilShift { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+        @keyframes shimmerGlare { 0% { background-position: -200% center; } 100% { background-position: 200% center; } }
+        @keyframes cyberScan { 0% { transform: translateY(-100%); opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { transform: translateY(1000%); opacity: 0; } }
+        @keyframes voidPulse { 0%, 100% { background-size: 100% 100%; filter: brightness(1); } 50% { background-size: 120% 120%; filter: brightness(1.2); } }
         
         .legend-badge { background: linear-gradient(90deg, #6b21a8 0%, #d946ef 20%, #6b21a8 40%, #d946ef 60%, #6b21a8 80%); background-size: 200% auto; animation: shimmerSlow 4s linear infinite; color: white; border: 1px solid #e879f9; box-shadow: 0 0 15px rgba(217, 70, 239, 0.5); font-weight: 900; }
         .champion-badge { background: linear-gradient(90deg, #991b1b 0%, #ef4444 20%, #991b1b 40%, #ef4444 60%, #991b1b 80%); background-size: 200% auto; animation: shimmerSlow 4s linear infinite; color: white; border: 1px solid #f87171; box-shadow: 0 0 15px rgba(239, 68, 68, 0.5); font-weight: 900; }
         .elite-badge { background: linear-gradient(90deg, #0f172a 0%, #475569 20%, #0f172a 40%, #475569 60%, #0f172a 80%); background-size: 200% auto; animation: shimmerSlow 4s linear infinite; color: white; border: 1px solid #94a3b8; box-shadow: 0 0 15px rgba(148, 163, 184, 0.3); font-weight: 900; }
         
-        .banner-blue-tech {
-          background-color: #0f172a;
-          background-image: 
-            linear-gradient(rgba(59, 130, 246, 0.15) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(59, 130, 246, 0.15) 1px, transparent 1px);
-          background-size: 30px 30px;
-          position: relative;
+        /* CARD TEXTURES FROM CUSTOMIZE PAGE */
+        .holo-card-base { background: transparent; }
+        .holo-card-obsidian { background: linear-gradient(135deg, #0f172a 0%, #334155 25%, #000000 50%, #0f172a 75%, #1e293b 100%); background-size: 300% 300%; }
+        .holo-card-crimson { background: linear-gradient(135deg, #450a0a 0%, #dc2626 50%, #450a0a 100%); background-size: 300% 300%; }
+        .holo-card-sapphire { background: linear-gradient(135deg, #172554 0%, #0ea5e9 50%, #172554 100%); background-size: 300% 300%; }
+        
+        .holo-card-hype { 
+          background: 
+            linear-gradient(135deg, rgba(255,255,255,0.15) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.15) 75%, transparent 75%, transparent 100%),
+            linear-gradient(135deg, #4f46e5 0%, #9333ea 25%, #ec4899 50%, #3b82f6 75%, #4f46e5 100%); 
+          background-size: 40px 40px, 300% 300%; 
         }
-        .banner-blue-tech::before {
-          content: "";
-          position: absolute;
-          top: 0; left: 0; right: 0; bottom: 0;
-          background: linear-gradient(to bottom, transparent, rgba(59, 130, 246, 0.2), transparent);
-          animation: scanline 4s linear infinite;
-          pointer-events: none;
-          z-index: 1;
+
+        .holo-card-premium { 
+          background: 
+            repeating-linear-gradient(45deg, rgba(255,255,255,0.05) 0px, rgba(255,255,255,0.05) 2px, transparent 2px, transparent 6px),
+            linear-gradient(135deg, #b45309 0%, #f59e0b 25%, #fef08a 50%, #d97706 75%, #78350f 100%); 
+          background-size: 100% 100%, 300% 300%; 
+        }
+
+        .holo-card-amethyst { 
+          background: radial-gradient(circle at 50% 50%, #c026d3 0%, #7e22ce 30%, #3b0764 80%, #000000 100%); 
+          animation: voidPulse 6s ease-in-out infinite;
+        }
+        .holo-card-amethyst::before {
+          content: ''; position: absolute; inset: 0; pointer-events: none; opacity: 0.1;
+          background-image: repeating-radial-gradient(circle at 50% 50%, transparent 0, transparent 2px, #fff 3px, #fff 4px);
+        }
+
+        .holo-card-cyber { 
+          background: 
+            linear-gradient(rgba(16, 185, 129, 0.15) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(16, 185, 129, 0.15) 1px, transparent 1px),
+            linear-gradient(135deg, #022c22 0%, #064e3b 50%, #083344 100%);
+          background-size: 20px 20px, 20px 20px, 100% 100%;
+          box-shadow: inset 0 0 40px rgba(6, 182, 212, 0.3);
+        }
+        .holo-card-cyber::after {
+          content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 8px;
+          background: rgba(34, 211, 238, 0.8); filter: blur(3px); box-shadow: 0 0 20px #22d3ee;
+          animation: cyberScan 3s linear infinite;
         }
         
-        .banner-shimmer-gold {
-          background: linear-gradient(135deg, #f59e0b 0%, #fef3c7 25%, #f59e0b 50%, #fef3c7 75%, #f59e0b 100%);
-          background-size: 300% 300%;
-          animation: liquidPan 8s ease-in-out infinite;
-          position: relative;
-        }
+        .animate-foil { animation: foilShift 15s ease-in-out infinite; }
+        .holo-glare { position: absolute; inset: 0; background: linear-gradient(105deg, transparent 20%, rgba(255,255,255,0.4) 25%, transparent 30%); background-size: 200% auto; animation: shimmerGlare 8s infinite linear; pointer-events: none; z-index: 10; mix-blend-mode: overlay;}
       `}} />
+
+      {/* TOAST NOTIFICATION */}
+      {toast && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[200] animate-in slide-in-from-top-5 fade-in duration-300">
+          <div className={`rounded-full px-6 py-3 shadow-2xl flex items-center gap-3 font-bold text-sm border ${toast.type === 'error' ? 'bg-red-900 text-white border-red-700' : 'bg-slate-900 text-white border-slate-700'}`}>
+            {toast.type === 'error' ? <X className="w-4 h-4 text-red-400" /> : <CheckCircle2 className="w-4 h-4 text-emerald-400" />} {toast.message}
+          </div>
+        </div>
+      )}
 
       <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-10">
         
-        <button onClick={() => router.back()} className="inline-flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 mb-6 transition-colors">
-          <ArrowLeft className="w-4 h-4 mr-2" /> Back
-        </button>
+        <div className="flex items-center justify-between mb-6">
+          <button onClick={() => router.back()} className="inline-flex items-center text-sm font-bold text-slate-500 hover:text-slate-900 transition-colors">
+            <ArrowLeft className="w-4 h-4 mr-2" /> Back
+          </button>
+
+          {/* View count indicator for the athlete themselves to see it's working */}
+          {isSelf && (
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg border border-blue-200">
+                <Search className="w-4 h-4" />
+                <span className="text-xs font-bold uppercase tracking-widest">{athlete.search_appearances || 0} Search Views</span>
+              </div>
+              <div className="flex items-center gap-2 bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded-lg border border-emerald-200">
+                <Activity className="w-4 h-4" />
+                <span className="text-xs font-bold uppercase tracking-widest">{athlete.profile_views || 0} Profile Clicks</span>
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* 🚨 DYNAMIC BANNER CONTAINER 🚨 */}
-        <div className={`rounded-[2.5rem] p-6 sm:p-8 md:p-12 border shadow-xl relative overflow-hidden mb-6 transition-all duration-300 ${containerClass}`}>
+        <div className={`rounded-[2.5rem] p-6 sm:p-8 md:p-12 border relative overflow-hidden mb-6 transition-all duration-300 ${containerClass}`}>
           {backgroundEffects}
           
           <div className="relative z-10 flex flex-col md:flex-row items-center md:items-start gap-6 md:gap-8">
@@ -362,14 +438,30 @@ export default function PublicAthleteProfile() {
             />
 
             <div className="flex-1 text-center md:text-left w-full">
+              
+              {/* 🚨 BRANDING OVER-TITLE 🚨 */}
+              <div className="mb-2">
+                <span className={`text-[10px] font-black uppercase tracking-widest flex items-center justify-center md:justify-start gap-1.5 opacity-80`}>
+                  <BookOpen className="w-3.5 h-3.5" /> Athletic Portfolio
+                </span>
+              </div>
+
               <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3 mb-2 justify-center md:justify-start">
                 <h1 className={`text-3xl sm:text-4xl md:text-5xl font-black tracking-tight ${nameClass}`}>
                   {athlete.first_name} {athlete.last_name}
                 </h1>
-                {athlete.trust_level > 0 && (
+                
+                {isVerified ? (
                   <div className={`inline-flex items-center border px-3 py-1 rounded-full w-max mx-auto md:mx-0 ${badgeClass}`}>
-                    <CheckCircle2 className="w-4 h-4 mr-1.5" />
-                    <span className="text-xs font-bold uppercase tracking-widest">Verified</span>
+                    <ShieldCheck className="w-4 h-4 mr-1.5" />
+                    <span className="text-xs font-bold uppercase tracking-widest">Verified Indexed</span>
+                  </div>
+                ) : (
+                  <div className={`inline-flex items-center border px-3 py-1 rounded-full w-max mx-auto md:mx-0 ${unverifiedBadgeClass}`}>
+                    <span title="This profile's results are self-reported and not officially indexed.">
+                      <AlertTriangle className="w-4 h-4 mr-1.5 inline" />
+                    </span>
+                    <span className="text-xs font-bold uppercase tracking-widest">Unverified</span>
                   </div>
                 )}
               </div>
@@ -401,7 +493,7 @@ export default function PublicAthleteProfile() {
                       </div>
                     ) : (
                       <button onClick={handleContactClick} className={`w-full sm:w-auto font-black py-3.5 px-8 rounded-xl transition-colors flex items-center justify-center gap-2 ${primaryBtnClass}`}>
-                        <Mail className="w-5 h-5" /> Contact
+                        <Mail className="w-5 h-5" /> Contact Athlete
                       </button>
                     )}
 
@@ -422,31 +514,78 @@ export default function PublicAthleteProfile() {
                   </>
                 )}
                 
-                <button onClick={handleCopyLink} className={`w-full sm:w-auto font-black py-3.5 px-6 rounded-xl transition-colors flex items-center justify-center gap-2 ${secondaryBtnClass}`}>
-                  {copySuccess ? <><CheckCircle2 className="w-5 h-5" /> Copied!</> : <><Share2 className="w-5 h-5" /> Share Profile</>}
+                <button onClick={handleCopyLink} className={`w-full sm:w-auto font-black py-3.5 px-6 rounded-xl transition-colors flex items-center justify-center gap-2 border ${secondaryBtnClass}`}>
+                  {copySuccess ? <><CheckCircle2 className="w-5 h-5" /> Copied!</> : <><Share2 className="w-5 h-5" /> Share Portfolio</>}
                 </button>
               </div>
             </div>
           </div>
         </div>
 
+        {/* NOTIFICATION FOR COACHES IF UNVERIFIED */}
+        {viewerRole === 'coach' && !isVerified && (
+           <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-2xl mb-6 flex items-start gap-3 shadow-sm">
+             <AlertTriangle className="w-6 h-6 text-amber-500 shrink-0 mt-0.5" />
+             <div>
+               <h4 className="font-black text-sm">Unofficial Data Notice</h4>
+               <p className="text-sm font-medium mt-1">This athlete has not yet linked their Athletic.net profile. The times listed below are self-reported and have not been indexed by our verified scraping engine.</p>
+             </div>
+           </div>
+        )}
+
         <div className="flex border-b border-slate-200 mb-6 sm:mb-8 overflow-x-auto hide-scrollbar">
           <button 
             onClick={() => setActiveTab('accolades')}
             className={`px-4 sm:px-6 py-4 font-bold text-sm sm:text-base flex items-center gap-2 border-b-4 transition-colors whitespace-nowrap ${activeTab === 'accolades' ? 'border-blue-600 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
           >
-            <Trophy className="w-5 h-5" /> Accolades
+            <Trophy className="w-5 h-5" /> Stats & Academics
           </button>
           <button 
             onClick={() => setActiveTab('activity')}
             className={`px-4 sm:px-6 py-4 font-bold text-sm sm:text-base flex items-center gap-2 border-b-4 transition-colors whitespace-nowrap ${activeTab === 'activity' ? 'border-blue-600 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
           >
-            <Globe className="w-5 h-5" /> Activity
+            <Globe className="w-5 h-5" /> Feed Activity
           </button>
         </div>
 
         {activeTab === 'accolades' && (
           <div className="animate-in fade-in duration-300">
+            
+            {/* 🚨 NEW ACADEMICS & INFO SECTION FROM JSON 🚨 */}
+            {(parsedResume.gpa || parsedResume.accolades.length > 0 || parsedResume.schoolPrefs) && (
+              <div className="bg-white p-6 sm:p-8 rounded-[2rem] border border-slate-200 shadow-sm mb-6 space-y-6">
+                <h3 className="text-xl font-black text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-4">
+                  <FileText className="w-5 h-5 text-blue-500" /> Athlete Overview
+                </h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                   {parsedResume.gpa && (
+                     <div>
+                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1.5"><GraduationCap className="w-3.5 h-3.5" /> Unweighted GPA</p>
+                       <p className="text-3xl font-black text-slate-800">{parsedResume.gpa}</p>
+                     </div>
+                   )}
+                   {parsedResume.accolades.length > 0 && (
+                     <div>
+                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1.5"><Medal className="w-3.5 h-3.5" /> Career Highlights</p>
+                       <div className="flex flex-wrap gap-2">
+                         {parsedResume.accolades.map((acc, i) => (
+                           <span key={i} className="bg-blue-50 text-blue-700 border border-blue-200 px-3 py-1.5 rounded-lg text-xs font-bold">{acc}</span>
+                         ))}
+                       </div>
+                     </div>
+                   )}
+                </div>
+
+                {parsedResume.schoolPrefs && (
+                   <div className="pt-4 border-t border-slate-100">
+                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1.5"><School className="w-3.5 h-3.5" /> School Preferences</p>
+                     <p className="text-sm font-medium text-slate-700 leading-relaxed whitespace-pre-wrap">{parsedResume.schoolPrefs}</p>
+                   </div>
+                )}
+              </div>
+            )}
+
             {athlete.prs && athlete.prs.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {athlete.prs.map((pr, index) => (
@@ -465,7 +604,9 @@ export default function PublicAthleteProfile() {
                       )}
                     </div>
                     <div className="sm:text-right pt-3 sm:pt-0 sm:pl-4 border-t sm:border-t-0 sm:border-l border-slate-100 shrink-0">
-                      <span className="block text-[10px] sm:text-xs font-bold text-blue-400 uppercase tracking-widest mb-0.5 sm:mb-1">Mark</span>
+                      <span className="block text-[10px] sm:text-xs font-bold text-blue-400 uppercase tracking-widest mb-0.5 sm:mb-1 flex items-center justify-end gap-1">
+                        Mark {!isVerified && <span title="Self-Reported"><AlertTriangle className="w-3 h-3 text-amber-400" /></span>}
+                      </span>
                       <span className="font-black text-2xl sm:text-3xl text-blue-600 whitespace-nowrap">{pr.mark}</span>
                     </div>
                   </div>

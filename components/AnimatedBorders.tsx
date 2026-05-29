@@ -88,20 +88,14 @@ const GoldBorder = ({ children }: { children: React.ReactNode }) => (
 // ==========================================
 const DiamondBorder = ({ children }: { children: React.ReactNode }) => (
   <div className="absolute inset-0 flex items-center justify-center">
-    {/* Deep Blue Glow */}
     <div className="absolute -inset-2 bg-blue-700/40 rounded-full blur-xl animate-pulse"></div>
-    
     <div className="absolute -inset-1 rounded-full overflow-hidden shadow-[0_0_15px_#1d4ed8] z-0">
-      {/* High contrast Midnight Blue and Pure White facets */}
       <div className="absolute inset-[-50%] animate-[spin_4s_linear_infinite]" 
            style={{ background: 'conic-gradient(from 0deg, #0f172a, #1e3a8a, #ffffff, #1e40af, #3b82f6, #ffffff, #0f172a)' }}></div>
-      {/* Sharp icy highlight overlay */}
       <div className="absolute inset-[-50%] animate-[spin_2s_linear_infinite_reverse] opacity-40 mix-blend-overlay" 
            style={{ background: 'conic-gradient(from 180deg, transparent, #e0f2fe, transparent, #ffffff, transparent)' }}></div>
     </div>
-
     <div className="absolute inset-[2px] rounded-full border-2 border-blue-200/60 z-10 shadow-inner"></div>
-    
     <div className="absolute inset-[3px] z-20 rounded-full overflow-hidden flex items-center justify-center bg-slate-900">
       {children}
     </div>
@@ -114,10 +108,6 @@ const DiamondBorder = ({ children }: { children: React.ReactNode }) => (
 const NeonGlitchBorder = ({ children }: { children: React.ReactNode }) => (
   <div className="absolute inset-0 flex items-center justify-center">
     <style dangerouslySetInnerHTML={{__html: `
-      /* Using opacity layering instead of screen blending.
-         Base opacity is 0.6, so overlap creates deep purple.
-         Glitch state hits opacity 1 for bright distinct colors.
-      */
       @keyframes chromatic-cyan {
         0%, 85% { transform: translate(0, 0) scale(1); opacity: 0.6; filter: blur(0px); }
         87% { transform: translate(-3px, 2px) scale(1.02) skewX(2deg); opacity: 1; filter: blur(1px); }
@@ -137,17 +127,11 @@ const NeonGlitchBorder = ({ children }: { children: React.ReactNode }) => (
         100% { transform: translate(0, 0); }
       }
     `}} />
-    
-    {/* Darker Ambient Glow for contrast */}
     <div className="absolute -inset-4 bg-fuchsia-900/50 rounded-full blur-xl animate-pulse z-0"></div>
-
     <div className="absolute -inset-[3px] rounded-full border-[3px] border-cyan-500 shadow-[0_0_12px_#06b6d4] z-10" 
          style={{ animation: 'chromatic-cyan 3.5s infinite cubic-bezier(0.25, 0.46, 0.45, 0.94)' }}></div>
-         
     <div className="absolute -inset-[3px] rounded-full border-[3px] border-fuchsia-500 shadow-[0_0_12px_#d946ef] z-10" 
          style={{ animation: 'chromatic-pink 3.5s infinite cubic-bezier(0.25, 0.46, 0.45, 0.94)', animationDelay: '0.1s' }}></div>
-
-    {/* Avatar Container (Dark background for neon contrast) */}
     <div className="absolute inset-[3px] z-20 rounded-full overflow-hidden flex items-center justify-center bg-slate-900">
       {children}
     </div>
@@ -191,7 +175,7 @@ const EtherealCosmosBorder = ({ children }: { children: React.ReactNode }) => (
 );
 
 // ==========================================
-// 7. NEW FREE BONUS BORDER: THE PIONEER
+// 7. PIONEER
 // ==========================================
 const PioneerBorder = ({ children }: { children: React.ReactNode }) => (
   <div className="absolute inset-0 flex items-center justify-center">
@@ -200,31 +184,20 @@ const PioneerBorder = ({ children }: { children: React.ReactNode }) => (
       @keyframes pioneer-spin-fast { 100% { transform: rotate(-360deg); } }
       @keyframes pioneer-flicker { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
     `}} />
-    
-    {/* Ambient Holographic Glow */}
     <div className="absolute -inset-4 bg-cyan-600/20 rounded-full blur-xl animate-[pioneer-flicker_3s_ease-in-out_infinite] z-0"></div>
-
-    {/* Outer HUD Tech Ring (Counter-clockwise rotation) */}
     <svg className="absolute -inset-[6px] w-[calc(100%+12px)] h-[calc(100%+12px)] z-10 animate-[pioneer-spin-fast_12s_linear_infinite]" viewBox="0 0 100 100" style={{ overflow: 'visible' }}>
       <circle cx="50" cy="50" r="49" fill="none" stroke="#0369a1" strokeWidth="0.5" strokeDasharray="2 4" />
       <circle cx="50" cy="50" r="49" fill="none" stroke="#38bdf8" strokeWidth="1.5" strokeDasharray="15 60" strokeLinecap="round" />
     </svg>
-
-    {/* Main Radar Container */}
     <div className="absolute -inset-1 rounded-full bg-slate-950 shadow-[inset_0_0_15px_#020617] z-10 overflow-hidden border border-slate-800">
-       {/* Sweeping Radar Beam */}
        <div className="absolute inset-[-50%] animate-[pioneer-spin-slow_2.5s_linear_infinite]" 
             style={{ background: 'conic-gradient(from 0deg, transparent 70%, rgba(14, 165, 233, 0.4) 85%, rgba(56, 189, 248, 0.9) 98%, #ffffff 100%)' }}></div>
     </div>
-
-    {/* Inner HUD Ring (Clockwise rotation) */}
     <div className="absolute inset-[1px] rounded-full border border-cyan-400/30 z-20 shadow-[0_0_10px_rgba(56,189,248,0.4)]">
         <svg className="absolute inset-0 w-full h-full animate-[pioneer-spin-slow_8s_linear_infinite]" viewBox="0 0 100 100" style={{ overflow: 'visible' }}>
            <circle cx="50" cy="50" r="49" fill="none" stroke="#bae6fd" strokeWidth="1" strokeDasharray="4 8" opacity="0.7" />
         </svg>
     </div>
-    
-    {/* Avatar Container */}
     <div className="absolute inset-[4px] z-30 rounded-full overflow-hidden flex items-center justify-center bg-slate-950 shadow-2xl">
       {children}
     </div>
@@ -232,7 +205,7 @@ const PioneerBorder = ({ children }: { children: React.ReactNode }) => (
 );
 
 // ==========================================
-// 8. EXCLUSIVE REFERRAL BORDER (PLASMA SURGE)
+// 8. PLASMA SURGE
 // ==========================================
 const PlasmaSurgeBorder = ({ children }: { children: React.ReactNode }) => (
   <div className="absolute inset-0 flex items-center justify-center">
@@ -240,16 +213,12 @@ const PlasmaSurgeBorder = ({ children }: { children: React.ReactNode }) => (
       @keyframes plasma-spin { 100% { transform: rotate(360deg); } }
       @keyframes plasma-pulse { 0%, 100% { opacity: 0.7; transform: scale(0.98); } 50% { opacity: 1; transform: scale(1.02); } }
     `}} />
-    
     <div className="absolute -inset-4 bg-emerald-900/60 rounded-full blur-xl animate-pulse z-0"></div>
-    
     <div className="absolute -inset-1.5 rounded-full overflow-hidden shadow-[0_0_20px_#10b981] z-10 animate-[plasma-pulse_2s_ease-in-out_infinite]">
        <div className="absolute inset-[-50%] animate-[plasma-spin_1.5s_linear_infinite]" 
             style={{ background: 'conic-gradient(from 0deg, #022c22, #10b981, #22d3ee, #10b981, #022c22)' }}></div>
     </div>
-
     <div className="absolute inset-[2px] rounded-full border-2 border-emerald-300 z-10 shadow-inner"></div>
-    
     <div className="absolute inset-[4px] z-20 rounded-full overflow-hidden flex items-center justify-center bg-slate-950">
       {children}
     </div>
@@ -257,7 +226,7 @@ const PlasmaSurgeBorder = ({ children }: { children: React.ReactNode }) => (
 );
 
 // ==========================================
-// 9. NEW EXOTIC: ABYSSAL VOID (BLACK HOLE)
+// 9. ABYSSAL VOID
 // ==========================================
 const AbyssalVoidBorder = ({ children }: { children: React.ReactNode }) => (
   <div className="absolute inset-0 flex items-center justify-center">
@@ -266,24 +235,14 @@ const AbyssalVoidBorder = ({ children }: { children: React.ReactNode }) => (
       @keyframes void-pulse { 0%, 100% { transform: scale(0.95); opacity: 0.8; } 50% { transform: scale(1.05); opacity: 1; } }
       @keyframes accretion-wobble { 0%, 100% { transform: scale(1) rotate(0deg); } 50% { transform: scale(1.02) rotate(180deg); } }
     `}} />
-    
-    {/* Deep gravity well glow */}
     <div className="absolute -inset-6 bg-fuchsia-900/50 rounded-full blur-2xl animate-[void-pulse_4s_ease-in-out_infinite] z-0"></div>
-    
-    {/* Accretion Disk */}
     <div className="absolute -inset-2 rounded-full bg-slate-950 shadow-[0_0_30px_#4c1d95] z-0 overflow-hidden animate-[accretion-wobble_3s_ease-in-out_infinite]">
        <div className="absolute inset-[-50%] animate-[void-spin_2s_linear_infinite]"
             style={{ background: 'conic-gradient(from 0deg, #000000, #4c1d95, #c026d3, #000000, #1e1b4b, #000000)' }}></div>
     </div>
-
-    {/* Event Horizon (pure black inner ring) */}
     <div className="absolute -inset-1 rounded-full border-[4px] border-black shadow-[inset_0_0_20px_#000] z-10"></div>
-    
-    {/* Swirling energy overlay (screen/lighten effect) */}
     <div className="absolute inset-[-1px] rounded-full mix-blend-screen opacity-60 z-20 animate-[void-spin_3s_linear_infinite_reverse]"
          style={{ background: 'conic-gradient(from 180deg, transparent, rgba(232, 121, 249, 0.8), transparent)' }}></div>
-
-    {/* Avatar Container (Deep dark background to simulate being inside the void) */}
     <div className="absolute inset-[3px] z-30 rounded-full overflow-hidden flex items-center justify-center bg-black shadow-[inset_0_0_15px_#000]">
       {children}
     </div>
@@ -291,7 +250,7 @@ const AbyssalVoidBorder = ({ children }: { children: React.ReactNode }) => (
 );
 
 // ==========================================
-// 10. NEW EXOTIC: CELESTIAL RADIANCE (GOD TIER)
+// 10. CELESTIAL RADIANCE
 // ==========================================
 const CelestialRadianceBorder = ({ children }: { children: React.ReactNode }) => (
   <div className="absolute inset-0 flex items-center justify-center">
@@ -300,35 +259,125 @@ const CelestialRadianceBorder = ({ children }: { children: React.ReactNode }) =>
       @keyframes celestial-spin-reverse { 100% { transform: rotate(-360deg); } }
       @keyframes celestial-breathe { 0%, 100% { opacity: 0.5; transform: scale(0.95); } 50% { opacity: 1; transform: scale(1.05); } }
     `}} />
-    
-    {/* Soft, wide angelic aura */}
     <div className="absolute -inset-6 bg-gradient-to-tr from-yellow-200/20 via-white/40 to-amber-300/20 rounded-full blur-xl animate-[celestial-breathe_4s_ease-in-out_infinite] z-0"></div>
-    
-    {/* Harder, glowing back-plate */}
     <div className="absolute -inset-[2px] rounded-full bg-yellow-400/20 blur-sm z-0"></div>
-
-    {/* Sweeping Corona of Light (Sharp leading edge fading into gold) */}
     <div className="absolute -inset-[3px] rounded-full overflow-hidden z-10 shadow-[0_0_15px_rgba(253,224,71,0.4)]">
       <div className="absolute inset-[-50%] animate-[celestial-spin_4s_linear_infinite]" 
            style={{ background: 'conic-gradient(from 0deg, transparent 0%, transparent 10%, #ffffff 15%, #fde047 17%, transparent 30%, transparent 50%, transparent 60%, #ffffff 65%, #fde047 67%, transparent 80%)' }}></div>
     </div>
-
-    {/* Outer Holy Halo (Slow reverse spin with delicate geometry) */}
     <svg className="absolute -inset-[7px] w-[calc(100%+14px)] h-[calc(100%+14px)] z-20 animate-[celestial-spin-reverse_24s_linear_infinite]" viewBox="0 0 100 100" style={{ overflow: 'visible' }}>
       <circle cx="50" cy="50" r="49" fill="none" stroke="#fef08a" strokeWidth="0.5" strokeDasharray="1 3" opacity="0.8" />
       <circle cx="50" cy="50" r="46" fill="none" stroke="#fde047" strokeWidth="0.5" strokeDasharray="12 6" opacity="0.5" />
     </svg>
-
-    {/* Inner Power Ring (Fast forward spin) */}
     <svg className="absolute -inset-[1px] w-[calc(100%+2px)] h-[calc(100%+2px)] z-20 animate-[celestial-spin_12s_linear_infinite]" viewBox="0 0 100 100" style={{ overflow: 'visible' }}>
       <circle cx="50" cy="50" r="49" fill="none" stroke="#ffffff" strokeWidth="1.5" strokeDasharray="15 5 1 5" filter="drop-shadow(0 0 2px #fde047)" />
     </svg>
-
-    {/* Crisp Inner Rim */}
     <div className="absolute inset-[1px] rounded-full border border-yellow-100 z-20 shadow-[inset_0_0_12px_rgba(253,224,71,0.6),0_0_8px_rgba(253,224,71,0.4)]"></div>
-
-    {/* Avatar Container */}
     <div className="absolute inset-[3px] z-30 rounded-full overflow-hidden flex items-center justify-center bg-white shadow-2xl">
+      {children}
+    </div>
+  </div>
+);
+
+// ==========================================
+// 11. TOXIC SLIME (NEW)
+// ==========================================
+const ToxicSlimeBorder = ({ children }: { children: React.ReactNode }) => (
+  <div className="absolute inset-0 flex items-center justify-center">
+    <style dangerouslySetInnerHTML={{__html: `
+      @keyframes slime-spin { 100% { transform: rotate(360deg); } }
+      @keyframes slime-bubble { 0%, 100% { transform: scale(1); filter: brightness(1); } 50% { transform: scale(1.05); filter: brightness(1.3); } }
+    `}} />
+    <div className="absolute -inset-4 bg-lime-500/40 rounded-full blur-xl animate-[slime-bubble_3s_ease-in-out_infinite] z-0"></div>
+    <div className="absolute -inset-1.5 rounded-full overflow-hidden shadow-[0_0_15px_#84cc16] z-0 border border-lime-400/50">
+      <div className="absolute inset-[-50%] animate-[slime-spin_2s_linear_infinite]" 
+           style={{ background: 'conic-gradient(from 0deg, #166534, #22c55e, #84cc16, #166534, #15803d, #166534)' }}></div>
+    </div>
+    <div className="absolute inset-[2px] rounded-full border border-green-900 z-10 shadow-inner"></div>
+    <div className="absolute inset-[3px] z-20 rounded-full overflow-hidden flex items-center justify-center bg-slate-900 shadow-2xl">
+      {children}
+    </div>
+  </div>
+);
+
+// ==========================================
+// 12. CYBER MATRIX (NEW)
+// ==========================================
+const CyberMatrixBorder = ({ children }: { children: React.ReactNode }) => (
+  <div className="absolute inset-0 flex items-center justify-center">
+    <style dangerouslySetInnerHTML={{__html: `
+      @keyframes matrix-scan { 0% { transform: translateY(-100%); } 100% { transform: translateY(100%); } }
+      .matrix-grid { background-image: linear-gradient(#052e16 1px, transparent 1px), linear-gradient(90deg, #052e16 1px, transparent 1px); background-size: 6px 6px; }
+    `}} />
+    <div className="absolute -inset-3 bg-green-500/30 rounded-full blur-lg z-0 animate-pulse"></div>
+    <div className="absolute -inset-1 rounded-full border border-green-500 shadow-[0_0_15px_#22c55e] z-10 overflow-hidden matrix-grid bg-black">
+      <div className="w-full h-[50%] bg-gradient-to-b from-transparent to-green-400 opacity-60 animate-[matrix-scan_2s_linear_infinite]"></div>
+    </div>
+    <div className="absolute inset-[3px] rounded-full border border-green-900 z-20 shadow-inner"></div>
+    <div className="absolute inset-[4px] z-30 rounded-full overflow-hidden flex items-center justify-center bg-black">
+      {children}
+    </div>
+  </div>
+);
+
+// ==========================================
+// 13. MOLTEN CORE (NEW)
+// ==========================================
+const MoltenCoreBorder = ({ children }: { children: React.ReactNode }) => (
+  <div className="absolute inset-0 flex items-center justify-center">
+    <style dangerouslySetInnerHTML={{__html: `
+      @keyframes magma-pulse { 0%, 100% { filter: brightness(1) drop-shadow(0 0 10px #ea580c); } 50% { filter: brightness(1.5) drop-shadow(0 0 25px #f97316); } }
+      @keyframes slow-spin { 100% { transform: rotate(360deg); } }
+    `}} />
+    <div className="absolute -inset-3 bg-red-600/40 rounded-full blur-xl animate-pulse z-0"></div>
+    
+    <div className="absolute -inset-1 rounded-full bg-slate-950 z-0"></div>
+    <svg className="absolute -inset-[4px] w-[calc(100%+8px)] h-[calc(100%+8px)] z-10 animate-[slow-spin_15s_linear_infinite]" viewBox="0 0 100 100" style={{ overflow: 'visible' }}>
+      <circle cx="50" cy="50" r="48" fill="none" stroke="#ea580c" strokeWidth="4" strokeDasharray="8 4 15 6 4 12" strokeLinecap="round" className="animate-[magma-pulse_3s_ease-in-out_infinite]" />
+      <circle cx="50" cy="50" r="48" fill="none" stroke="#fcd34d" strokeWidth="1" strokeDasharray="8 4 15 6 4 12" strokeLinecap="round" opacity="0.8" className="animate-[magma-pulse_3s_ease-in-out_infinite]" />
+    </svg>
+    <div className="absolute inset-[2px] rounded-full border-2 border-orange-950 z-20 shadow-inner"></div>
+    <div className="absolute inset-[3px] z-30 rounded-full overflow-hidden flex items-center justify-center bg-slate-950 shadow-2xl">
+      {children}
+    </div>
+  </div>
+);
+
+// ==========================================
+// 14. GLACIAL FROST (NEW)
+// ==========================================
+const GlacialFrostBorder = ({ children }: { children: React.ReactNode }) => (
+  <div className="absolute inset-0 flex items-center justify-center">
+    <style dangerouslySetInnerHTML={{__html: `
+      @keyframes frost-shimmer { 0% { background-position: -200% center; } 100% { background-position: 200% center; } }
+    `}} />
+    <div className="absolute -inset-2 bg-sky-300/30 rounded-full blur-md z-0"></div>
+    <div className="absolute -inset-1 rounded-full border-[3px] border-sky-200/50 shadow-[0_0_15px_#7dd3fc] z-10 overflow-hidden bg-sky-900/40 backdrop-blur-sm">
+      <div className="absolute inset-0 opacity-50 mix-blend-overlay bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
+      <div className="absolute inset-[-50%] bg-gradient-to-r from-transparent via-white to-transparent opacity-40 animate-[frost-shimmer_3s_infinite_linear]" style={{ backgroundSize: '200% auto' }}></div>
+    </div>
+    <div className="absolute inset-[3px] rounded-full border border-sky-100/50 z-20 shadow-inner"></div>
+    <div className="absolute inset-[4px] z-30 rounded-full overflow-hidden flex items-center justify-center bg-slate-900">
+      {children}
+    </div>
+  </div>
+);
+
+// ==========================================
+// 15. SYNTHWAVE VAPOR (NEW)
+// ==========================================
+const SynthwaveBorder = ({ children }: { children: React.ReactNode }) => (
+  <div className="absolute inset-0 flex items-center justify-center">
+    <style dangerouslySetInnerHTML={{__html: `
+      @keyframes synth-spin { 100% { transform: rotate(360deg); } }
+    `}} />
+    <div className="absolute -inset-4 bg-fuchsia-600/30 rounded-full blur-xl z-0"></div>
+    <div className="absolute -inset-1 rounded-full overflow-hidden shadow-[0_0_15px_#d946ef,-3px_3px_0px_#06b6d4] z-10 border border-fuchsia-400">
+      <div className="absolute inset-[-50%] animate-[synth-spin_4s_linear_infinite]" 
+           style={{ background: 'conic-gradient(from 0deg, #d946ef, #06b6d4, #fcd34d, #d946ef)' }}></div>
+    </div>
+    <div className="absolute inset-[3px] rounded-full border-2 border-indigo-900 z-20 shadow-inner"></div>
+    <div className="absolute inset-[4px] z-30 rounded-full overflow-hidden flex items-center justify-center bg-slate-900">
       {children}
     </div>
   </div>
@@ -378,28 +427,45 @@ export function AvatarWithBorder({ avatarUrl, borderId, sizeClasses = "w-12 h-12
     return <div className={`relative ${sizeClasses} shrink-0 aspect-square rounded-full block`}><NeonGlitchBorder>{AvatarImage}</NeonGlitchBorder></div>;
   }
   if (borderId === 'ethereal-cosmos') {
-     return <div className={`relative ${sizeClasses} shrink-0 aspect-square rounded-full block`}><EtherealCosmosBorder>{AvatarImage}</EtherealCosmosBorder></div>;
+      return <div className={`relative ${sizeClasses} shrink-0 aspect-square rounded-full block`}><EtherealCosmosBorder>{AvatarImage}</EtherealCosmosBorder></div>;
   }
   
   // 3. SPECIAL FREE BORDER
   if (borderId === 'pioneer') {
-     return <div className={`relative ${sizeClasses} shrink-0 aspect-square rounded-full block`}><PioneerBorder>{AvatarImage}</PioneerBorder></div>;
+      return <div className={`relative ${sizeClasses} shrink-0 aspect-square rounded-full block`}><PioneerBorder>{AvatarImage}</PioneerBorder></div>;
   }
   
   // 4. EXCLUSIVE REWARDS
   if (borderId === 'plasma-surge') {
-     return <div className={`relative ${sizeClasses} shrink-0 aspect-square rounded-full block`}><PlasmaSurgeBorder>{AvatarImage}</PlasmaSurgeBorder></div>;
+      return <div className={`relative ${sizeClasses} shrink-0 aspect-square rounded-full block`}><PlasmaSurgeBorder>{AvatarImage}</PlasmaSurgeBorder></div>;
   }
 
   // 5. EXOTIC / GOD TIER BORDERS
   if (borderId === 'abyssal-void') {
-     return <div className={`relative ${sizeClasses} shrink-0 aspect-square rounded-full block`}><AbyssalVoidBorder>{AvatarImage}</AbyssalVoidBorder></div>;
+      return <div className={`relative ${sizeClasses} shrink-0 aspect-square rounded-full block`}><AbyssalVoidBorder>{AvatarImage}</AbyssalVoidBorder></div>;
   }
   if (borderId === 'celestial-radiance') {
-     return <div className={`relative ${sizeClasses} shrink-0 aspect-square rounded-full block`}><CelestialRadianceBorder>{AvatarImage}</CelestialRadianceBorder></div>;
+      return <div className={`relative ${sizeClasses} shrink-0 aspect-square rounded-full block`}><CelestialRadianceBorder>{AvatarImage}</CelestialRadianceBorder></div>;
   }
 
-  // 6. FALLBACK TO STANDARD CSS BORDERS
+  // 6. BRAND NEW ANIMATED TEXTURES
+  if (borderId === 'toxic-slime') {
+      return <div className={`relative ${sizeClasses} shrink-0 aspect-square rounded-full block`}><ToxicSlimeBorder>{AvatarImage}</ToxicSlimeBorder></div>;
+  }
+  if (borderId === 'cyber-matrix') {
+      return <div className={`relative ${sizeClasses} shrink-0 aspect-square rounded-full block`}><CyberMatrixBorder>{AvatarImage}</CyberMatrixBorder></div>;
+  }
+  if (borderId === 'molten-core') {
+      return <div className={`relative ${sizeClasses} shrink-0 aspect-square rounded-full block`}><MoltenCoreBorder>{AvatarImage}</MoltenCoreBorder></div>;
+  }
+  if (borderId === 'glacial-frost') {
+      return <div className={`relative ${sizeClasses} shrink-0 aspect-square rounded-full block`}><GlacialFrostBorder>{AvatarImage}</GlacialFrostBorder></div>;
+  }
+  if (borderId === 'synthwave') {
+      return <div className={`relative ${sizeClasses} shrink-0 aspect-square rounded-full block`}><SynthwaveBorder>{AvatarImage}</SynthwaveBorder></div>;
+  }
+
+  // 7. FALLBACK TO STANDARD CSS BORDERS
   let standardClass = 'border-[3px] border-slate-200 shadow-sm'; 
 
   if (borderId && borderId !== 'none') {

@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
-import { Activity, ShieldCheck, Link as LinkIcon, Trophy, BookOpen, LogOut, Medal, Timer, TrendingUp, CheckCircle2, Search, AlertCircle, Zap, Calendar, MapPin, Camera, Mail, RefreshCw, School, Lock, AlertTriangle, ExternalLink, ChevronRight, Check, Clock, Edit2, MousePointer2, Flame, Bookmark, BookmarkPlus, Share2, Instagram, X, Users, Gift, Paintbrush, ArrowDown, HelpCircle, Globe, UserCircle2, Eye, BarChart3, Rocket, FileText, Save, Crown, Target, Swords, ArrowRight, Trash2, Download, ChevronDown, ChevronUp } from 'lucide-react';
+import { Activity, ShieldCheck, Link as LinkIcon, Trophy, BookOpen, LogOut, Medal, Timer, TrendingUp, CheckCircle2, Search, AlertCircle, Zap, Calendar, MapPin, Camera, Mail, RefreshCw, School, Lock, AlertTriangle, ExternalLink, ChevronRight, Check, Clock, Edit2, MousePointer2, Flame, Bookmark, BookmarkPlus, Share2, Instagram, X, Users, Gift, Paintbrush, ArrowDown, HelpCircle, Globe, UserCircle2, Eye, BarChart3, Rocket, FileText, Save, Crown, Target, Swords, ArrowRight, Trash2, Download, ChevronDown, ChevronUp, Image as ImageIcon, Star, MoreHorizontal, Flag } from 'lucide-react';
 import Link from 'next/link';
 import imageCompression from 'browser-image-compression';
 
@@ -26,16 +26,19 @@ interface AthleteProfile {
   avatar_url: string | null; 
   equipped_border: string | null; 
   equipped_title: string | null; 
+  equipped_card: string | null; 
   current_login_streak: number; 
   last_login_date: string | null; 
   meet_history: string[] | null; 
   current_pr_streak: number; 
   highest_pr_streak: number; 
   base_prs: any[] | null; 
+  bounty_targets?: any[] | null; 
   referred_by: string | null; 
   verified_referrals: number; 
   created_at: string | null; 
   unlocked_borders: string[] | null;
+  unlocked_cards: string[] | null;
   is_premium: boolean;
   boosts_available: number;
   saved_resume: string | null;
@@ -269,6 +272,36 @@ const getAthleteProjection = (prs: any[], gender: string): ProjectionResult => {
   };
 };
 
+// 🚨 CENTRALIZED CARD STYLES HELPER 🚨
+const getCardStyles = (cardId: string | null | undefined, type: 'post' | 'dir' | 'hero' = 'post') => {
+  let id = cardId || 'base';
+  if (id === 'default') id = 'base';
+
+  const isFoil = ['hype', 'premium', 'crimson', 'sapphire'].includes(id);
+  const isAnimated = ['hype', 'premium', 'crimson', 'sapphire', 'amethyst', 'cyber'].includes(id);
+  const hasGlare = ['hype', 'premium'].includes(id); 
+  const hasTrophy = ['hype', 'premium'].includes(id); 
+
+  let bgClass = '';
+  if (id === 'base') {
+     bgClass = type === 'hero' ? 'bg-slate-900' : type === 'post' ? 'bg-white/[0.02]' : 'bg-gradient-to-b from-white/[0.05] to-transparent';
+  } else if (id === 'obsidian') {
+     bgClass = 'holo-card-obsidian';
+  } else {
+     bgClass = `holo-card-${id}`;
+  }
+
+  return {
+     bgClass,
+     isFoil,
+     isCustom: id !== 'base',
+     isAnimated,
+     hasGlare,
+     hasTrophy, 
+     borderClass: id === 'base' ? (type === 'hero' ? 'border-b border-slate-800' : type === 'post' ? 'border-white/5 hover:border-white/10' : 'border-white/10') : 'border-white/20 shadow-xl'
+  };
+};
+
 export default function DashboardPage() {
   const supabase = createClient();
   const router = useRouter();
@@ -295,13 +328,10 @@ export default function DashboardPage() {
   const [highestPercentile, setHighestPercentile] = useState<number>(1.0);
   
   const [equippedTitle, setEquippedTitle] = useState<string>('prospect');
-  const [equippedBorder, setEquippedBorder] = useState<string>('none');
   const [isEquipping, setIsEquipping] = useState(false);
-  const [isTitleDropdownOpen, setIsTitleDropdownOpen] = useState(false);
   
   const [streak, setStreak] = useState(0);
   const [savedColleges, setSavedColleges] = useState<any[]>([]);
-  const [activeRivals, setActiveRivals] = useState<any[]>([]); 
 
   const [inviteCodeInput, setInviteCodeInput] = useState('');
   const [isSubmittingCode, setIsSubmittingCode] = useState(false);
@@ -318,18 +348,16 @@ export default function DashboardPage() {
   const [activeCardAthlete, setActiveCardAthlete] = useState<ScoutedAthlete | null>(null);
   const [isExportingCard, setIsExportingCard] = useState(false);
 
+  const [activeTab, setActiveTab] = useState<'stats' | 'recruiting' | 'scout'>('stats');
+
+  const [toast, setToast] = useState<{ message: string; type: 'error' | 'success' } | null>(null);
+
+  // 🚨 VIEW LOG STATES (RESTORED) 🚨
   const [dailyViews, setDailyViews] = useState(0);
   const [monthlyViews, setMonthlyViews] = useState(0);
   const [allRecentViewers, setAllRecentViewers] = useState<any[]>([]);
   const [recentViewers, setRecentViewers] = useState<any[]>([]);
   const [showAllViewersModal, setShowAllViewersModal] = useState(false);
-  const [showImpressionTooltip, setShowImpressionTooltip] = useState(false);
-
-  const [expandedEventIndex, setExpandedEventIndex] = useState<number | null>(null);
-
-  const [activeTab, setActiveTab] = useState<'stats' | 'recruiting' | 'scout' | 'rewards'>('stats');
-
-  const [toast, setToast] = useState<{ message: string; type: 'error' | 'success' } | null>(null);
 
   // 🚨 MANUAL ONBOARDING STATES 🚨
   const [isEditingProfile, setIsEditingProfile] = useState(false);
@@ -347,9 +375,7 @@ export default function DashboardPage() {
     setTimeout(() => setToast(null), 4000);
   };
 
-  // 🚨 CHECK LOCALSTORAGE FOR COOLDOWNS ON MOUNT 🚨
   useEffect(() => {
-    // 1. Check Sync Cooldown (24 hours)
     const lastSync = localStorage.getItem('last_sync_time');
     if (lastSync) {
       const timeSince = Date.now() - parseInt(lastSync);
@@ -362,12 +388,10 @@ export default function DashboardPage() {
       }
     }
 
-    // 2. Check Verify Cooldown (3 hours if locked)
     const lockedUntil = localStorage.getItem('verify_lockout_until');
     if (lockedUntil && Date.now() < parseInt(lockedUntil)) {
       setVerifyLockout(parseInt(lockedUntil));
     } else {
-      // Clear expired locks
       localStorage.removeItem('verify_lockout_until');
       localStorage.removeItem('verify_attempts');
     }
@@ -395,7 +419,6 @@ export default function DashboardPage() {
     }
   };
 
-  // 🚨 COLLEGE FINDER: LIVE SEARCH EFFECT 🚨
   useEffect(() => {
     const searchColleges = async () => {
       if (searchQuery.trim().length < 3) {
@@ -417,11 +440,9 @@ export default function DashboardPage() {
     return () => clearTimeout(timeoutId);
   }, [searchQuery, supabase]);
 
-  // 🚨 COLLEGE FINDER: SAVE SCHOOL 🚨
   const handleSaveCollege = async (collegeId: string) => {
     if (!currentUserId) return;
     try {
-      // Check if already saved
       const exists = savedColleges.some(c => c.college_id === collegeId);
       if (exists) {
         showToast("College is already on your board!", "error");
@@ -434,7 +455,6 @@ export default function DashboardPage() {
       });
       if (error) throw error;
       
-      // Refresh board
       const { data: savedCollegesData } = await supabase
         .from('saved_colleges')
         .select(`id, college_id, universities (*)`)
@@ -447,10 +467,6 @@ export default function DashboardPage() {
     } catch (err: any) {
       showToast(err.message, "error");
     }
-  };
-
-  const toggleEventExpansion = (index: number) => {
-    setExpandedEventIndex(prev => prev === index ? null : index);
   };
 
   useEffect(() => {
@@ -499,58 +515,16 @@ export default function DashboardPage() {
         setScoutsRemaining(Math.max(0, 10 - scoutsToday));
       }
 
-      const { data: aData } = await supabase.from('athletes').select('*').eq('id', session.user.id).maybeSingle();
+      const { data: aData } = await supabase
+        .from('athletes')
+        .select('id, first_name, last_name, high_school, state, gender, avatar_url, grad_year, prs, trust_level, is_premium, is_looking_for_college, coins, equipped_border, equipped_card, equipped_title, saved_resume, bounty_targets, rival_ids, athletic_net_url, referred_by, verified_referrals, created_at, current_login_streak, last_login_date, boosts_available')
+        .eq('id', session.user.id)
+        .maybeSingle();
       
       if (aData) {
         setUserRole('athlete');
         setEquippedTitle(aData.equipped_title || 'prospect');
-        setEquippedBorder(aData.equipped_border || 'none');
         setResumeText(aData.saved_resume || '');
-        
-        try {
-           const today = new Date();
-           today.setHours(0, 0, 0, 0);
-           const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-
-           const { data: viewLogs } = await supabase
-             .from('profile_view_logs')
-             .select('created_at, coaches(first_name, last_name, school_name, avatar_url, email)')
-             .eq('athlete_id', session.user.id)
-             .order('created_at', { ascending: false });
-
-           if (viewLogs) {
-              const daily = viewLogs.filter(log => new Date(log.created_at) >= today).length;
-              const monthly = viewLogs.filter(log => new Date(log.created_at) >= firstOfMonth).length;
-
-              const uniqueCoaches: any[] = [];
-              const seenIds = new Set();
-              
-              for (const log of viewLogs) {
-                 const coachData = Array.isArray((log as any).coaches) ? (log as any).coaches[0] : (log as any).coaches;
-                 const cId = coachData ? (coachData as any).school_name : null; 
-                 
-                 if (cId && !seenIds.has(cId) && coachData) {
-                     seenIds.add(cId);
-                     uniqueCoaches.push(coachData);
-                 }
-              }
-
-              setDailyViews(daily);
-              setMonthlyViews(monthly);
-              setAllRecentViewers(uniqueCoaches);
-              setRecentViewers(uniqueCoaches.slice(0, 3)); 
-           }
-        } catch (e) {
-           console.log("Could not load advanced view logs. Using basic stats.");
-        }
-
-        if (aData.rival_ids && aData.rival_ids.length > 0) {
-          const { data: rData } = await supabase
-            .from('athletes')
-            .select('id, first_name, last_name, high_school, avatar_url, equipped_border')
-            .in('id', aData.rival_ids);
-          if (rData) setActiveRivals(rData);
-        }
         
         if (aData.created_at) {
           const diffTime = Math.abs(new Date().getTime() - new Date(aData.created_at).getTime());
@@ -614,8 +588,45 @@ export default function DashboardPage() {
           }
         }
 
+        try {
+           const today = new Date();
+           today.setHours(0, 0, 0, 0);
+           const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+
+           const { data: viewLogs } = await supabase
+             .from('profile_view_logs')
+             .select('created_at, coaches(first_name, last_name, school_name, avatar_url, email)')
+             .eq('athlete_id', session.user.id)
+             .order('created_at', { ascending: false });
+
+           if (viewLogs) {
+              const daily = viewLogs.filter(log => new Date(log.created_at) >= today).length;
+              const monthly = viewLogs.filter(log => new Date(log.created_at) >= firstOfMonth).length;
+
+              const uniqueCoaches: any[] = [];
+              const seenIds = new Set();
+              
+              for (const log of viewLogs) {
+                 const coachData = Array.isArray((log as any).coaches) ? (log as any).coaches[0] : (log as any).coaches;
+                 const cId = coachData ? (coachData as any).school_name : null; 
+                 
+                 if (cId && !seenIds.has(cId) && coachData) {
+                     seenIds.add(cId);
+                     uniqueCoaches.push(coachData);
+                 }
+              }
+
+              setDailyViews(daily);
+              setMonthlyViews(monthly);
+              setAllRecentViewers(uniqueCoaches);
+              setRecentViewers(uniqueCoaches.slice(0, 3)); 
+           }
+        } catch (e) {
+           console.log("Could not load advanced view logs. Using basic stats.");
+        }
+
         setHighestPercentile(bestPercentileFound);
-        setAthleteProfile(aData);
+        setAthleteProfile(aData as unknown as AthleteProfile);
       }
       setLoading(false);
     }
@@ -676,6 +687,12 @@ export default function DashboardPage() {
       
       if (!response.ok) throw new Error(result.error || "Failed to sync profile. Please try again.");
       
+      // 🚨 INITIALIZE BOUNTY TARGETS ON FIRST SCRAPE 🚨
+      const initialBounties = result.data.prs.map((pr: any) => ({
+         event: pr.event,
+         mark: pr.mark
+      }));
+
       await supabase.from('athletes').update({ 
         first_name: result.data.firstName, 
         last_name: result.data.lastName, 
@@ -683,6 +700,7 @@ export default function DashboardPage() {
         athletic_net_url: result.data.url, 
         prs: result.data.prs, 
         base_prs: result.data.prs, 
+        bounty_targets: initialBounties, 
         gender: result.data.gender, 
         state: result.data.state,                
         school_size: result.data.schoolSize,     
@@ -691,7 +709,6 @@ export default function DashboardPage() {
         trust_level: 0 
       }).eq('id', athleteProfile?.id);
 
-      // 🚨 SAVE SYNC COOLDOWN ON SUCCESS
       localStorage.setItem('last_sync_time', Date.now().toString());
       window.location.reload();
     } catch (err: any) { 
@@ -756,7 +773,7 @@ export default function DashboardPage() {
         if (rpcError) console.error("RPC Error:", rpcError);
 
         // 2. Give the current newly verified user their reward (+1 Boost ONLY)
-        let myBoosts = (athleteProfile.boosts_available || 0) + 1; // +1 Boost for accepting an invite
+        let myBoosts = (athleteProfile.boosts_available || 0) + 1; 
 
         await supabase.from('athletes').update({
           trust_level: 1,
@@ -777,7 +794,6 @@ export default function DashboardPage() {
     }
   };
 
-  // 🚨 MANUAL ONBOARDING SAVE (Only names) 🚨
   const handleManualSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSyncing(true);
@@ -785,8 +801,8 @@ export default function DashboardPage() {
       const { error } = await supabase.from('athletes').update({
         first_name: editFirstName,
         last_name: editLastName,
-        athletic_net_url: 'skipped', // Flags the account to bypass forced sync
-        trust_level: 0 // Prevents messaging/posting until they actually sync
+        athletic_net_url: 'skipped', 
+        trust_level: 0 
       }).eq('id', athleteProfile?.id);
 
       if (error) throw error;
@@ -795,45 +811,6 @@ export default function DashboardPage() {
       showToast(err.message, 'error');
     } finally {
       setIsSyncing(false);
-    }
-  };
-
-  const handleReSync = async () => {
-    if (!athleteProfile?.athletic_net_url || athleteProfile.athletic_net_url === 'skipped') return;
-    
-    if (!canSync) {
-      showToast(syncCooldownText, "error");
-      return;
-    }
-
-    setIsSyncing(true);
-    
-    try {
-      const response = await fetch('/api/sync', { 
-        method: 'POST', 
-        headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify({ url: athleteProfile.athletic_net_url }) 
-      });
-      
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Failed to sync profile.");
-      
-      await supabase.from('athletes').update({ 
-        prs: result.data.prs,
-        gender: result.data.gender,
-        state: result.data.state,                
-        school_size: result.data.schoolSize,     
-        conference: result.data.conference,
-        grad_year: result.data.gradYear       
-      }).eq('id', athleteProfile.id);
-      
-      // 🚨 SAVE SYNC COOLDOWN ON SUCCESS
-      localStorage.setItem('last_sync_time', Date.now().toString());
-      window.location.reload(); 
-    } catch (err: any) { 
-      showToast(err.message, "error");
-    } finally { 
-      setIsSyncing(false); 
     }
   };
 
@@ -855,17 +832,6 @@ export default function DashboardPage() {
     } catch (error: any) { showToast(`Error uploading image: ${error.message}`); } finally { setIsUploadingAvatar(false); }
   };
 
-  const handleEquipTitle = async (titleId: string) => {
-    if (!athleteProfile) return;
-    setIsEquipping(true);
-    try {
-      await supabase.from('athletes').update({ equipped_title: titleId }).eq('id', athleteProfile.id);
-      setEquippedTitle(titleId);
-      setIsTitleDropdownOpen(false); 
-      showToast(`Successfully equipped ${titleId} title!`, 'success');
-    } catch (err: any) { showToast(`Failed to equip title: ${err.message}`); } finally { setIsEquipping(false); }
-  };
-
   const handleSaveResume = async () => {
     if (!athleteProfile) return;
     setIsSavingResume(true);
@@ -874,6 +840,16 @@ export default function DashboardPage() {
       setAthleteProfile({ ...athleteProfile, saved_resume: resumeText });
       showToast("Athletic Resume saved successfully!", "success");
     } catch (err: any) { showToast(`Failed to save: ${err.message}`); } finally { setIsSavingResume(false); }
+  };
+
+  const handleEquipTitle = async (titleId: string) => {
+    if (!athleteProfile) return;
+    setIsEquipping(true);
+    try {
+      await supabase.from('athletes').update({ equipped_title: titleId }).eq('id', athleteProfile.id);
+      setEquippedTitle(titleId);
+      showToast(`Successfully equipped ${titleId} title!`, 'success');
+    } catch (err: any) { showToast(`Failed to equip title: ${err.message}`); } finally { setIsEquipping(false); }
   };
 
   const handleShareCode = async (code: string) => {
@@ -935,28 +911,6 @@ export default function DashboardPage() {
       showToast(err.message, "error"); 
     } finally { 
       setIsSubmittingCode(false); 
-    }
-  };
-
-  const handleRemoveRival = async (rivalId: string) => {
-    if (!athleteProfile) return;
-    try {
-      const updatedRivalIds = (athleteProfile.rival_ids || []).filter(id => id !== rivalId);
-      
-      const { data: currentData } = await supabase.from('athletes').select('bounty_targets').eq('id', athleteProfile.id).single();
-      const currentBounties = currentData?.bounty_targets || [];
-      const updatedBounties = currentBounties.filter((bt: any) => !(bt.type === 'rival_hunt' && bt.rivalId === rivalId));
-
-      await supabase.from('athletes').update({ 
-        rival_ids: updatedRivalIds,
-        bounty_targets: updatedBounties
-      }).eq('id', athleteProfile.id);
-
-      setActiveRivals(activeRivals.filter(r => r.id !== rivalId));
-      setAthleteProfile({ ...athleteProfile, rival_ids: updatedRivalIds });
-      showToast("Rival dropped.", "success");
-    } catch (err: any) {
-      showToast(err.message, 'error');
     }
   };
 
@@ -1059,6 +1013,96 @@ export default function DashboardPage() {
     return { bg: 'bg-orange-50 border-orange-200', text: 'text-orange-700', icon: 'text-orange-500 fill-orange-400' }; 
   };
 
+  const handleReSync = async () => {
+    if (!athleteProfile?.athletic_net_url || athleteProfile.athletic_net_url === 'skipped') return;
+    
+    if (!canSync) {
+      showToast(syncCooldownText, "error");
+      return;
+    }
+
+    setIsSyncing(true);
+    
+    try {
+      const response = await fetch('/api/sync', { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ url: athleteProfile.athletic_net_url }) 
+      });
+      
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Failed to sync profile.");
+      
+      // 🚨 MANAGE BOUNTY TARGETS 🚨
+      const currentBounties = athleteProfile.bounty_targets || [];
+      const updatedBounties = [...currentBounties];
+
+      let improvedEvent = null;
+      let improvedMark = null;
+
+      const currentPrs = athleteProfile.prs || [];
+
+      for (const newPr of result.data.prs) {
+        
+        // 1. Make sure they have a bounty target for this event (in case they tried a new event)
+        const hasBounty = updatedBounties.some(b => b.event === newPr.event && !b.type);
+        if (!hasBounty) {
+           updatedBounties.push({ event: newPr.event, mark: newPr.mark });
+        }
+
+        // 2. Check if this is a PR to trigger the feed post
+        const oldPr = currentPrs.find((p: any) => p.event === newPr.event);
+        if (!oldPr) {
+          improvedEvent = newPr.event;
+          improvedMark = newPr.mark;
+        } else if (oldPr.mark !== newPr.mark) {
+          const isField = FIELD_EVENTS.includes(newPr.event);
+          const oldNum = convertMarkToNumber(oldPr.mark, isField);
+          const newNum = convertMarkToNumber(newPr.mark, isField);
+          
+          if (isField ? newNum > oldNum : (newNum < oldNum && newNum > 0)) {
+            improvedEvent = newPr.event;
+            improvedMark = newPr.mark;
+          }
+        }
+      }
+
+      const { error: updateError } = await supabase.from('athletes').update({ 
+        prs: result.data.prs,
+        bounty_targets: updatedBounties, // 🚨 Saving updated bounty targets here
+        gender: result.data.gender,
+        state: result.data.state,                
+        school_size: result.data.schoolSize,     
+        conference: result.data.conference,
+        grad_year: result.data.gradYear        
+      }).eq('id', athleteProfile.id);
+
+      if (updateError) throw updateError;
+      
+      if (improvedEvent && improvedMark) {
+        await supabase.from('posts').insert({
+          athlete_id: athleteProfile.id,
+          content: `Just verified a new PR in the ${improvedEvent}! The grind doesn't stop. 😤`,
+          linked_pr_event: improvedEvent,
+          linked_pr_mark: improvedMark,
+          linked_prs: [{ event: improvedEvent, mark: improvedMark }],
+          is_boosted: false 
+        });
+
+        showToast("New PR detected! Stats synced.", "success");
+      } else {
+        showToast("Stats synced! No new PRs detected.", "success");
+      }
+
+      localStorage.setItem('last_sync_time', Date.now().toString());
+      setTimeout(() => window.location.reload(), 1500); 
+    } catch (err: any) { 
+      showToast(err.message, "error");
+    } finally { 
+      setIsSyncing(false); 
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#F8FAFC] flex flex-col items-center justify-center">
@@ -1077,23 +1121,8 @@ export default function DashboardPage() {
   const isUnverified = athleteProfile?.trust_level === 0 && !!athleteProfile?.athletic_net_url && !isSkipped;
 
   const projection = getAthleteProjection(athleteProfile?.prs || [], athleteProfile?.gender || 'Boys');
-  const myReferralCode = athleteProfile?.athletic_net_url?.match(/\d{5,}/)?.[0] || null;
-  const showCodeEntry = daysSinceJoin <= 7 && !athleteProfile?.referred_by && !isSkipped;
   const streakTheme = getStreakStyle();
-  const hasPRs = athleteProfile?.prs && athleteProfile.prs.length > 0;
   const activeTitle = EARNED_TITLES.find(t => t.id === equippedTitle) || EARNED_TITLES[6];
-
-  function getTrustBadge(level: number, skipped: boolean) {
-    if (skipped && level === 0) return { icon: UserCircle2, color: 'text-slate-500', bg: 'bg-slate-100 border-slate-200', text: 'Unverified Profile' };
-    switch(level) {
-      case 1: return { icon: CheckCircle2, color: 'text-green-500', bg: 'bg-green-50 border-green-200', text: 'Results Verified' };
-      case 2: return { icon: Trophy, color: 'text-blue-500', bg: 'bg-blue-50 border-blue-200', text: 'Community Verified' };
-      case 3: return { icon: ShieldCheck, color: 'text-purple-500', bg: 'bg-purple-50 border-purple-200', text: 'Coach Verified' };
-      default: return { icon: AlertCircle, color: 'text-orange-500', bg: 'bg-orange-50 border-orange-200', text: 'Pending Verification' };
-    }
-  }
-
-  const badge = getTrustBadge(athleteProfile?.trust_level || 0, isSkipped);
 
   const cardProjection = activeCardAthlete ? getAthleteProjection(activeCardAthlete.prs, activeCardAthlete.gender) : null;
   let cardAccentColor = 'from-slate-700 to-slate-900 border-slate-500';
@@ -1106,29 +1135,91 @@ export default function DashboardPage() {
     else if (cardProjection.overallScore >= 55) { cardAccentColor = 'from-amber-500 to-orange-900 border-amber-400'; cardGlowColor = 'bg-amber-500/40'; }
   }
 
+  const heroStyles = getCardStyles(athleteProfile?.equipped_card, 'hero');
+  const myReferralCode = athleteProfile?.athletic_net_url?.match(/\d{5,}/)?.[0] || null;
+  const showCodeEntry = daysSinceJoin <= 7 && !athleteProfile?.referred_by && !isSkipped;
+
   const currentRefs = athleteProfile?.verified_referrals || 0;
   const cycle = Math.floor(currentRefs / 5);
-  const base = cycle * 5;
-  const progressInCycle = currentRefs - base;
+  const baseCount = cycle * 5;
+  const progressInCycle = currentRefs - baseCount;
   const progressPct = Math.min(100, (progressInCycle / 5) * 100);
 
   const milestones = [
-    { count: base + 1, label: '+1 Boost', icon: Rocket, color: 'text-blue-400', bg: 'bg-blue-500', isMajor: false },
-    { count: base + 2, label: '+1 Boost', icon: Rocket, color: 'text-blue-400', bg: 'bg-blue-500', isMajor: false },
-    { count: base + 3, label: '+1 Boost', icon: Rocket, color: 'text-blue-400', bg: 'bg-blue-500', isMajor: false },
-    { count: base + 4, label: '+1 Boost', icon: Rocket, color: 'text-blue-400', bg: 'bg-blue-500', isMajor: false },
-    { count: base + 5, label: 'Plasma Border', icon: Crown, color: 'text-fuchsia-400', bg: 'bg-fuchsia-500', isMajor: true },
+    { count: baseCount + 1, label: '+1 Boost', icon: Rocket, color: 'text-blue-400', bg: 'bg-blue-500', isMajor: false },
+    { count: baseCount + 2, label: '+1 Boost', icon: Rocket, color: 'text-blue-400', bg: 'bg-blue-500', isMajor: false },
+    { count: baseCount + 3, label: '+1 Boost', icon: Rocket, color: 'text-blue-400', bg: 'bg-blue-500', isMajor: false },
+    { count: baseCount + 4, label: '+1 Boost', icon: Rocket, color: 'text-blue-400', bg: 'bg-blue-500', isMajor: false },
+    { count: baseCount + 5, label: 'Plasma Border', icon: Crown, color: 'text-fuchsia-400', bg: 'bg-fuchsia-500', isMajor: true },
   ];
-
-  const TABS = [
-    { id: 'stats', label: 'My Stats', icon: Activity },
-    { id: 'recruiting', label: 'Recruiting', icon: Target },
-    { id: 'scout', label: 'Pro Scout', icon: Search },
-    { id: 'rewards', label: 'Rewards', icon: Gift },
-  ] as const;
 
   return (
     <main className="min-h-screen bg-[#F8FAFC] font-sans pb-32">
+      
+      {/* 🚨 DYNAMIC CSS INJECTION FOR PREMIUM CARDS 🚨 */}
+      <style dangerouslySetInnerHTML={{__html: `
+        @keyframes foilShift { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+        @keyframes shimmerGlare { 0% { background-position: -200% center; } 100% { background-position: 200% center; } }
+        @keyframes cyberScan { 0% { transform: translateY(-100%); opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { transform: translateY(1000%); opacity: 0; } }
+        @keyframes voidPulse { 0%, 100% { background-size: 100% 100%; filter: brightness(1); } 50% { background-size: 120% 120%; filter: brightness(1.2); } }
+        
+        .holo-card-base { background: transparent; }
+        .holo-card-obsidian { background: linear-gradient(135deg, #0f172a 0%, #334155 25%, #000000 50%, #0f172a 75%, #1e293b 100%); background-size: 300% 300%; }
+        .holo-card-crimson { background: linear-gradient(135deg, #450a0a 0%, #dc2626 50%, #450a0a 100%); background-size: 300% 300%; }
+        .holo-card-sapphire { background: linear-gradient(135deg, #172554 0%, #0ea5e9 50%, #172554 100%); background-size: 300% 300%; }
+        
+        /* SHATTERED HOLOGRAPHIC FOIL */
+        .holo-card-hype { 
+          background: 
+            linear-gradient(135deg, rgba(255,255,255,0.15) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.15) 75%, transparent 75%, transparent 100%),
+            linear-gradient(135deg, #4f46e5 0%, #9333ea 25%, #ec4899 50%, #3b82f6 75%, #4f46e5 100%); 
+          background-size: 40px 40px, 300% 300%; 
+        }
+
+        /* BRUSHED GOLD FOIL */
+        .holo-card-premium { 
+          background: 
+            repeating-linear-gradient(45deg, rgba(255,255,255,0.05) 0px, rgba(255,255,255,0.05) 2px, transparent 2px, transparent 6px),
+            linear-gradient(135deg, #b45309 0%, #f59e0b 25%, #fef08a 50%, #d97706 75%, #78350f 100%); 
+          background-size: 100% 100%, 300% 300%; 
+        }
+
+        /* PULSATING NEBULA CORE */
+        .holo-card-amethyst { 
+          background: radial-gradient(circle at 50% 50%, #c026d3 0%, #7e22ce 30%, #3b0764 80%, #000000 100%); 
+          animation: voidPulse 6s ease-in-out infinite;
+        }
+        .holo-card-amethyst::before {
+          content: ''; position: absolute; inset: 0; pointer-events: none; opacity: 0.1;
+          background-image: repeating-radial-gradient(circle at 50% 50%, transparent 0, transparent 2px, #fff 3px, #fff 4px);
+        }
+
+        /* NEON HACKER MATRIX */
+        .holo-card-cyber { 
+          background: 
+            linear-gradient(rgba(16, 185, 129, 0.15) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(16, 185, 129, 0.15) 1px, transparent 1px),
+            linear-gradient(135deg, #022c22 0%, #064e3b 50%, #083344 100%);
+          background-size: 20px 20px, 20px 20px, 100% 100%;
+          box-shadow: inset 0 0 40px rgba(6, 182, 212, 0.3);
+        }
+        .holo-card-cyber::after {
+          content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 8px;
+          background: rgba(34, 211, 238, 0.8); filter: blur(3px); box-shadow: 0 0 20px #22d3ee;
+          animation: cyberScan 3s linear infinite;
+        }
+        
+        .animate-foil { animation: foilShift 15s ease-in-out infinite; }
+        .holo-glare { position: absolute; inset: 0; background: linear-gradient(105deg, transparent 20%, rgba(255,255,255,0.4) 25%, transparent 30%); background-size: 200% auto; animation: shimmerGlare 8s infinite linear; pointer-events: none; z-index: 10; mix-blend-mode: overlay;}
+        
+        .legend-badge { background: linear-gradient(90deg, #6b21a8 0%, #d946ef 20%, #6b21a8 40%, #d946ef 60%, #6b21a8 80%); background-size: 200% auto; animation: shimmerSlow 4s linear infinite; color: white; border: 1px solid #e879f9; box-shadow: 0 0 15px rgba(217, 70, 239, 0.5); font-weight: 900; }
+        .champion-badge { background: linear-gradient(90deg, #991b1b 0%, #ef4444 20%, #991b1b 40%, #ef4444 60%, #991b1b 80%); background-size: 200% auto; animation: shimmerSlow 4s linear infinite; color: white; border: 1px solid #f87171; box-shadow: 0 0 15px rgba(239, 68, 68, 0.5); font-weight: 900; }
+        .elite-badge { background: linear-gradient(90deg, #0f172a 0%, #475569 20%, #0f172a 40%, #475569 60%, #0f172a 80%); background-size: 200% auto; animation: shimmerSlow 4s linear infinite; color: white; border: 1px solid #94a3b8; box-shadow: 0 0 15px rgba(148, 163, 184, 0.3); font-weight: 900; }
+        
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 10px; }
+      `}} />
       
       {toast && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[200] animate-in slide-in-from-top-5 fade-in duration-300 w-[90%] max-w-md">
@@ -1182,7 +1273,7 @@ export default function DashboardPage() {
               <button onClick={() => setShowAllViewersModal(false)} className="p-2 hover:bg-slate-200 rounded-full transition-colors"><X className="w-5 h-5 text-slate-500" /></button>
             </div>
             <div className="p-2 overflow-y-auto flex-1 custom-scrollbar">
-              {allRecentViewers.map((coach, idx) => (
+              {allRecentViewers.map((coach: any, idx: number) => (
                 <div key={idx} className="flex items-center justify-between p-4 border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors group">
                   <div className="flex items-center gap-4">
                     <AvatarWithBorder avatarUrl={coach.avatar_url} borderId="none" sizeClasses="w-12 h-12" userRole="coach" />
@@ -1266,33 +1357,21 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <style dangerouslySetInnerHTML={{__html: `
-        @keyframes liquidPan { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
-        @keyframes shimmerSlow { 0% { background-position: -200% center; } 100% { background-position: 200% center; } }
-        
-        .legend-badge { background: linear-gradient(90deg, #6b21a8 0%, #d946ef 20%, #6b21a8 40%, #d946ef 60%, #6b21a8 80%); background-size: 200% auto; animation: shimmerSlow 4s linear infinite; color: white; border: 1px solid #e879f9; box-shadow: 0 0 15px rgba(217, 70, 239, 0.5); font-weight: 900; }
-        .champion-badge { background: linear-gradient(90deg, #991b1b 0%, #ef4444 20%, #991b1b 40%, #ef4444 60%, #991b1b 80%); background-size: 200% auto; animation: shimmerSlow 4s linear infinite; color: white; border: 1px solid #f87171; box-shadow: 0 0 15px rgba(239, 68, 68, 0.5); font-weight: 900; }
-        .elite-badge { background: linear-gradient(90deg, #0f172a 0%, #475569 20%, #0f172a 40%, #475569 60%, #0f172a 80%); background-size: 200% auto; animation: shimmerSlow 4s linear infinite; color: white; border: 1px solid #94a3b8; box-shadow: 0 0 15px rgba(148, 163, 184, 0.3); font-weight: 900; }
-        
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 10px; }
-      `}} />
-
-      {/* HERO SECTION */}
-      <div className="bg-slate-900 text-white pt-16 pb-24 px-6 relative overflow-hidden">
-        {athleteProfile?.is_premium && (
-          <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/20 blur-[100px] rounded-full pointer-events-none"></div>
+      {/* 🚨 DYNAMIC PRISTINE HERO SECTION 🚨 */}
+      <div className={`${heroStyles.bgClass} ${heroStyles.isAnimated ? 'animate-foil border-b border-white/20' : 'bg-slate-900 border-b border-slate-800'} text-white pt-16 pb-24 px-6 relative overflow-hidden`}>
+        {/* Only premium/holographic cards get the glare effect */}
+        {heroStyles.hasGlare && <div className="holo-glare"></div>}
+        {heroStyles.isAnimated && <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-[0.05] mix-blend-overlay pointer-events-none"></div>}
+        {heroStyles.hasTrophy && (
+          <div className="absolute -top-10 -right-10 opacity-[0.03] pointer-events-none z-10">
+            <Trophy size={400} className="animate-[spin_60s_linear_infinite]" />
+          </div>
         )}
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center gap-8 relative z-10">
-          
+
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center gap-8 relative z-20">
           <div className="relative w-32 h-32 group shrink-0">
             <div className={`w-full h-full rounded-full border-4 ${athleteProfile?.is_premium ? 'border-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.3)]' : 'border-slate-800 shadow-xl'} overflow-hidden bg-slate-800 flex items-center justify-center ${isUploadingAvatar ? 'animate-pulse' : ''}`}>
-              {athleteProfile?.avatar_url ? (
-                <img src={athleteProfile.avatar_url} alt="Profile" className="w-full h-full object-cover" />
-              ) : (
-                <UserCircle2 className="w-12 h-12 text-slate-400" />
-              )}
+              <AvatarWithBorder avatarUrl={athleteProfile?.avatar_url ?? null} borderId={athleteProfile?.equipped_border || 'none'} sizeClasses="w-full h-full" />
             </div>
             {!isUnverified && (
               <label className="absolute inset-0 bg-black/40 rounded-full flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer z-30">
@@ -1304,21 +1383,19 @@ export default function DashboardPage() {
           </div>
 
           <div className="text-center md:text-left flex-1 w-full">
-            
-            {/* 🚨 VISIBLE TOP-LEVEL RANK DISPLAY */}
             <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 mb-3">
               {isSkipped ? (
                 <div className={`inline-flex items-center px-3 py-1 rounded-full text-[10px] sm:text-xs font-black tracking-widest uppercase border shadow-sm bg-slate-800 border-slate-700 text-slate-300`}>
                   <Globe className="w-3.5 h-3.5 mr-1.5" /> General Profile
                 </div>
               ) : (
-                <div className={`inline-flex items-center px-3 py-1 rounded-full text-[10px] sm:text-xs font-black tracking-widest uppercase border shadow-sm ${activeTitle.badgeClass}`}>
+                <div className={`inline-flex items-center px-3 py-1 rounded-full text-[10px] sm:text-xs font-black tracking-widest uppercase border shadow-sm ${activeTitle.badgeClass} backdrop-blur-md`}>
                   <Trophy className="w-3.5 h-3.5 mr-1.5" /> {activeTitle.name} Rank
                 </div>
               )}
               
               {athleteProfile?.is_premium && (
-                <div className={`inline-flex items-center px-3 py-1 rounded-full text-[10px] sm:text-xs font-black tracking-widest uppercase border bg-amber-500/20 border-amber-400/30 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.2)]`}>
+                <div className={`inline-flex items-center px-3 py-1 rounded-full text-[10px] sm:text-xs font-black tracking-widest uppercase border bg-amber-500/20 border-amber-400/30 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.2)] backdrop-blur-md`}>
                   <Crown className="w-3.5 h-3.5 mr-1.5" /> Pro Member
                 </div>
               )}
@@ -1333,7 +1410,7 @@ export default function DashboardPage() {
                   </span>
                 )}
               </h1>
-              <p className="text-lg text-slate-400 font-medium flex items-center justify-center md:justify-start gap-2">
+              <p className="text-lg text-slate-300 font-medium flex items-center justify-center md:justify-start gap-2">
                 <MapPin className="w-4 h-4 opacity-70" /> 
                 {isSkipped 
                   ? (athleteProfile?.high_school ? `${athleteProfile.high_school} • Class of ${athleteProfile.grad_year}` : 'College Recruiting Hub')
@@ -1574,21 +1651,7 @@ export default function DashboardPage() {
             
             {/* LEFT COLUMN: BASIC PROFILE + UPSELL */}
             <div className="lg:col-span-1 space-y-6">
-              <div className="bg-white rounded-[2rem] p-8 border border-slate-200 shadow-sm relative flex flex-col items-center text-center">
-                <div className="relative w-28 h-28 mb-4 group">
-                  <AvatarWithBorder avatarUrl={athleteProfile.avatar_url ?? null} borderId="none" sizeClasses="w-28 h-28" />
-                  <label className="absolute inset-0 bg-black/40 rounded-full flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer z-30">
-                    <Camera className="w-6 h-6 text-white mb-1" />
-                    <span className="text-[10px] text-white font-bold uppercase tracking-wider px-2">Upload</span>
-                    <input type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} disabled={isUploadingAvatar} />
-                  </label>
-                </div>
-                <h1 className="text-2xl font-black text-slate-900 mb-2">{athleteProfile.first_name} {athleteProfile.last_name}</h1>
-                <div className="inline-flex items-center px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-slate-600 text-xs font-bold tracking-widest uppercase shadow-sm">
-                  General Athlete
-                </div>
-              </div>
-
+              
               <div className="bg-gradient-to-br from-blue-900 to-indigo-900 rounded-[2rem] p-8 shadow-xl border border-blue-700 text-white relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-48 h-48 bg-blue-500/20 blur-[60px] rounded-full pointer-events-none"></div>
                 <div className="relative z-10 text-center">
@@ -1744,1012 +1807,382 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* 🚨 MAIN DASHBOARD CONTENT (ONLY VISIBLE IF VERIFIED + TRACK) 🚨 */}
-        {athleteProfile && !isUnverified && !isSkipped && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-8 animate-in fade-in slide-in-from-bottom-4">
-            
-            {/* ================= LEFT COLUMN: PERMANENT SIDEBAR ================= */}
-            <div className="lg:col-span-1 space-y-6">
-              
-              <div className="bg-white rounded-[2rem] p-8 border border-slate-200 shadow-sm relative flex flex-col">
-                <div className="relative w-28 h-28 mb-6 group mx-auto md:mx-0">
-                  <AvatarWithBorder 
-                      avatarUrl={athleteProfile?.avatar_url ?? null} 
-                      borderId={equippedBorder ?? null} 
-                      sizeClasses="w-28 h-28"
-                  />
-                  <label className="absolute inset-0 bg-black/40 rounded-full flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer z-30">
-                    <Camera className="w-6 h-6 text-white mb-1" />
-                    <span className="text-[10px] text-white font-bold uppercase tracking-wider">Upload</span>
-                    <input type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} disabled={isUploadingAvatar} />
-                  </label>
-                </div>
+        {/* 🚨 VERIFIED TRACK & FIELD DASHBOARD 🚨 */}
+        {athleteProfile && !isSkipped && athleteProfile.trust_level > 0 && (
+          <div className="mt-8 grid grid-cols-1 xl:grid-cols-3 gap-8 animate-in fade-in slide-in-from-bottom-4">
+             
+             {/* 🚨 LEFT COLUMN (Tabs & Content) 🚨 */}
+             <div className="xl:col-span-2 flex flex-col">
+                 <div className="flex gap-4 mb-8 overflow-x-auto custom-scrollbar pb-1 border-b border-slate-200 relative">
+                    <button 
+                      onClick={() => setActiveTab('stats')} 
+                      className={`pb-4 text-sm font-bold transition-all relative flex items-center gap-2 shrink-0 ${activeTab === 'stats' ? 'text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                       <Activity className="w-4 h-4" /> My Stats
+                       {activeTab === 'stats' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-t-full" />}
+                    </button>
+                    <button 
+                      onClick={() => setActiveTab('recruiting')} 
+                      className={`pb-4 text-sm font-bold transition-all relative flex items-center gap-2 shrink-0 ${activeTab === 'recruiting' ? 'text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                       <Target className="w-4 h-4" /> Recruiting Board
+                       {activeTab === 'recruiting' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-t-full" />}
+                    </button>
+                    <button 
+                      onClick={() => setActiveTab('scout')} 
+                      className={`pb-4 text-sm font-bold transition-all relative flex items-center gap-2 shrink-0 ${activeTab === 'scout' ? 'text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                       <Search className="w-4 h-4" /> Pro Scout
+                       {activeTab === 'scout' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-t-full" />}
+                    </button>
+                 </div>
 
-                <div className="flex flex-wrap items-center gap-3 mb-1">
-                  <h1 className="text-2xl font-black text-slate-900">{athleteProfile.first_name} {athleteProfile.last_name}</h1>
-                  {streak > 0 && (
-                    <div className={`flex items-center px-2.5 py-1 rounded-lg border text-[10px] font-black tracking-widest uppercase ${streakTheme.bg}`}>
-                      <Flame className={`w-3.5 h-3.5 mr-1 ${streakTheme.icon}`} />
-                      <span className={streakTheme.text}>{streak} Day Login Streak</span>
-                    </div>
-                  )}
-                </div>
-                
-                <p className="text-slate-500 font-medium leading-relaxed mt-2 mb-6">
-                  {athleteProfile.high_school} 
-                  {athleteProfile.grad_year && ` • Class of ${athleteProfile.grad_year}`}
-                  {athleteProfile.state && ` • ${athleteProfile.state}`}
-                  {athleteProfile.school_size && ` • ${athleteProfile.school_size}`}
-                  {athleteProfile.conference && ` • ${athleteProfile.conference}`}
-                </p>
-                
-                <div className="border-t border-slate-100 pt-6 mt-auto grid grid-cols-2 gap-4">
-                  <div>
-                    <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Trust Level</span>
-                    <div className="flex items-center gap-1.5">
-                      <badge.icon className={`w-4 h-4 ${badge.color}`} />
-                      <span className={`text-xs font-bold ${badge.color}`}>{badge.text}</span>
-                    </div>
-                  </div>
-                  <div>
-                    <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Division</span>
-                    <div className="flex items-center gap-1.5">
-                      <CheckCircle2 className="w-4 h-4 text-slate-400" />
-                      <span className="text-xs font-bold text-slate-700">{athleteProfile.gender || 'Boys'}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* ACTIVE RIVALS DASHBOARD WIDGET */}
-              <div className="bg-white rounded-[2rem] p-8 shadow-sm border border-slate-200 relative overflow-hidden flex flex-col">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 border-b border-slate-100 pb-6 gap-4">
-                  <div>
-                    <h3 className="text-xl font-black text-slate-900 tracking-tight flex items-center">
-                      <Swords className="w-5 h-5 mr-2 text-red-500" /> Active Rivals
-                    </h3>
-                  </div>
-                  <div className="bg-slate-100 text-slate-600 font-bold px-3 py-1.5 rounded-lg text-xs shrink-0">
-                    {activeRivals.length} / 5
-                  </div>
-                </div>
-
-                {activeRivals.length > 0 ? (
-                  <div className="grid grid-cols-1 gap-3 mb-6">
-                    {activeRivals.map((rival) => (
-                      <div key={rival.id} className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 bg-slate-50 hover:border-red-300 hover:bg-red-50 transition-colors group relative">
-                        <Link href={`/athlete/${rival.id}`} className="absolute inset-0 z-10" aria-label={`View ${rival.first_name}`}></Link>
-                        <AvatarWithBorder avatarUrl={rival.avatar_url ?? null} borderId={rival.equipped_border ?? null} sizeClasses="w-10 h-10 shrink-0" />
-                        <div className="flex-1 truncate relative z-0">
-                          <h4 className="font-bold text-sm text-slate-900 truncate group-hover:text-red-600 transition-colors">{rival.first_name} {rival.last_name}</h4>
-                        </div>
-                        <button onClick={() => handleRemoveRival(rival.id)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-white rounded-lg transition-colors z-20 relative">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-6 bg-slate-50 rounded-2xl border border-slate-200 border-dashed mb-6">
-                    <Swords className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                    <p className="text-xs text-slate-500 font-medium">Head to the Arena to declare rivals.</p>
-                  </div>
-                )}
-                
-                <Link href="/compete" className="w-full bg-slate-900 hover:bg-black text-white font-black py-3 rounded-xl transition-all shadow-md flex items-center justify-center gap-2 mt-auto text-sm">
-                  Enter The Arena <ArrowRight className="w-3 h-3" />
-                </Link>
-              </div>
-
-              <div className="bg-slate-900 rounded-[2rem] p-8 shadow-lg border border-slate-800 text-white relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 blur-[40px] rounded-full pointer-events-none"></div>
-                <div className="relative z-10 flex items-center justify-between">
-                  <div>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Boost Wallet</p>
-                    <h3 className="text-4xl font-black text-white leading-none">{athleteProfile?.boosts_available || 0}</h3>
-                  </div>
-                  <div className="w-12 h-12 bg-amber-500/20 rounded-2xl flex items-center justify-center border border-amber-500/30">
-                    <Rocket className="w-6 h-6 text-amber-400" />
-                  </div>
-                </div>
-              </div>
-
-            </div>
-
-            {/* ================= RIGHT COLUMN: TABBED INTERFACE ================= */}
-            <div className="lg:col-span-2 space-y-6">
-              
-              {/* Sleek Tab Navigation */}
-              <div className="bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm flex overflow-x-auto custom-scrollbar sticky top-4 z-40">
-                {TABS.map(tab => (
-                  <button 
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)} 
-                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-bold text-sm transition-all whitespace-nowrap ${
-                      activeTab === tab.id 
-                        ? 'bg-blue-50 text-blue-700 shadow-sm border border-blue-200/50' 
-                        : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50 border border-transparent'
-                    }`}
-                  >
-                    <tab.icon className={`w-4 h-4 ${activeTab === tab.id ? 'text-blue-500' : 'text-slate-400'}`} /> {tab.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* 📊 TAB 1: MY STATS (WITH ADVANCED ANALYTICS) */}
-              {activeTab === 'stats' && (
-                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                  
-                  {/* 🚨 PRO ANALYTICS HUB 🚨 */}
-                  <div className="bg-white rounded-[2rem] p-8 shadow-sm border border-slate-200 relative overflow-hidden">
-                    <div className="flex items-center justify-between mb-8 pb-6 border-b border-slate-100">
-                      <div>
-                        <h2 className="text-2xl font-black text-slate-900 flex items-center">
-                          <BarChart3 className="w-6 h-6 mr-3 text-indigo-500" /> Scouting Analytics
-                        </h2>
-                        <p className="text-slate-500 font-medium mt-1">See how much traction your profile is getting with college coaches.</p>
-                      </div>
-                    </div>
-
-                    <div className={`relative ${!athleteProfile?.is_premium ? 'min-h-[280px]' : ''}`}>
-                      
-                      {/* 🔓 UNLOCKED ROW: Proves to the athlete that the app is working! */}
-                      <div className="mb-6">
-                        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl p-6 md:p-8 flex flex-col sm:flex-row items-center justify-between gap-6 shadow-sm">
-                          <div>
-                            <p className="text-xs font-bold text-blue-500 uppercase tracking-widest mb-1 flex items-center gap-1.5">
-                              <Eye className="w-4 h-4" /> All-Time Profile Clicks
-                            </p>
-                            <h3 className="text-4xl md:text-5xl font-black text-blue-700 tracking-tight">
-                              {athleteProfile?.profile_views || 0}
-                            </h3>
-                          </div>
-                          <div className="text-center sm:text-right max-w-[200px]">
-                            <p className="text-sm font-medium text-slate-500">Coaches have actively clicked to view your full profile.</p>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* 🔒 LOCKED PRO ROW: Impressions, Daily, Monthly, and Who Viewed */}
-                      <div className="relative rounded-2xl border border-slate-200 bg-slate-50 p-6 overflow-hidden">
-                        {!athleteProfile?.is_premium && (
-                          <div className="absolute inset-0 z-20 bg-slate-50/80 backdrop-blur-md flex flex-col items-center justify-center text-center p-6">
-                            <div className="w-14 h-14 bg-white rounded-full flex items-center justify-center mb-3 border border-slate-200 shadow-sm">
-                              <Lock className="w-6 h-6 text-slate-400" />
-                            </div>
-                            <h3 className="text-lg font-black text-slate-900 mb-1">Advanced Analytics Locked</h3>
-                            <p className="text-slate-500 text-sm font-medium mb-4 max-w-xs">Upgrade to Pro to track your feed impressions and see exactly who is viewing your profile.</p>
-                            <Link href="/pro" className="bg-gradient-to-r from-amber-400 to-amber-500 text-amber-950 font-black px-6 py-2.5 rounded-xl shadow-md hover:scale-105 transition-transform flex items-center gap-2 text-sm">
-                              <Crown className="w-4 h-4" /> Unlock Pro
-                            </Link>
-                          </div>
-                        )}
-
-                        <div className={`${!athleteProfile?.is_premium ? 'opacity-20 select-none blur-[2px]' : ''}`}>
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-                            {/* 🚨 FEED IMPRESSIONS WITH TOOLTIP 🚨 */}
-                            <div className="bg-white rounded-xl p-5 border border-slate-100 shadow-sm relative">
-                              <div className="flex items-center justify-between mb-2">
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                                  Feed Impressions
-                                  <button 
-                                    onClick={() => setShowImpressionTooltip(!showImpressionTooltip)} 
-                                    className="text-slate-300 hover:text-emerald-500 transition-colors focus:outline-none"
-                                  >
-                                    <HelpCircle className="w-3.5 h-3.5" />
-                                  </button>
-                                </p>
-                                <Search className="w-4 h-4 text-emerald-400" />
-                              </div>
-                              <h3 className="text-3xl font-black text-slate-900">{athleteProfile?.is_premium ? athleteProfile.search_appearances || 0 : '241'}</h3>
-                              
-                              {/* TOOLTIP POPOVER */}
-                              {showImpressionTooltip && athleteProfile?.is_premium && (
-                                <div className="absolute top-12 left-0 w-[200px] bg-slate-900 text-white text-xs p-4 rounded-xl shadow-xl z-50 animate-in fade-in zoom-in-95 border border-slate-700">
-                                  <p className="mb-3 leading-relaxed">This is the number of times your posts or profile appeared on a coach's screen while they were scrolling the feed or searching the database.</p>
-                                  <button onClick={() => setShowImpressionTooltip(false)} className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-2 rounded-lg transition-colors">Got it</button>
-                                </div>
-                              )}
-                            </div>
-                            
-                            <div className="bg-white rounded-xl p-5 border border-slate-100 shadow-sm">
-                              <div className="flex items-center justify-between mb-2">
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Views Today</p>
-                                <Activity className="w-4 h-4 text-blue-400" />
-                              </div>
-                              <h3 className="text-3xl font-black text-slate-900">{athleteProfile?.is_premium ? dailyViews : '14'}</h3>
-                            </div>
-                            
-                            <div className="bg-white rounded-xl p-5 border border-slate-100 shadow-sm">
-                              <div className="flex items-center justify-between mb-2">
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Views This Month</p>
-                                <Calendar className="w-4 h-4 text-indigo-400" />
-                              </div>
-                              <h3 className="text-3xl font-black text-slate-900">{athleteProfile?.is_premium ? monthlyViews : '89'}</h3>
-                            </div>
-                          </div>
-
-                          <div className="border-t border-slate-200 pt-6">
-                             <div className="flex items-center justify-between mb-4">
-                               <p className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
-                                 <UserCircle2 className="w-4 h-4 text-indigo-400" /> Recent Coach Views
-                               </p>
-                               {allRecentViewers.length > 3 && (
-                                 <button onClick={() => setShowAllViewersModal(true)} className="text-[10px] font-black text-indigo-500 hover:text-indigo-600 uppercase tracking-widest bg-indigo-50 px-3 py-1.5 rounded-lg transition-colors border border-indigo-100 shadow-sm hover:shadow-md">
-                                   View All ({allRecentViewers.length})
-                                 </button>
-                               )}
-                             </div>
-                             
-                             {recentViewers.length > 0 ? (
-                               <div className="space-y-3">
-                                 {recentViewers.map((coach, idx) => (
-                                   <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-white border border-slate-100 shadow-sm">
-                                     <div className="flex items-center gap-4">
-                                       <AvatarWithBorder avatarUrl={coach.avatar_url} borderId="none" sizeClasses="w-10 h-10" userRole="coach" />
-                                       <div>
-                                         <p className="font-black text-slate-900 text-sm">Coach {coach.last_name}</p>
-                                         <p className="text-xs font-bold text-slate-500 truncate max-w-[200px]">{coach.school_name}</p>
-                                       </div>
-                                     </div>
-                                     <button 
-                                       onClick={() => handleContactCoach(coach.email)} 
-                                       className="w-10 h-10 rounded-full bg-slate-50 text-slate-500 flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all border border-slate-200"
-                                       title="Email Coach"
-                                     >
-                                       <Mail className="w-4 h-4" />
-                                     </button>
-                                   </div>
-                                 ))}
-                               </div>
-                             ) : (
-                               <p className="text-sm font-medium text-slate-400 italic py-4 bg-white p-4 rounded-xl border border-slate-100 text-center">No recent views from verified coaches.</p>
-                             )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 🚨 DOPAMINE IN-DEPTH COLLEGE PROJECTION SCORER 🚨 */}
-                  <div className="bg-white rounded-[2rem] p-8 md:p-10 shadow-sm border border-slate-200 relative overflow-hidden flex flex-col">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 pb-8 border-b border-slate-100 gap-4">
-                      <div>
-                        <h3 className="text-2xl font-black text-slate-900 tracking-tight flex items-center">
-                          <Target className="w-6 h-6 mr-3 text-blue-500" /> Recruiting Scouting Report
-                        </h3>
-                        <p className="text-slate-500 font-medium mt-1 text-sm">Where you stand against national college standards.</p>
-                      </div>
-                      <div className="bg-slate-900 text-white flex flex-col items-center justify-center px-6 py-4 rounded-2xl shadow-lg border border-slate-700 shrink-0 relative overflow-hidden min-w-[140px]">
-                        <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-blue-500 to-purple-500"></div>
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Overall Score</span>
-                        <span className="font-black text-4xl leading-none mb-1">{hasPRs && projection.overallScore > 0 ? projection.overallScore : '-'}</span>
-                        <span className="text-[9px] font-bold text-blue-300 uppercase tracking-widest bg-blue-500/20 px-2 py-0.5 rounded-full">Via {projection.bestEvent}</span>
-                      </div>
-                    </div>
-
-                    {hasPRs && projection.overallScore > 0 ? (
-                      <div className="space-y-8">
-                        <div className={`p-6 rounded-2xl border ${projection.bg} ${projection.border} relative overflow-hidden shadow-sm`}>
-                          <div className="absolute top-0 right-0 p-6 opacity-10 pointer-events-none"><BarChart3 className={`w-24 h-24 ${projection.color}`} /></div>
-                          <div className="relative z-10">
-                            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Projected Tier</p>
-                            <h4 className={`text-2xl font-black mb-3 ${projection.color}`}>{projection.overallLabel}</h4>
-                            <p className="text-slate-700 font-medium text-sm leading-relaxed max-w-lg">{projection.overallDesc}</p>
-                          </div>
-                        </div>
-
-                        <div>
-                          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
-                            <Activity className="w-3.5 h-3.5" /> Event-by-Event Breakdown
-                          </h4>
-                          
-                          <div className="space-y-6 max-h-[700px] overflow-y-auto pr-2 custom-scrollbar">
-                            {projection.eventBreakdowns.map((ev: any, i: number) => {
-                              const isExpanded = expandedEventIndex === i;
-
-                              return (
-                                <div key={i} className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-300">
-                                  <button 
-                                    onClick={() => toggleEventExpansion(i)} 
-                                    className="w-full flex justify-between items-center p-6 sm:px-8 text-left hover:bg-slate-50 transition-colors"
-                                  >
-                                    <div>
-                                      <span className="font-black text-2xl text-slate-900 tracking-tight">{ev.event}</span>
-                                    </div>
-                                    <div className="flex items-center gap-4">
-                                      <div className="flex items-end gap-1">
-                                        <span className="text-3xl font-black text-blue-600 leading-none">{ev.score}</span>
-                                        <span className="text-xs font-bold text-slate-400 pb-0.5">/99</span>
-                                      </div>
-                                      {isExpanded ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
-                                    </div>
-                                  </button>
-
-                                  {isExpanded && (
-                                    <div className="px-6 sm:px-8 pb-8 space-y-6 border-t border-slate-100 animate-in fade-in slide-in-from-top-1 duration-200">
-
-                                      <div className="flex flex-col sm:flex-row sm:items-center gap-4 pt-6">
-                                        <div className="bg-slate-50 border border-slate-100 px-5 py-3 rounded-xl flex-1 flex flex-col justify-center">
-                                          <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Current Mark</span>
-                                          <span className="font-black text-2xl text-slate-800">{ev.mark}</span>
-                                        </div>
-                                        <div className="bg-slate-50 border border-slate-100 px-5 py-3 rounded-xl flex-1 flex flex-col justify-center">
-                                          <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Current Tier</span>
-                                          <span className={`font-black text-lg tracking-tight ${
-                                            ev.score >= 85 ? 'text-fuchsia-600' :
-                                            ev.score >= 75 ? 'text-blue-600' :
-                                            ev.score >= 65 ? 'text-emerald-600' :
-                                            'text-slate-700'
-                                          }`}>{ev.currentTier}</span>
-                                        </div>
-                                      </div>
-
-                                      {ev.nextTier !== 'Elite' && ev.nextTier !== 'Varsity Standard' && (
-                                        <div className="bg-slate-50/50 border border-slate-100 rounded-xl p-5 flex items-center justify-between shadow-inner">
-                                          <div className="flex items-center gap-4">
-                                            <div className={`w-12 h-12 rounded-full flex items-center justify-center shadow-inner shrink-0 ${ev.isField ? 'bg-emerald-50 border border-emerald-100' : 'bg-cyan-50 border border-cyan-100'}`}>
-                                              {ev.isField ? <TrendingUp className="w-6 h-6 text-emerald-500" /> : <TrendingUp className="w-6 h-6 text-cyan-500 transform rotate-180" />}
-                                            </div>
-                                            <div>
-                                              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-0.5">Next Goal: {ev.nextTier}</p>
-                                              <p className="text-xl font-black text-slate-900 tracking-tight">{ev.targetMarkFormatted}</p>
-                                            </div>
-                                          </div>
-                                          <div className="text-right shrink-0">
-                                            <span className={`text-xl font-black block ${ev.isField ? 'text-emerald-600' : 'text-cyan-600'}`}>{ev.deltaFormatted}</span>
-                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Needed</p>
-                                          </div>
-                                        </div>
-                                      )}
-
-                                      {ev.nextTier === 'Varsity Standard' && (
-                                        <div className="bg-slate-50 border border-slate-100 rounded-xl p-5 flex items-center justify-center">
-                                          <Activity className="w-5 h-5 text-slate-400 mr-2" />
-                                          <span className="text-base font-black text-slate-700 tracking-tight">Goal: Hit Varsity Standard ({ev.targetMarkFormatted})</span>
-                                        </div>
-                                      )}
-                                      {ev.nextTier === 'Elite' && (
-                                        <div className="bg-amber-50 border border-amber-100 rounded-xl p-5 flex items-center justify-center">
-                                          <Crown className="w-5 h-5 text-amber-500 mr-2" />
-                                          <span className="text-base font-black text-amber-600 tracking-tight">Elite Status Achieved - Maintain Dominance</span>
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        <div className="mt-6 pt-6 border-t border-slate-100 flex items-center justify-center gap-2">
-                           <Activity className="w-4 h-4 text-blue-400" />
-                           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                             Powered by ChasedSports Scoring Algorithm v2.0
-                           </p>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="text-center py-12 bg-slate-50 rounded-2xl border border-slate-200 border-dashed">
-                         <Activity className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                         <h4 className="text-lg font-black text-slate-900 mb-1">No data available</h4>
-                         <p className="text-sm text-slate-500 font-medium">Sync your Athletic.net profile to generate your scouting report.</p>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* VERIFIED PRS */}
-                  <div className="bg-white rounded-[2rem] p-8 md:p-12 border border-slate-200 shadow-sm relative overflow-hidden">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
-                      <div>
-                        <h3 className="text-2xl font-black text-slate-900 tracking-tight">Verified PRs</h3>
-                        <p className="text-slate-500 font-medium">Your official meet results & national rank.</p>
-                      </div>
-                      
-                      <button onClick={handleReSync} disabled={isSyncing} className="flex items-center justify-center bg-slate-900 hover:bg-blue-600 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-colors disabled:opacity-50 disabled:hover:bg-slate-900">
-                        {isSyncing ? (
-                          <><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Finding...</>
-                        ) : (
-                          <><RefreshCw className="w-4 h-4 mr-2" /> Sync Latest PRs</>
-                        )}
-                      </button>
-                    </div>
-
-                    {hasPRs ? (
-                      <div className="grid grid-cols-1 gap-4">
-                        {athleteProfile!.prs!.map((pr, index) => {
-                          const queryParams = new URLSearchParams({ event: pr.event, gender: athleteProfile.gender || 'Boys' });
-                          const leaderboardLink = `/leaderboard?${queryParams.toString()}#${athleteProfile.id}`;
-
-                          return (
-                            <div key={index} className={`flex flex-col sm:flex-row sm:items-center justify-between p-5 rounded-2xl border border-slate-200 bg-slate-50 gap-4 group hover:bg-blue-50 hover:border-blue-300 transition-colors cursor-pointer relative overflow-hidden`}>
-                              <Link href={leaderboardLink} className="absolute inset-0 z-10" aria-label={`View ${pr.event} Leaderboard`}></Link>
-                              
-                              <div className="flex-1 relative z-0">
-                                <span className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-widest group-hover:text-blue-500 transition-colors">Event</span>
-                                <span className="font-black text-xl text-slate-800">{pr.event}</span>
-                                {(pr.date || pr.meet) && (
-                                  <div className="flex items-center gap-2 text-xs text-slate-500 font-medium mt-2">
-                                    <span className="flex items-center"><Calendar className="w-3 h-3 mr-1 text-slate-400" /> {pr.date}</span>
-                                    <span className="hidden sm:inline text-slate-300">•</span>
-                                    <span className="flex items-center truncate pr-2"><MapPin className="w-3 h-3 mr-1 text-slate-400" /> {pr.meet}</span>
-                                  </div>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-5 sm:border-l sm:border-slate-200 sm:pl-5 pr-4 relative z-0">
-                                <div className="flex flex-col items-start sm:items-end">
-                                  <span className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-widest">Global Status</span>
-                                  {pr.tier ? (
-                                    <div className="flex items-center gap-2 mt-0.5">
-                                      <span className="text-sm font-black text-slate-400 group-hover:text-blue-500 transition-colors">#{pr.globalRank}</span>
-                                      <span className={`px-3 py-1 rounded-lg text-[10px] font-black tracking-widest uppercase text-white ${pr.tier.classes}`}>
-                                        {pr.tier.name}
-                                      </span>
-                                    </div>
-                                  ) : (
-                                    <span className="px-3 py-1 rounded-lg text-[10px] font-black tracking-widest uppercase bg-slate-100 text-slate-400 border border-slate-200">UNRANKED</span>
-                                  )}
-                                </div>
-                                <div className="text-right ml-auto sm:ml-0">
-                                  <span className="block text-[10px] font-bold text-blue-400 mb-1 uppercase tracking-widest">Mark</span>
-                                  <span className="font-black text-3xl text-blue-600">{pr.mark}</span>
-                                </div>
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    ) : (
-                      <div className="text-center py-12 bg-slate-50 rounded-2xl border border-slate-200 border-dashed text-center">
-                        <Activity className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                        <h4 className="text-lg font-black text-slate-900 mb-1">No times found</h4>
-                        <p className="text-sm text-slate-500 font-medium mt-1">Sync your profile to populate this board.</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* 🎯 TAB 2: RECRUITING */}
-              {activeTab === 'recruiting' && (
-                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                  
-                  {/* NCAA RECRUITING RULES GUIDE */}
-                  <div className="bg-white rounded-[2rem] p-8 shadow-sm border border-slate-200 relative overflow-hidden">
-                    <div className="flex items-center gap-3 mb-6 pb-6 border-b border-slate-100">
-                      <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center border border-blue-100">
-                        <BookOpen className="w-6 h-6 text-blue-600" />
-                      </div>
-                      <div>
-                        <h2 className="text-2xl font-black text-slate-900 tracking-tight">NCAA Recruiting Guide</h2>
-                        <p className="text-slate-500 font-medium text-sm">Understand when and how coaches can contact you.</p>
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-6">
-                      <div className="bg-slate-50 border border-slate-100 rounded-2xl p-6">
-                        <h3 className="font-black text-lg text-slate-900 mb-2 flex items-center gap-2">
-                          <AlertCircle className="w-5 h-5 text-amber-500" /> The "June 15th" Rule (D1 & D2)
-                        </h3>
-                        <p className="text-slate-600 text-sm leading-relaxed mb-4">
-                          NCAA Division 1 and Division 2 coaches <strong>cannot</strong> send you recruiting materials, direct messages, or return your phone calls until <strong className="text-slate-900">June 15th after your Sophomore year.</strong> Before this date, they can only send you camp brochures or generic questionnaires.
-                        </p>
-                      </div>
-
-                      <div className="bg-blue-50/50 border border-blue-100 rounded-2xl p-6">
-                        <h3 className="font-black text-lg text-slate-900 mb-2 flex items-center gap-2">
-                          <CheckCircle2 className="w-5 h-5 text-blue-500" /> The "One-Way" Loophole
-                        </h3>
-                        <p className="text-slate-600 text-sm leading-relaxed">
-                          Even if you are a Freshman or Sophomore, <strong>you can still contact coaches!</strong> You are allowed to call, email, or DM them to express interest. 
-                          <br/><br/>
-                          <span className="font-bold text-slate-800">The Catch:</span> If you call and they pick up, you can talk. But if you leave a voicemail or send a DM, <strong>they are legally not allowed to reply to you</strong> until June 15th of your Sophomore year. Do not get discouraged if they don't answer—they are likely just following NCAA rules!
-                        </p>
-                      </div>
-
-                      <div className="bg-emerald-50/50 border border-emerald-100 rounded-2xl p-6">
-                        <h3 className="font-black text-lg text-slate-900 mb-2 flex items-center gap-2">
-                          <Trophy className="w-5 h-5 text-emerald-500" /> D3 & NAIA Programs
-                        </h3>
-                        <p className="text-slate-600 text-sm leading-relaxed">
-                          Division 3 and NAIA programs have much fewer restrictions. Coaches from these divisions can contact you, reply to your emails, and send you recruiting materials at almost any point during your high school career.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* INBOX BANNER */}
-                  <div className="bg-gradient-to-r from-purple-900 to-indigo-900 rounded-[2rem] p-8 border border-purple-700 shadow-xl relative overflow-hidden flex flex-col sm:flex-row items-center justify-between gap-6">
-                    <div className="absolute top-0 right-0 w-64 h-64 bg-purple-500/20 blur-[80px] rounded-full pointer-events-none"></div>
-                    <div className="relative z-10 flex items-center gap-6 text-center sm:text-left">
-                      <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center border border-white/20 shrink-0 mx-auto sm:mx-0">
-                        <Mail className="w-8 h-8 text-purple-200" />
-                      </div>
-                      <div>
-                        <h3 className="text-2xl font-black text-white tracking-tight mb-1">Recruiting Inbox</h3>
-                        <p className="text-purple-200/80 font-medium text-sm">
-                          {unreadCount > 0 
-                            ? `You have ${unreadCount} unread pitches from college coaches!` 
-                            : "Coaches use the Discovery Engine to send you direct pitches."}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="relative z-10 w-full sm:w-auto shrink-0">
-                      <Link href="/dashboard/messages" className="block w-full text-center bg-white text-purple-900 hover:bg-purple-50 font-black px-8 py-4 rounded-xl shadow-lg transition-colors">
-                        View Messages {unreadCount > 0 && <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full ml-2">{unreadCount}</span>}
-                      </Link>
-                    </div>
-                  </div>
-
-                  {/* MASTER RESUME */}
-                  <div className="bg-white rounded-[2rem] p-8 md:p-10 border border-slate-200 shadow-sm h-auto flex flex-col relative overflow-hidden">
-                    {!athleteProfile?.is_premium && (
-                      <div className="absolute inset-0 z-10 bg-white/70 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center">
-                        <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4 border border-slate-200 shadow-inner">
-                          <Lock className="w-8 h-8 text-slate-400" />
-                        </div>
-                        <h3 className="text-xl font-black text-slate-900 mb-2">Resume Builder is Locked</h3>
-                        <p className="text-slate-500 font-medium mb-6 max-w-sm">Upgrade to Pro to create a master athletic resume that you can attach to any recruiting pitch with one click.</p>
-                        <Link href="/pro" className="bg-gradient-to-r from-amber-400 to-amber-500 text-amber-950 font-black px-6 py-3 rounded-xl shadow-lg hover:scale-105 transition-transform flex items-center gap-2">
-                          <Crown className="w-4 h-4" /> Unlock Pro Features
-                        </Link>
-                      </div>
-                    )}
-
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 pb-6 border-b border-slate-100 gap-4">
-                      <div>
-                        <h2 className="text-2xl font-black text-slate-900 flex items-center">
-                          <FileText className="w-6 h-6 mr-3 text-emerald-500" /> Master Resume
-                        </h2>
-                        <p className="text-slate-500 font-medium mt-1 text-sm">Save your academics and achievements. Attach this to any feed pitch instantly.</p>
-                      </div>
-                      
-                      {athleteProfile?.is_premium && (
-                        <button 
-                          onClick={handleSaveResume}
-                          disabled={isSavingResume}
-                          className="flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-white font-black px-5 py-2.5 rounded-xl text-sm transition-colors shadow-md disabled:opacity-50 shrink-0"
-                        >
-                          <Save className="w-4 h-4" /> {isSavingResume ? 'Saving...' : 'Save Resume'}
-                        </button>
-                      )}
-                    </div>
-
-                    <div className="flex-1 flex flex-col">
-                      <textarea 
-                        value={resumeText}
-                        onChange={(e) => setResumeText(e.target.value)}
-                        disabled={!athleteProfile?.is_premium}
-                        placeholder="Example:&#10;&#10;Academics:&#10;GPA: 3.9 (Unweighted)&#10;SAT: 1450&#10;Intended Major: Business Administration&#10;&#10;Athletic Highlights:&#10;• 2024 State Finalist (400m)&#10;• 3x Varsity Letterman&#10;• Team Captain (Junior & Senior Year)"
-                        className="flex-1 w-full bg-slate-50 border border-slate-200 rounded-2xl p-5 text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white resize-none min-h-[250px]"
-                      />
-                      <p className="text-xs font-bold text-slate-400 text-right mt-3">
-                        Markdown and line breaks are supported.
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* TARGET SCHOOLS */}
-                  <div className="bg-white rounded-[2rem] p-8 md:p-10 border border-slate-200 shadow-sm relative overflow-hidden">
-                    <div className="flex items-center justify-between mb-6 border-b border-slate-100 pb-6">
-                      <div>
-                        <h3 className="text-xl font-black text-slate-900 tracking-tight flex items-center">
-                          <School className="w-6 h-6 mr-2 text-blue-600" /> Target Schools
-                        </h3>
-                        <p className="text-slate-500 font-medium text-sm mt-1">Colleges you are actively interested in.</p>
-                      </div>
-                      <div className="bg-slate-100 text-slate-600 font-bold px-3 py-1.5 rounded-lg text-xs">
-                        {savedColleges?.length || 0} Saved
-                      </div>
-                    </div>
-                    
-                    {savedColleges && savedColleges.length > 0 ? (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {savedColleges.map((saved) => {
-                          const college = saved.universities; 
-                          if (!college) return null;
-                          return (
-                            <div key={saved.id} className="flex items-center gap-4 p-4 rounded-2xl border border-slate-200 bg-slate-50 hover:border-blue-300 hover:bg-blue-50 transition-colors group cursor-pointer relative">
-                              <Link href={`/college/${college.id}`} className="absolute inset-0 z-10" aria-label={`View ${college.name}`}></Link>
-                              <div className="w-12 h-12 bg-white rounded-full border border-slate-200 shadow-sm flex items-center justify-center shrink-0 overflow-hidden relative z-0">
-                                {college.logo_url ? (
-                                  <img src={college.logo_url} alt={college.name} className="w-8 h-8 object-contain" />
-                                ) : (
-                                  <School className="w-6 h-6 text-slate-400" />
-                                )}
-                              </div>
-                              <div className="flex-1 truncate relative z-0">
-                                <h4 className="font-bold text-slate-900 truncate group-hover:text-blue-600 transition-colors">{college.name}</h4>
-                                <p className="text-xs font-medium text-slate-500 flex items-center mt-0.5">
-                                  {college.division || 'NCAA'} • {college.state || 'USA'}
-                                </p>
+                 {/* 📊 TAB 1: STATS */}
+                 {activeTab === 'stats' && (
+                    <div className="grid grid-cols-1 gap-8 animate-in fade-in duration-300">
+                       <div className={`bg-white rounded-[2rem] p-8 border ${projection.border} shadow-sm flex flex-col md:flex-row items-center gap-8`}>
+                          <div className="flex flex-col items-center justify-center text-center w-full md:w-1/3">
+                              <Target className={`w-12 h-12 mb-4 ${projection.color}`} />
+                              <h3 className={`text-6xl font-black mb-2 ${projection.color}`}>{projection.overallScore}</h3>
+                              <div className={`px-4 py-1.5 rounded-full text-[10px] sm:text-xs font-black uppercase tracking-widest border mb-4 shadow-sm ${projection.bg} ${projection.border} ${projection.color}`}>
+                                 {projection.overallLabel}
                               </div>
                               <button 
-                                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleRemoveCollege(saved.id); }} 
-                                 className="relative z-20 p-2 text-slate-400 hover:text-red-500 hover:bg-white rounded-lg transition-colors"
-                                 title="Remove school"
+                                onClick={handleReSync}
+                                disabled={isSyncing || !canSync}
+                                className="mt-4 w-full bg-slate-900 hover:bg-black text-white py-3 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition-transform hover:scale-[1.02] disabled:opacity-50"
                               >
-                                 <Trash2 className="w-4 h-4" />
+                                 {isSyncing ? <RefreshCw className="w-4 h-4 animate-spin"/> : <RefreshCw className="w-4 h-4"/>} 
+                                 {canSync ? 'Sync Latest Marks' : 'Sync on Cooldown'}
                               </button>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    ) : (
-                      <div className="text-center py-8 bg-slate-50 rounded-2xl border border-slate-200 border-dashed">
-                        <Bookmark className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-                        <h4 className="text-lg font-bold text-slate-900 mb-1">No schools saved yet</h4>
-                        <p className="text-sm text-slate-500 font-medium mb-4 max-w-sm mx-auto">Build your recruiting board by saving colleges that match your athletic and academic goals.</p>
-                        <Link href="/search" className="inline-flex items-center justify-center bg-white border border-slate-200 hover:border-blue-400 hover:text-blue-600 text-slate-700 font-bold px-6 py-2.5 rounded-xl transition-all shadow-sm">
-                          Open College Finder
-                        </Link>
-                      </div>
-                    )}
-                  </div>
-
-                </div>
-              )}
-
-              {/* 🕵️ TAB 3: PRO Scout */}
-              {activeTab === 'scout' && (
-                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                  <div className="bg-white rounded-[2rem] p-8 md:p-10 shadow-sm border border-slate-200 h-auto flex flex-col relative overflow-hidden">
-                    {!athleteProfile?.is_premium && (
-                      <div className="absolute inset-0 z-10 bg-white/70 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center">
-                        <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4 border border-slate-200 shadow-inner">
-                          <Lock className="w-8 h-8 text-slate-400" />
-                        </div>
-                        <h3 className="text-xl font-black text-slate-900 mb-2">Pro Scout is Locked</h3>
-                        <p className="text-slate-500 font-medium mb-6 max-w-sm">Upgrade to Pro to instantly generate a recruiting score and tier projection for any competitor in the country.</p>
-                        <Link href="/pro" className="bg-gradient-to-r from-amber-400 to-amber-500 text-amber-950 font-black px-6 py-3 rounded-xl shadow-lg hover:scale-105 transition-transform flex items-center gap-2">
-                          <Crown className="w-4 h-4" /> Unlock Pro Features
-                        </Link>
-                      </div>
-                    )}
-
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 pb-6 border-b border-slate-100 gap-4">
-                      <div>
-                        <h2 className="text-2xl font-black text-slate-900 flex items-center">
-                          <Search className="w-6 h-6 mr-3 text-indigo-500" /> Pro Scout
-                        </h2>
-                        <p className="text-slate-500 font-medium mt-1 text-sm">Paste any athlete's Athletic.net link to see their recruiting score.</p>
-                      </div>
-                      <div className="bg-slate-100 text-slate-600 font-bold px-3 py-1.5 rounded-lg text-xs shrink-0">
-                        {scoutsRemaining} / 10 Daily Uses
-                      </div>
-                    </div>
-
-                    <form onSubmit={handleScoutCompetitor} className="flex gap-2 mb-6">
-                      <input 
-                        type="url" 
-                        required 
-                        placeholder="Paste Athletic.net link..." 
-                        value={scoutUrl} 
-                        onChange={(e) => setScoutUrl(e.target.value)} 
-                        disabled={!athleteProfile?.is_premium || scoutsRemaining <= 0}
-                        className="flex-1 bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-sm transition-colors" 
-                      />
-                      <button 
-                        type="submit" 
-                        disabled={isScouting || !athleteProfile?.is_premium || scoutsRemaining <= 0} 
-                        className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3 rounded-xl font-bold text-sm disabled:opacity-50 transition-colors shadow-sm shrink-0 flex items-center"
-                      >
-                        {isScouting ? <RefreshCw className="w-4 h-4 animate-spin" /> : 'Scout'}
-                      </button>
-                    </form>
-
-                    {scoutedAthletes.length > 0 && (
-                      <div className="mt-8 space-y-4">
-                        <h4 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-4">Saved Scout Reports</h4>
-                        {scoutedAthletes.map(scout => {
-                          const proj = getAthleteProjection(scout.prs, scout.gender);
-                          return (
-                            <div key={scout.id} className="bg-slate-50 border border-slate-200 rounded-2xl p-5 relative group transition-all hover:border-indigo-300">
-                              <button
-                                onClick={() => handleRemoveScouted(scout.id)}
-                                className="absolute top-4 right-4 p-1.5 bg-white text-slate-400 hover:text-red-500 rounded-lg border border-slate-200 shadow-sm opacity-0 group-hover:opacity-100 transition-all z-20"
-                                title="Remove report"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-
-                              <div className="flex justify-between items-start mb-4 pb-4 border-b border-slate-200 pr-8">
-                                <div>
-                                  <h4 className="text-lg font-black text-slate-900">{scout.first_name} {scout.last_name}</h4>
-                                  <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-0.5">{scout.high_school}</p>
-                                </div>
-                                <div className="text-right flex flex-col items-end">
-                                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Overall Score</span>
-                                  <div className="flex items-end gap-1">
-                                    <span className="font-black text-2xl text-indigo-600 leading-none">{scout.calculated_score || '-'}</span>
-                                    <span className="text-[10px] font-bold text-slate-400 pb-0.5">/99</span>
-                                  </div>
-                                  <span className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest mt-1 bg-indigo-50 px-1.5 py-0.5 rounded">Via {proj.bestEvent}</span>
-                                </div>
-                              </div>
-
-                              <div className={`px-4 py-2 rounded-xl border mb-4 inline-block ${proj.bg || 'bg-slate-100'} ${proj.border || 'border-slate-200'}`}>
-                                <span className={`text-sm font-black ${proj.color || 'text-slate-600'}`}>{scout.calculated_tier || 'N/A'}</span>
-                              </div>
-
-                              {proj.eventBreakdowns && proj.eventBreakdowns.length > 0 && (
-                                <div className="space-y-2 mb-4 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
-                                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">All Events</p>
-                                  {proj.eventBreakdowns.map((ev: any, idx: number) => (
-                                    <div key={idx} className="flex items-center justify-between bg-white border border-slate-100 rounded-lg p-2.5 shadow-sm">
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-xs font-black text-slate-700">{ev.event}</span>
-                                        <span className="text-[10px] font-medium text-slate-500">{ev.mark}</span>
+                          </div>
+                          <div className="flex-1 w-full flex flex-col justify-center">
+                              <p className="text-slate-500 text-sm font-medium leading-relaxed mb-6">{projection.overallDesc}</p>
+                              <div className="space-y-4">
+                                {projection.eventBreakdowns.slice(0, 3).map((ev: any, idx: number) => (
+                                  <div key={idx} className="bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                                      <div>
+                                        <h4 className="font-black text-slate-900 flex items-center gap-2">
+                                          {ev.event} <span className="bg-white text-slate-500 text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-widest border border-slate-200">{ev.currentTier}</span>
+                                        </h4>
                                       </div>
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-[10px] font-bold text-slate-400">{ev.currentTier}</span>
-                                        <span className="text-xs font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">{ev.score}</span>
+                                      <div className="text-right flex items-center gap-4">
+                                        <div className="hidden sm:block text-[9px] font-bold text-emerald-600 uppercase tracking-widest bg-emerald-50 px-2 py-1 rounded border border-emerald-100">
+                                          {ev.deltaFormatted} to {ev.nextTier}
+                                        </div>
+                                        <span className="text-xl font-black text-blue-600">{ev.mark}</span>
                                       </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-
-                              <button 
-                                onClick={() => setActiveCardAthlete(scout)}
-                                className="w-full mt-2 bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 rounded-xl text-xs transition-colors flex items-center justify-center gap-2 shadow-sm"
-                              >
-                                <Share2 className="w-4 h-4" /> Export Scout Card
-                              </button>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* 🎁 TAB 4: REWARDS */}
-              {activeTab === 'rewards' && (
-                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                  
-                  {/* TITLE MANAGER */}
-                  <div className="bg-white rounded-[2rem] p-8 border border-slate-200 shadow-sm relative">
-                    <div className="flex items-center justify-between mb-6">
-                      <div>
-                        <h3 className="text-xl font-black text-slate-900 tracking-tight">Rank Titles</h3>
-                        <p className="text-xs text-slate-500 font-medium mt-1">Equip your highest earned rank.</p>
-                      </div>
-                      <Trophy className="w-6 h-6 text-slate-300" />
-                    </div>
-
-                    {/* 🚨 NEW SLEEK TITLE DROPDOWN MENU 🚨 */}
-                    <div className="relative mb-6">
-                      <button 
-                        onClick={() => setIsTitleDropdownOpen(!isTitleDropdownOpen)}
-                        className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-all text-left bg-blue-50 border-blue-300 shadow-sm`}
-                      >
-                        <div className="flex items-center gap-4">
-                          <div className={`px-3 py-1.5 rounded-lg text-[10px] font-black tracking-widest uppercase text-white ${activeTitle.badgeClass}`}>
-                            {activeTitle.name}
-                          </div>
-                          <span className="block text-[10px] font-bold text-blue-500 uppercase tracking-wider">Currently Equipped</span>
-                        </div>
-                        {isTitleDropdownOpen ? <ChevronUp className="w-5 h-5 text-blue-500" /> : <ChevronDown className="w-5 h-5 text-blue-500" />}
-                      </button>
-
-                      {isTitleDropdownOpen && (
-                        <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl border border-slate-200 shadow-2xl z-20 overflow-hidden animate-in fade-in slide-in-from-top-2">
-                          <div className="max-h-64 overflow-y-auto p-2 space-y-1 custom-scrollbar">
-                            {EARNED_TITLES.map((title) => {
-                              const isUnlocked = highestPercentile <= title.reqPercentile;
-                              const isEquipped = equippedTitle === title.id;
-
-                              return (
-                                <button 
-                                  key={title.id}
-                                  disabled={!isUnlocked || isEquipping}
-                                  onClick={() => handleEquipTitle(title.id)}
-                                  className={`w-full flex items-center justify-between p-3 rounded-xl transition-all text-left ${
-                                    isEquipped 
-                                      ? 'bg-blue-50/50' 
-                                      : isUnlocked 
-                                        ? 'hover:bg-slate-50' 
-                                        : 'opacity-40 cursor-not-allowed'
-                                  }`}
-                                >
-                                  <div className="flex items-center gap-3">
-                                    <div className={`px-2 py-1 rounded text-[9px] font-black tracking-widest uppercase text-white ${isUnlocked ? title.badgeClass : 'bg-slate-300 text-slate-500 border border-slate-400'}`}>
-                                      {title.name}
-                                    </div>
-                                    {!isUnlocked && <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider flex items-center"><Lock className="w-2.5 h-2.5 inline mr-1 -mt-0.5" />{title.unlockText}</span>}
                                   </div>
-                                  {isEquipped && <CheckCircle2 className="w-4 h-4 text-blue-500" />}
-                                </button>
-                              )
-                            })}
+                                ))}
+                                {projection.eventBreakdowns.length === 0 && (
+                                  <div className="text-center text-slate-500 font-medium py-4">No valid results found. Click Sync.</div>
+                                )}
+                              </div>
                           </div>
-                        </div>
-                      )}
+                       </div>
                     </div>
+                 )}
 
-                    <Link href="/dashboard/customize" className={`w-full flex items-center justify-center py-4 rounded-xl font-black transition-all bg-slate-900 text-white hover:bg-slate-800 hover:-translate-y-0.5 shadow-md`}>
-                      <Paintbrush className="w-5 h-5 mr-2" /> Customize Profile
-                    </Link>
-                  </div>
+                 {/* 🎯 TAB 3: RECRUITING BOARD */}
+                 {activeTab === 'recruiting' && (
+                    <div className="grid grid-cols-1 gap-8 animate-in fade-in duration-300">
+                       <div className="bg-white rounded-[2rem] p-8 shadow-sm border border-slate-200 relative overflow-visible flex flex-col z-20">
+                         <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 pb-6 border-b border-slate-100 gap-4">
+                           <div>
+                             <h3 className="text-2xl font-black text-slate-900 tracking-tight flex items-center">
+                               <School className="w-6 h-6 mr-3 text-blue-600" /> Target Colleges
+                             </h3>
+                             <p className="text-slate-500 font-medium text-sm mt-1">Search and save colleges you are actively interested in.</p>
+                           </div>
+                           <div className="bg-slate-100 text-slate-600 font-bold px-3 py-1.5 rounded-lg text-xs shrink-0">
+                             {savedColleges?.length || 0} Saved
+                           </div>
+                         </div>
 
-                  {/* REFERRAL PROGRAM WITH MILESTONES */}
-                  <div className="bg-slate-900 rounded-[2rem] p-8 md:p-12 border border-slate-800 shadow-xl relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 blur-[80px] rounded-full pointer-events-none"></div>
-                    
-                    <div className="flex flex-col md:flex-row items-start justify-between gap-12 relative z-10">
-                      <div className="flex-1 w-full">
-                        <h3 className="text-3xl font-black text-white tracking-tight mb-3 flex items-center gap-3">
-                          <Users className="w-8 h-8 text-emerald-400" /> Invite & Earn
-                        </h3>
-                        <p className="text-slate-300 font-medium text-lg mb-6 leading-relaxed max-w-xl">
-                          Get <strong className="text-amber-400">1 Free Boost</strong> for every single teammate that uses your unique code. Reach 5 invites to unlock the exclusive Plasma Border!
-                        </p>
-                        
-                        {!myReferralCode ? (
-                          <div className="bg-slate-800 border border-slate-700 text-slate-400 p-4 rounded-xl text-sm font-bold inline-block">
-                            Sync your Athletic.net profile above to generate your unique invite code!
-                          </div>
-                        ) : (
-                          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                            <div className="bg-slate-950 px-6 py-3 rounded-xl border border-emerald-500/30 flex items-center gap-4 shadow-inner">
-                              <span className="text-[10px] text-slate-500 uppercase tracking-widest font-black">Your Code:</span>
-                              <span className="text-2xl font-mono font-black tracking-widest text-emerald-400">{myReferralCode}</span>
-                            </div>
-                            <button 
-                              onClick={() => handleShareCode(myReferralCode)}
-                              className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-6 py-3.5 rounded-xl font-black transition-colors flex items-center gap-2"
-                            >
-                              <Share2 className="w-5 h-5" /> Share Code
-                            </button>
-                          </div>
-                        )}
-
-                        {showCodeEntry && (
-                          <div className="mt-8 bg-slate-800/50 p-6 rounded-2xl border border-slate-700 max-w-md">
-                            <h4 className="text-white font-bold mb-2 flex items-center gap-2">
-                              <Gift className="w-5 h-5 text-fuchsia-400" /> Were you invited?
-                            </h4>
-                            <p className="text-xs text-slate-400 mb-4">Enter your teammate's code below to get a free Boost!</p>
-                            <form onSubmit={handleSubmitInviteCode} className="flex gap-2">
+                         {/* 🚨 LIVE COLLEGE FINDER WIDGET 🚨 */}
+                         <div className="relative mb-8">
+                           <div className="flex items-center bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 focus-within:ring-2 focus-within:ring-blue-500 focus-within:bg-white transition-all shadow-sm">
+                              <Search className="w-5 h-5 text-slate-400 mr-3 shrink-0" />
                               <input 
-                                type="text" 
-                                required
-                                placeholder="Enter Code (e.g. 123456)" 
-                                value={inviteCodeInput}
-                                onChange={(e) => setInviteCodeInput(e.target.value)}
-                                className="flex-1 bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-2 focus:outline-none focus:border-fuchsia-500 font-mono text-sm"
+                                type="text"
+                                placeholder="Search for any college (e.g., Oregon, UCLA)..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="w-full bg-transparent focus:outline-none text-sm font-bold text-slate-900 placeholder:text-slate-400 placeholder:font-medium"
                               />
-                              <button 
-                                type="submit" 
-                                disabled={isSubmittingCode}
-                                className="bg-fuchsia-600 hover:bg-fuchsia-500 text-white px-4 py-2 rounded-xl font-bold text-sm disabled:opacity-50"
-                              >
-                                {isSubmittingCode ? '...' : 'Submit'}
-                              </button>
-                            </form>
+                              {isSearchingColleges && <RefreshCw className="w-4 h-4 text-blue-500 animate-spin" />}
+                           </div>
+                           
+                           {/* Dropdown Results */}
+                           {searchQuery.length >= 3 && searchResults.length > 0 && (
+                              <div className="absolute top-full mt-2 left-0 right-0 bg-white rounded-xl border border-slate-200 shadow-xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2">
+                                 {searchResults.map((uni: any) => {
+                                   const isAlreadySaved = savedColleges.some(c => c.college_id === uni.id);
+                                   return (
+                                     <div key={uni.id} className="flex items-center justify-between p-4 border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
+                                         <Link href={`/college/${uni.id}`} className="flex items-center gap-4 flex-1">
+                                           <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center shrink-0 border border-slate-200 overflow-hidden shadow-sm">
+                                               {uni.logo_url ? <img src={uni.logo_url} className="w-8 h-8 object-contain"/> : <School className="w-5 h-5 text-slate-400" />}
+                                           </div>
+                                           <div>
+                                               <p className="text-sm font-bold text-slate-900">{uni.name}</p>
+                                               <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">{uni.division} • {uni.state}</p>
+                                           </div>
+                                         </Link>
+                                         <button 
+                                           onClick={() => handleSaveCollege(uni.id)} 
+                                           disabled={isAlreadySaved}
+                                           className={`p-2.5 rounded-lg transition-colors shadow-sm border shrink-0 ${isAlreadySaved ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed' : 'bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white border-blue-200 hover:border-blue-600'}`}
+                                           title={isAlreadySaved ? "Already saved" : "Save to board"}
+                                         >
+                                           {isAlreadySaved ? <Check className="w-4 h-4" /> : <BookmarkPlus className="w-4 h-4" />}
+                                         </button>
+                                     </div>
+                                   )
+                                 })}
+                              </div>
+                           )}
+                         </div>
+                         
+                         {/* Board List */}
+                         {savedColleges && savedColleges.length > 0 ? (
+                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 flex-1">
+                             {savedColleges.map((saved) => {
+                               const college = saved.universities; 
+                               if (!college) return null;
+                               return (
+                                 <div key={saved.id} className="flex items-center gap-4 p-4 rounded-2xl border border-slate-200 bg-slate-50 hover:border-blue-300 hover:bg-blue-50 transition-colors group cursor-pointer relative">
+                                   <Link href={`/college/${college.id}`} className="absolute inset-0 z-10" aria-label={`View ${college.name}`}></Link>
+                                   <div className="w-12 h-12 bg-white rounded-full border border-slate-200 shadow-sm flex items-center justify-center shrink-0 overflow-hidden relative z-0">
+                                     {college.logo_url ? (
+                                       <img src={college.logo_url} alt={college.name} className="w-8 h-8 object-contain" />
+                                     ) : (
+                                       <School className="w-6 h-6 text-slate-400" />
+                                     )}
+                                   </div>
+                                   <div className="flex-1 truncate relative z-0">
+                                     <h4 className="font-bold text-slate-900 truncate group-hover:text-blue-600 transition-colors">{college.name}</h4>
+                                     <p className="text-xs font-medium text-slate-500 flex items-center mt-0.5">
+                                       {college.division || 'NCAA'} • {college.state || 'USA'}
+                                     </p>
+                                   </div>
+                                   <button 
+                                       onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleRemoveCollege(saved.id); }} 
+                                       className="relative z-20 p-2 text-slate-400 hover:text-red-500 hover:bg-white rounded-lg transition-colors"
+                                       title="Remove school"
+                                   >
+                                       <Trash2 className="w-4 h-4" />
+                                   </button>
+                                 </div>
+                               )
+                             })}
+                           </div>
+                         ) : (
+                           <div className="text-center py-12 bg-slate-50 rounded-2xl border border-slate-200 border-dashed flex-1 flex flex-col items-center justify-center">
+                             <Bookmark className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+                             <h4 className="text-xl font-black text-slate-900 mb-2">Your board is empty</h4>
+                             <p className="text-sm text-slate-500 font-medium max-w-sm mx-auto">Use the search bar above to look up colleges and add them to your recruiting target list.</p>
+                           </div>
+                         )}
+                       </div>
+                    </div>
+                 )}
+
+                 {/* 🕵️‍♂️ TAB 4: PRO SCOUT */}
+                 {activeTab === 'scout' && (
+                    <div className="bg-white rounded-[2rem] p-8 shadow-sm border border-slate-200 animate-in fade-in duration-300">
+                       <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 pb-6 border-b border-slate-100 gap-4">
+                          <div>
+                             <h3 className="text-2xl font-black text-slate-900 flex items-center">
+                               <Search className="w-6 h-6 mr-3 text-blue-600" /> Pro Scout Analytics
+                             </h3>
+                             <p className="text-slate-500 font-medium text-sm mt-1">Generate comprehensive recruiting reports on competitors.</p>
                           </div>
-                        )}
-                      </div>
+                          <div className="bg-blue-50 text-blue-700 border border-blue-200 font-bold px-4 py-2 rounded-lg text-xs flex items-center gap-2">
+                             <Zap className="w-4 h-4" /> {scoutsRemaining} Scans Left Today
+                          </div>
+                       </div>
+
+                       <form onSubmit={handleScoutCompetitor} className="flex flex-col sm:flex-row gap-3 mb-10 bg-slate-50 p-2 rounded-[1.5rem] border border-slate-200">
+                          <input 
+                            type="url" 
+                            value={scoutUrl} 
+                            onChange={e=>setScoutUrl(e.target.value)} 
+                            placeholder="Paste competitor's Athletic.net URL..." 
+                            className="flex-1 bg-transparent px-4 py-3 focus:outline-none font-medium text-sm text-slate-900 placeholder:text-slate-400" 
+                          />
+                          <button 
+                            type="submit" 
+                            disabled={isScouting || scoutsRemaining <= 0} 
+                            className="bg-slate-900 hover:bg-black text-white px-8 py-3 rounded-xl font-bold transition-all shadow-md disabled:opacity-50 flex items-center justify-center"
+                          >
+                             {isScouting ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin"/> Scanning...</> : 'Generate Report'}
+                          </button>
+                       </form>
+
+                       {scoutedAthletes.length > 0 ? (
+                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {scoutedAthletes.map(a => (
+                               <div key={a.id} className="p-5 border border-slate-200 bg-slate-50 rounded-2xl flex items-center justify-between hover:shadow-md transition-shadow group">
+                                  <div>
+                                     <h4 className="font-black text-slate-900 text-lg">{a.first_name} {a.last_name}</h4>
+                                     <p className="text-xs font-bold text-slate-500 mt-1 flex items-center gap-1.5">
+                                       <Star className="w-3.5 h-3.5 text-amber-400" /> Score: {a.calculated_score} <span className="mx-1">•</span> {a.calculated_tier}
+                                     </p>
+                                  </div>
+                                  <div className="flex gap-2">
+                                     <button onClick={() => setActiveCardAthlete(a)} className="p-3 bg-white border border-slate-200 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-all shadow-sm" title="View Scout Card">
+                                       <Eye className="w-4 h-4"/>
+                                     </button>
+                                     <button onClick={() => handleRemoveScouted(a.id)} className="p-3 bg-white border border-slate-200 text-red-500 rounded-xl hover:bg-red-500 hover:text-white hover:border-red-500 transition-all shadow-sm opacity-0 group-hover:opacity-100" title="Delete Report">
+                                       <Trash2 className="w-4 h-4"/>
+                                     </button>
+                                  </div>
+                               </div>
+                            ))}
+                         </div>
+                       ) : (
+                         <div className="text-center py-12 border border-slate-200 border-dashed rounded-2xl bg-slate-50">
+                            <Users className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+                            <h4 className="text-lg font-black text-slate-900">No scouting reports yet.</h4>
+                            <p className="text-sm text-slate-500 mt-1">Paste a URL above to analyze your competition.</p>
+                         </div>
+                       )}
+                    </div>
+                 )}
+             </div>
+
+             {/* 🚨 RIGHT COLUMN (Boosts, Rewards, Progression) 🚨 */}
+             <div className="xl:col-span-1 space-y-6">
+                 
+                 {/* 🚀 BOOST WALLET */}
+                 <div className="bg-slate-900 rounded-[2rem] p-8 shadow-xl text-white flex justify-between items-center relative overflow-hidden group">
+                    <div className="absolute inset-0 bg-gradient-to-br from-amber-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                    <div className="relative z-10">
+                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Boost Wallet</p>
+                       <p className="text-5xl font-black">{athleteProfile?.boosts_available || 0}</p>
+                    </div>
+                    <div className="relative z-10 w-16 h-16 bg-amber-500/20 border border-amber-500/30 rounded-2xl flex items-center justify-center shadow-inner">
+                       <Rocket className="w-8 h-8 text-amber-400" />
+                    </div>
+                 </div>
+
+                 {/* 🎁 REWARDS (Invite & Earn) */}
+                 <div className="bg-slate-900 rounded-[2rem] p-8 shadow-xl text-white border border-slate-800">
+                    <div className="flex items-center gap-3 mb-3">
+                       <Users className="w-7 h-7 text-emerald-400" />
+                       <h3 className="text-3xl font-black tracking-tight">Invite & Earn</h3>
+                    </div>
+                    <p className="text-sm text-slate-400 font-medium mb-8 leading-relaxed">
+                       Get <strong className="text-amber-400">1 Free Boost</strong> for every teammate that uses your unique code. Reach 5 invites to unlock the exclusive Plasma Border!
+                    </p>
+
+                    <div className="flex flex-col gap-4 mb-8">
+                       <div className="flex flex-col sm:flex-row sm:items-center gap-3 bg-black/40 border border-slate-700/50 p-4 rounded-2xl">
+                          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest sm:w-24">Your Code:</span>
+                          <span className="font-mono font-black text-emerald-400 text-xl tracking-widest flex-1">{myReferralCode || 'SYNCING...'}</span>
+                          <button onClick={() => handleShareCode(myReferralCode || '')} className="w-full sm:w-auto p-3 bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-400 rounded-xl transition-colors flex items-center justify-center gap-2 font-bold text-sm">
+                             <Share2 className="w-4 h-4" /> Share
+                          </button>
+                       </div>
+                       
+                       <div className="pt-4 border-t border-slate-800">
+                           <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Have an Invite Code?</p>
+                           <form onSubmit={handleSubmitInviteCode} className="flex gap-2">
+                              <input type="text" value={inviteCodeInput} onChange={e=>setInviteCodeInput(e.target.value)} disabled={!showCodeEntry} placeholder={showCodeEntry ? "Enter invite code..." : "Locked (Past 7 days)"} className="bg-black/40 border border-slate-700/50 px-4 py-3 rounded-xl font-bold text-white flex-1 min-w-0 focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-50 text-sm" />
+                              <button type="submit" disabled={!showCodeEntry || isSubmittingCode} className="bg-emerald-600 hover:bg-emerald-500 text-white px-5 rounded-xl transition-transform hover:scale-105 shadow-sm disabled:opacity-50"><Check className="w-5 h-5" /></button>
+                           </form>
+                       </div>
                     </div>
 
-                    <div className="mt-12 pt-8 border-t border-slate-800 relative z-10">
-                      <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-12 sm:mb-8 gap-4">
-                        <div>
-                          <h4 className="text-xl font-black text-white flex items-center gap-2">
-                            <Trophy className="w-5 h-5 text-amber-400"/> Reward Track
-                          </h4>
-                          <p className="text-sm text-slate-400 font-medium mt-1">
-                            You have <strong className="text-white">{currentRefs}</strong> verified invites.
-                          </p>
-                        </div>
-                        <div className="text-left sm:text-right">
-                          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Next Mega Bonus</span>
-                          <span className="text-lg font-black text-amber-400">{base + 5} Invites</span>
-                        </div>
-                      </div>
-
-                      {/* Visual Track */}
-                      <div className="relative w-full h-4 bg-slate-950 rounded-full border border-slate-800 shadow-inner mb-10 mx-auto max-w-[95%]">
-                        
-                        <div 
-                          className="absolute left-0 top-0 h-full bg-gradient-to-r from-blue-500 via-emerald-400 to-amber-400 rounded-full transition-all duration-1000" 
-                          style={{ width: `${progressPct}%` }}
-                        >
-                          <div className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-[0_0_10px_rgba(255,255,255,0.8)]"></div>
-                        </div>
-
-                        {milestones.map((m, i) => {
-                          const posPct = ((m.count - base) / 5) * 100;
-                          const isAchieved = currentRefs >= m.count;
-                          const Icon = m.icon;
-                          
-                          return (
-                            <div key={i} className="absolute top-1/2 flex flex-col items-center" style={{ left: `${posPct}%`, transform: 'translate(-50%, -50%)' }}>
-                              <div className={`w-8 h-8 rounded-full flex items-center justify-center border-4 border-slate-900 z-10 transition-colors duration-500 ${isAchieved ? m.bg : 'bg-slate-800'} ${m.isMajor ? 'w-10 h-10 shadow-[0_0_15px_rgba(245,158,11,0.5)]' : ''}`}>
-                                {isAchieved ? <CheckCircle2 className="w-4 h-4 text-white" /> : <Icon className={`w-4 h-4 ${m.isMajor ? 'text-amber-400' : 'text-slate-500'}`} />}
-                              </div>
-
-                              <div className="absolute top-12 text-center w-24">
-                                <span className={`block text-[11px] font-black mb-0.5 ${isAchieved ? m.color : 'text-slate-500'}`}>{m.label}</span>
-                                <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">{m.count} Invites</span>
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
+                    {/* Milestone Track */}
+                    <div>
+                       <div className="flex justify-between items-end mb-4">
+                          <div className="flex items-center gap-2">
+                             <Trophy className="w-5 h-5 text-amber-400" />
+                             <span className="font-black text-lg">Reward Track</span>
+                          </div>
+                          <div className="text-right">
+                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block">Next Mega Bonus</span>
+                              <span className="text-amber-400 font-black text-sm">5 Invites</span>
+                          </div>
+                       </div>
+                       <p className="text-xs text-slate-400 mb-8">You have <strong>{currentRefs}</strong> verified invites.</p>
+                       
+                       <div className="relative pt-2 pb-2 px-1">
+                          <div className="absolute top-6 left-0 w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                             <div className="h-full bg-emerald-500 transition-all duration-1000 relative" style={{ width: `${progressPct}%` }}>
+                                <div className="absolute inset-0 bg-white/20 w-full animate-[shimmerSlow_2s_infinite]"></div>
+                             </div>
+                          </div>
+                          <div className="relative flex justify-between">
+                             {milestones.map((m, i) => {
+                                const isAchieved = currentRefs >= m.count;
+                                return (
+                                  <div key={i} className="flex flex-col items-center relative group w-8 sm:w-12">
+                                     <div className={`w-8 h-8 rounded-full flex items-center justify-center relative z-10 transition-all duration-500 ${isAchieved ? 'bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)] scale-110' : 'bg-slate-900 border-2 border-slate-800 text-slate-600'}`}>
+                                        {isAchieved ? <Check className="w-4 h-4" /> : <m.icon className="w-3 h-3" />}
+                                     </div>
+                                     <span className={`text-[8px] font-bold uppercase mt-3 text-center leading-tight ${isAchieved ? 'text-emerald-400' : 'text-slate-500'}`}>
+                                        {isAchieved ? 'Unlocked' : m.label}
+                                     </span>
+                                     <span className={`text-[10px] font-black mt-1 ${isAchieved ? 'text-white' : 'text-slate-600'}`}>{m.count} Invites</span>
+                                  </div>
+                                )
+                             })}
+                          </div>
+                       </div>
                     </div>
-                  </div>
-                </div>
-              )}
+                 </div>
 
-            </div>
+                 {/* 👑 RANK TITLES & CUSTOMIZE */}
+                 <div className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm flex flex-col">
+                    <div className="flex items-center justify-between mb-6">
+                       <div>
+                         <h3 className="text-xl font-black text-slate-900">Rank Titles</h3>
+                         <p className="text-xs font-medium text-slate-500 mt-1">Equip your highest earned rank.</p>
+                       </div>
+                       <Trophy className="w-6 h-6 text-slate-300" />
+                    </div>
+                    
+                    <div className="relative mb-6">
+                       <select 
+                         value={equippedTitle} 
+                         onChange={(e) => handleEquipTitle(e.target.value)}
+                         disabled={isEquipping}
+                         className="w-full bg-slate-50 border border-blue-200 text-slate-900 font-black text-sm px-4 py-4 rounded-xl appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
+                       >
+                          {EARNED_TITLES.map(t => {
+                             const isUnlocked = highestPercentile <= t.reqPercentile;
+                             return (
+                                <option key={t.id} value={t.id} disabled={!isUnlocked}>
+                                   {t.name} {isUnlocked ? '' : `(🔒 ${t.unlockText})`}
+                                </option>
+                             )
+                          })}
+                       </select>
+                       <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-blue-500 pointer-events-none" />
+                    </div>
+
+                    <Link href="/customize" className="w-full bg-slate-900 hover:bg-black text-white font-black py-4 rounded-xl flex items-center justify-center gap-2 transition-transform hover:scale-[1.02] active:scale-[0.98] shadow-lg text-sm group">
+                       <Paintbrush className="w-4 h-4 group-hover:rotate-12 transition-transform" /> 
+                       <span>Customize Profile</span>
+                    </Link>
+                 </div>
+                 
+                 {/* 🔥 STREAK */}
+                 <div className={`${streakTheme.bg} p-8 rounded-[2rem] border shadow-sm flex flex-col items-center justify-center text-center`}>
+                    <div className="relative w-16 h-16 mb-4 flex items-center justify-center">
+                       <div className="absolute inset-0 bg-white/50 rounded-full blur-xl animate-pulse"></div>
+                       <Flame className={`w-12 h-12 ${streakTheme.icon} relative z-10 drop-shadow-md`} />
+                    </div>
+                    <h3 className={`text-3xl font-black tracking-tighter mb-1 ${streakTheme.text}`}>{streak} Day Streak</h3>
+                    <p className={`font-bold ${streakTheme.text} opacity-80 uppercase tracking-widest text-[10px]`}>Log in daily for +10 Cash</p>
+                 </div>
+             </div>
           </div>
         )}
       </div>
-
-      {/* SCOUT CARD MODAL */}
-      {activeCardAthlete && cardProjection && (
-        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="flex flex-col items-center max-w-md w-full">
-            
-            <div className="flex justify-between items-center w-full mb-4">
-              <h3 className="text-white font-black text-xl">Scout Card</h3>
-              <button onClick={() => setActiveCardAthlete(null)} className="p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors">
-                <X className="w-5 h-5 text-white" />
-              </button>
-            </div>
-
-            <div id="scout-card-export" className={`relative w-[340px] aspect-[4/5] rounded-3xl overflow-hidden shadow-2xl bg-gradient-to-b ${cardAccentColor} border-4 flex flex-col p-6`}>
-               <div className={`absolute -top-10 -right-10 w-48 h-48 rounded-full blur-[60px] ${cardGlowColor}`}></div>
-               <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
-
-               <div className="flex justify-between items-start z-10">
-                  <div className="flex flex-col items-center bg-black/30 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/10 shadow-lg">
-                     <span className="text-5xl font-black text-white leading-none tracking-tighter">{cardProjection.overallScore}</span>
-                     <span className="text-[10px] font-black text-white/80 uppercase tracking-widest mt-1">OVR</span>
-                  </div>
-                  <ShieldCheck className="w-10 h-10 text-white/50" />
-               </div>
-
-               <div className="text-center mt-auto z-10">
-                  <h2 className="text-3xl font-black text-white uppercase italic tracking-tight drop-shadow-md">
-                    {activeCardAthlete.first_name} {activeCardAthlete.last_name}
-                  </h2>
-                  <p className="text-sm text-white/80 font-bold tracking-widest uppercase mt-1">{activeCardAthlete.high_school}</p>
-                  <div className="inline-block px-3 py-1 rounded-md bg-black/30 border border-white/10 mt-3">
-                    <p className="text-[10px] font-black text-white uppercase tracking-widest">{cardProjection.overallLabel}</p>
-                  </div>
-               </div>
-
-               <div className="w-full h-px bg-gradient-to-r from-transparent via-white/40 to-transparent my-6 z-10"></div>
-
-               <div className="flex justify-around z-10 text-white mb-2">
-                  {cardProjection.eventBreakdowns.slice(0,3).map((ev: any, idx: number) => (
-                    <div key={idx} className="flex flex-col items-center">
-                       <span className="text-xl font-black">{ev.mark}</span>
-                       <span className="text-[9px] font-bold uppercase text-white/60 tracking-widest mt-1 text-center max-w-[80px] truncate">{ev.event}</span>
-                    </div>
-                  ))}
-               </div>
-
-               <div className="absolute bottom-3 left-0 right-0 text-center z-10">
-                  <span className="text-[8px] font-bold uppercase tracking-widest text-white/30">Verified by ChasedSports</span>
-               </div>
-            </div>
-
-            <button 
-              onClick={handleDownloadCard} 
-              disabled={isExportingCard}
-              className="mt-8 w-full max-w-[340px] bg-white text-slate-900 font-black py-4 rounded-xl shadow-xl hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-2"
-            >
-              {isExportingCard ? <RefreshCw className="w-5 h-5 animate-spin" /> : <><Download className="w-5 h-5" /> Download Scout Card</>}
-            </button>
-          </div>
-        </div>
-      )}
     </main>
   );
 }

@@ -1,51 +1,83 @@
 import { MetadataRoute } from 'next';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+// 🚨 Cache the sitemap for 24 hours on Vercel's Edge Network to save database reads
+export const revalidate = 86400; 
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = 'https://www.chasedsports.com';
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.chasedsports.com';
 
-  const staticRoutes = [
-    '',
-    '/search',
-    '/feed',
-    '/leaderboard',
-    '/login'
-  ].map((route) => ({
+  // We use the standard supabase-js client here since sitemap.ts runs entirely 
+  // on the server and just needs public read access.
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+
+  // 1. Static Routes (Merged)
+  const staticPaths = [
+    { route: '', priority: 1.0, freq: 'daily' as const },
+    { route: '/search', priority: 0.9, freq: 'weekly' as const },
+    { route: '/feed', priority: 0.9, freq: 'always' as const },
+    { route: '/leaderboard', priority: 0.9, freq: 'daily' as const }, 
+    { route: '/shop', priority: 0.8, freq: 'weekly' as const },
+    { route: '/compete', priority: 0.8, freq: 'weekly' as const },
+    { route: '/login', priority: 0.5, freq: 'monthly' as const },
+  ];
+
+  const staticRoutes: MetadataRoute.Sitemap = staticPaths.map(({ route, priority, freq }) => ({
     url: `${baseUrl}${route}`,
-    lastModified: new Date(), // Static routes updating today is fine
-    changeFrequency: 'daily' as const,
-    priority: route === '' ? 1.0 : 0.8,
+    lastModified: new Date(),
+    changeFrequency: freq,
+    priority: priority,
   }));
 
-  // Pull a real timestamp (assuming you have created_at or updated_at)
-  const { data: universities } = await supabase
-    .from('universities')
-    .select('id'); // Add an updated_at column to your select if you have one!
+  try {
+    // 2. Fetch Universities for the College Finder SEO
+    const { data: universities, error: uniError } = await supabase
+      .from('universities')
+      .select('id');
 
-  const universityRoutes = (universities || []).map((uni) => ({
-    url: `${baseUrl}/college/${uni.id}`,
-    lastModified: new Date(), // Replace with uni.updated_at when available
-    changeFrequency: 'weekly' as const,
-    priority: 0.6,
-  }));
+    if (uniError) throw uniError;
 
-  // Grab the last_login_date so Google knows exactly who is active
-  const { data: athletes } = await supabase
-    .from('athletes')
-    .select('id, last_login_date, created_at')
-    .gt('trust_level', 0);
+    const collegeRoutes: MetadataRoute.Sitemap = (universities || []).map((uni) => ({
+      url: `${baseUrl}/college/${uni.id}`,
+      lastModified: new Date(), // Replace with uni.updated_at if added to schema later
+      changeFrequency: 'weekly',
+      priority: 0.6,
+    }));
 
-  const athleteRoutes = (athletes || []).map((athlete) => ({
-    url: `${baseUrl}/athlete/${athlete.id}`,
-    // Use their real last login or creation date, fallback to today if missing
-    lastModified: athlete.last_login_date ? new Date(athlete.last_login_date) : (athlete.created_at ? new Date(athlete.created_at) : new Date()),
-    changeFrequency: 'daily' as const,
-    priority: 0.7,
-  }));
+    // 3. Fetch ALL Verified Athletes (trust_level > 0)
+    // We intentionally exclude unverified athletes so we don't index unclaimed pages
+    const { data: athletes, error: athleteError } = await supabase
+      .from('athletes')
+      .select('id, last_login_date, created_at')
+      .gt('trust_level', 0);
 
-  return [...staticRoutes, ...universityRoutes, ...athleteRoutes];
+    if (athleteError) throw athleteError;
+
+    const athleteRoutes: MetadataRoute.Sitemap = (athletes || []).map((athlete) => {
+      // 🚨 SEO HACK: Use their real last login to tell Google this is a highly active portfolio
+      const modifiedDate = athlete.last_login_date 
+        ? new Date(athlete.last_login_date) 
+        : (athlete.created_at ? new Date(athlete.created_at) : new Date());
+
+      return {
+        url: `${baseUrl}/athlete/${athlete.id}`,
+        lastModified: modifiedDate, 
+        changeFrequency: 'daily', // High frequency because feed posts/PRs update often
+        priority: 0.8, // High priority so Google ranks their portfolios quickly
+      };
+    });
+
+    // Combine and return all routes for Google to crawl
+    return [...staticRoutes, ...collegeRoutes, ...athleteRoutes];
+
+  } catch (error) {
+    console.error("Error generating dynamic sitemap:", error);
+    
+    // Fallback: If Supabase fails for any reason, return the static routes 
+    // so the build doesn't crash and Google still gets a valid XML file.
+    return staticRoutes;
+  }
 }

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
-import { Target, TrendingUp, Crosshair, Crown, Lock, Activity, Zap, Medal, Swords, ScrollText, X, ChevronRight, Flame, Trophy, CheckCircle2, RefreshCw, AlertCircle, Search, MapPin, Skull, Gift, Share2, ShieldCheck, School, Users } from 'lucide-react';
+import { Target, TrendingUp, Crosshair, Crown, Lock, Activity, Zap, Medal, Swords, ScrollText, X, ChevronRight, Flame, Trophy, CheckCircle2, RefreshCw, AlertCircle, Search, MapPin, Skull, Gift, Share2, ShieldCheck, School, Users, HelpCircle } from 'lucide-react';
 import Link from 'next/link';
 
 // 🚨 IMPORT REUSABLE COMPONENTS
@@ -228,11 +228,13 @@ export default function CompetePage() {
 
   const [selectedBounty, setSelectedBounty] = useState<any | null>(null);
   const [isClaiming, setIsClaiming] = useState<string | null>(null);
-  const [toast, setToast] = useState<{ message: string; type: 'error' | 'success' } | null>(null);
+  
+  const [showHelpModal, setShowHelpModal] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'error' | 'success'; action?: { label: string, href: string } } | null>(null);
 
-  const showToast = (message: string, type: 'error' | 'success' = 'error') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 4000);
+  const showToast = (message: string, type: 'error' | 'success' = 'error', action?: { label: string, href: string }) => {
+    setToast({ message, type, action });
+    setTimeout(() => setToast(null), 5000);
   };
 
   useEffect(() => {
@@ -266,6 +268,18 @@ export default function CompetePage() {
           }
           
           let activeBounties = aData.bounty_targets || [];
+
+          // 🚨 THE SELF-HEALING FIX: Auto-generate baseline targets for legacy users! 🚨
+          if (activeBounties.length === 0 && aData.prs && aData.prs.length > 0) {
+            activeBounties = aData.prs.map((pr: any) => ({
+              event: pr.event,
+              mark: pr.mark
+            }));
+            
+            // Silently save this to the database so they are permanently initialized
+            await supabase.from('athletes').update({ bounty_targets: activeBounties }).eq('id', aData.id);
+          }
+
           setBountyTargets(activeBounties);
 
           if (aData.rival_ids && aData.rival_ids.length > 0) {
@@ -306,7 +320,6 @@ export default function CompetePage() {
       }
 
       // 🚨 DATA FETCH FOR ALL LEADERBOARDS
-      // Removed the .not('base_prs') so we can catch all athletes for Team Champs
       const { data: allAthletes } = await supabase
         .from('athletes')
         .select('id, first_name, last_name, high_school, avatar_url, equipped_border, prs, base_prs, trust_level, gender, grad_year')
@@ -432,6 +445,7 @@ export default function CompetePage() {
     loadCompeteData();
   }, [supabase, router]);
 
+  // 🚨 FIXED: Handle Claim Bounty & Drop Feed Post 🚨
   const handleClaimBounty = async (event: string, reward: number, newPRMark: string) => {
     if (!athleteId) return;
     setIsClaiming(event);
@@ -440,15 +454,36 @@ export default function CompetePage() {
         const newCoins = userCoins + reward;
         const newBountyTargets = bountyTargets.map(bt => bt.event === event ? { ...bt, mark: newPRMark } : bt);
 
+        // 1. Update the athlete's bank and targets
         const { error } = await supabase.from('athletes').update({
             coins: newCoins,
             bounty_targets: newBountyTargets
         }).eq('id', athleteId);
 
         if (error) throw error;
+
+        // 🚨 2. FIRE THE HOLOGRAPHIC POST TO THE GLOBAL FEED 🚨
+        const { error: postError } = await supabase.from('posts').insert({
+            athlete_id: athleteId,
+            content: `Just destroyed my target in the ${event} and claimed a ${reward} ChasedCash bounty! 💰🔥`,
+            linked_pr_event: event,
+            linked_pr_mark: newPRMark,
+            linked_prs: [{ event: event, mark: newPRMark }],
+            is_boosted: true, 
+            likes: [],
+            comments: [],
+            image_url: null
+        });
+
+        if (postError) {
+            console.error("Feed Post Failed:", postError);
+            showToast(`Bounty claimed, but Feed Post failed: ${postError.message}`, 'error');
+        } else {
+            showToast(`Bounty Claimed! +${reward} ChasedCash.`, 'success', { label: 'View on Global Feed 🚀', href: '/feed' });
+        }
+
         setUserCoins(newCoins);
         setBountyTargets(newBountyTargets);
-        showToast(`Bounty Claimed! +${reward} ChasedCash. New targets generated!`, 'success');
     } catch (err: any) {
         showToast(err.message, 'error');
     } finally {
@@ -456,6 +491,7 @@ export default function CompetePage() {
     }
   };
 
+  // 🚨 FIXED: Handle Rival Overtake & Drop Feed Post 🚨
   const handleClaimOvertake = async (event: string, reward: number, rivalId: string) => {
     if (!athleteId) return;
     setIsClaiming(event + '_overtake');
@@ -477,9 +513,29 @@ export default function CompetePage() {
 
         if (error) throw error;
 
+        // 🚨 POST RIVAL DEFEAT TO GLOBAL FEED 🚨
+        const myPr = athletePrs.find(p => p.event === event);
+        const { error: postError } = await supabase.from('posts').insert({
+            athlete_id: athleteId,
+            content: `Just overtook a rival in the ${event} and secured ${reward} ChasedCash. The throne is mine. 👑`,
+            linked_pr_event: event,
+            linked_pr_mark: myPr?.mark || 'N/A',
+            linked_prs: myPr ? [myPr] : [],
+            is_boosted: true,
+            likes: [],
+            comments: [],
+            image_url: null 
+        });
+        
+        if (postError) {
+             console.error("Feed Post Failed:", postError);
+             showToast(`Target Overtaken! Feed Post failed: ${postError.message}`, 'error');
+        } else {
+             showToast(`Target Overtaken! +${reward} ChasedCash!`, 'success', { label: 'View on Global Feed 🚀', href: '/feed' });
+        }
+
         setUserCoins(newCoins);
         setBountyTargets(updatedBounties);
-        showToast(`Target Overtaken! +${reward} ChasedCash!`, 'success');
     } catch (err: any) {
         showToast(err.message, 'error');
     } finally {
@@ -623,13 +679,65 @@ export default function CompetePage() {
   return (
     <main className="min-h-screen bg-[#F8FAFC] font-sans pb-32 relative">
       
-      {/* IN-APP TOAST */}
+      {/* 🚨 IN-APP TOAST (UPDATED TO SUPPORT ACTIONS) 🚨 */}
       {toast && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[200] animate-in slide-in-from-top-5 fade-in duration-300 w-[90%] max-w-md">
           <div className={`rounded-2xl p-4 shadow-2xl border flex items-start gap-3 ${toast.type === 'error' ? 'bg-red-50 border-red-200 text-red-800' : 'bg-green-50 border-green-200 text-green-800'}`}>
             {toast.type === 'error' ? <AlertCircle className="w-5 h-5 shrink-0 mt-0.5 text-red-500" /> : <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5 text-green-500" />}
-            <p className="text-sm font-bold leading-tight">{toast.message}</p>
+            <div className="flex-1">
+              <p className="text-sm font-bold leading-tight">{toast.message}</p>
+              {toast.action && (
+                <Link href={toast.action.href} className="inline-block mt-2 text-xs font-black bg-white/50 hover:bg-white px-3 py-1.5 rounded-lg transition-colors border border-green-200 shadow-sm text-green-700 hover:text-green-900">
+                  {toast.action.label}
+                </Link>
+              )}
+            </div>
             <button onClick={() => setToast(null)} className="ml-auto shrink-0 opacity-50 hover:opacity-100 transition-opacity"><X className="w-4 h-4" /></button>
+          </div>
+        </div>
+      )}
+
+      {/* 🚨 HELP MODAL 🚨 */}
+      {showHelpModal && (
+        <div className="fixed inset-0 z-[600] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setShowHelpModal(false)}></div>
+          <div className="bg-slate-900 rounded-[2.5rem] w-full max-w-md shadow-2xl relative z-10 overflow-hidden animate-in zoom-in-95 duration-400 border border-slate-700">
+            <div className="bg-slate-800/50 border-b border-slate-700 p-6 flex justify-between items-center relative overflow-hidden">
+              <div className="absolute -right-6 -top-6 w-32 h-32 bg-blue-500/20 rounded-full blur-3xl"></div>
+              <div className="relative z-10 flex items-center gap-4">
+                <div className="w-12 h-12 bg-slate-700 rounded-full flex items-center justify-center border border-slate-600">
+                  <HelpCircle className="w-6 h-6 text-blue-400" />
+                </div>
+                <div>
+                  <h3 className="font-black text-xl text-white tracking-tight">How It Works</h3>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">The Arena Guide</p>
+                </div>
+              </div>
+              <button onClick={() => setShowHelpModal(false)} className="relative z-10 p-2 bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white rounded-full transition-colors border border-transparent"><X className="w-5 h-5" /></button>
+            </div>
+            
+            <div className="p-6 md:p-8 space-y-6">
+               <div className="bg-black/40 border border-slate-700 rounded-2xl p-5 shadow-inner">
+                 <h4 className="font-black text-white text-sm flex items-center gap-2 mb-2">
+                   <Zap className="w-4 h-4 text-yellow-400" /> Getting Featured
+                 </h4>
+                 <p className="text-xs text-slate-400 leading-relaxed font-medium">
+                   Want the massive Holographic PR Card on the Global Feed? It triggers automatically when you: <br/>
+                   <span className="text-white mt-1 block">• Claim a Bounty here in the Arena</span>
+                   <span className="text-white block">• Sync a new PR from your Dashboard</span>
+                   <span className="text-blue-400 font-bold block mt-2 text-[10px] uppercase tracking-widest">Pro Tip: Premium members automatically get the Gold Card!</span>
+                 </p>
+               </div>
+
+               <div className="bg-black/40 border border-slate-700 rounded-2xl p-5 shadow-inner">
+                 <h4 className="font-black text-white text-sm flex items-center gap-2 mb-2">
+                   <Flame className="w-4 h-4 text-orange-500" /> The Hype Economy
+                 </h4>
+                 <p className="text-xs text-slate-400 leading-relaxed font-medium">
+                   Hype is our version of likes. It costs you nothing to hype up your friends, but <strong>every time someone hypes your post, you earn +2 ChasedCash!</strong> 💸 Keep stacking PRs to get more hype and buy gear in the shop.
+                 </p>
+               </div>
+            </div>
           </div>
         </div>
       )}
@@ -698,7 +806,15 @@ export default function CompetePage() {
             <div className="inline-flex items-center px-4 py-1.5 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-xs font-black tracking-widest uppercase mb-4 shadow-sm">
               <Zap className="w-4 h-4 mr-2" /> Active Season
             </div>
-            <h1 className="text-4xl sm:text-5xl font-black text-slate-900 tracking-tight mb-2">Competitions</h1>
+            <h1 className="text-4xl sm:text-5xl font-black text-slate-900 tracking-tight mb-2 flex items-center gap-3">
+              Competitions
+              <button 
+                onClick={() => setShowHelpModal(true)} 
+                className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-colors border border-slate-200 shadow-sm cursor-pointer group shrink-0"
+              >
+                <HelpCircle className="w-4 h-4 md:w-5 md:h-5 text-blue-500 group-hover:text-blue-600" />
+              </button>
+            </h1>
             <p className="text-slate-500 font-medium text-lg">Crush your goals to earn massive ChasedCash payouts.</p>
           </div>
           
@@ -879,7 +995,7 @@ export default function CompetePage() {
                 <div className="col-span-1 md:col-span-2 text-center py-16 bg-white rounded-[2rem] border border-slate-200 border-dashed">
                   <Activity className="w-12 h-12 text-slate-300 mx-auto mb-4" />
                   <h4 className="text-lg font-black text-slate-900">No events found</h4>
-                  <p className="text-sm text-slate-500 font-medium mt-1 max-w-sm mx-auto">Sync your profile on the Dashboard to generate your bounty contracts.</p>
+                  <p className="text-sm text-slate-500 font-medium mt-1 max-w-sm mx-auto">Your bounty targets will be generated automatically based on your current PRs.</p>
                 </div>
               )}
             </div>

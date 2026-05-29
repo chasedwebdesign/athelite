@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
-import { Search, Sparkles, AlertCircle, Mail, School, Camera, Star, ChevronRight, Activity, MapPin, Medal, Trash2, ExternalLink, ShieldAlert, CheckCircle2, Flame, Trophy, Pencil, Save, X, Download, MessageSquareText, TrendingUp, Crown, Users, AlertTriangle, Share2, RefreshCw, Lock } from 'lucide-react';
+import { Search, Sparkles, AlertCircle, Mail, School, Camera, Star, ChevronRight, Activity, MapPin, Medal, Trash2, ExternalLink, ShieldAlert, CheckCircle2, Flame, Trophy, Pencil, Save, X, Download, MessageSquareText, TrendingUp, Crown, Users, AlertTriangle, Share2, RefreshCw, Lock, Briefcase } from 'lucide-react';
 import Link from 'next/link';
 import imageCompression from 'browser-image-compression';
 
@@ -12,6 +12,9 @@ interface CoachProfile {
   first_name: string | null; 
   last_name: string | null; 
   school_name: string | null; 
+  sport: string | null;
+  coach_title: string | null;
+  division: string | null;
   coach_type: string; 
   avatar_url: string | null; 
   email: string | null; 
@@ -181,6 +184,35 @@ const getAthleteProjection = (prs: any[], gender: string) => {
   return { overallScore: bestScore, overallLabel: bestTier, bestEvent: prs[0]?.event || 'N/A' };
 };
 
+// 🚨 PREDEFINED OPTIONS FOR DROPDOWNS 🚨
+const SPORT_OPTIONS = [
+  'Track & Field',
+  'Cross Country',
+  'Football',
+  'Basketball',
+  'Soccer',
+  'Baseball',
+  'Volleyball',
+  'Softball',
+  'Wrestling'
+];
+
+const COACH_TITLES = [
+  'Head Coach',
+  'Associate Head Coach',
+  'Assistant Coach',
+  'Director of Operations',
+  'Recruiting Coordinator',
+  'Sprints & Hurdles Coach',
+  'Distance', 
+  'Jumps Coach',
+  'Throws Coach',
+  'Pole Vault Coach',
+  'Multi-Events Coach',
+  'Graduate Assistant',
+  'Volunteer Assistant'
+];
+
 export default function CollegeCoachDashboard() {
   const supabase = createClient();
   const router = useRouter();
@@ -208,6 +240,14 @@ export default function CollegeCoachDashboard() {
   const [editFirstName, setEditFirstName] = useState('');
   const [editLastName, setEditLastName] = useState('');
   const [editSchoolName, setEditSchoolName] = useState('');
+  const [editDivision, setEditDivision] = useState('');
+  const [editSport, setEditSport] = useState('');
+  const [editCoachTitle, setEditCoachTitle] = useState('');
+  const [schoolOptions, setSchoolOptions] = useState<{id: string, name: string, division: string}[]>([]);
+  const [showSchoolDropdown, setShowSchoolDropdown] = useState(false);
+  const [isSearchingSchool, setIsSearchingSchool] = useState(false);
+  const [showSportDropdown, setShowSportDropdown] = useState(false);
+  const [showTitleDropdown, setShowTitleDropdown] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   const [toast, setToast] = useState<{ message: string; type: 'error' | 'success' } | null>(null);
@@ -271,12 +311,42 @@ export default function CollegeCoachDashboard() {
     loadCoachData();
   }, [supabase]);
 
+  // 🚨 AUTOCOMPLETE FOR UNIVERSITIES 🚨
+  useEffect(() => {
+    const searchUniversities = async () => {
+      if (!editSchoolName || editSchoolName.length < 2) {
+        setSchoolOptions([]);
+        return;
+      }
+      setIsSearchingSchool(true);
+      
+      const { data } = await supabase
+        .from('universities')
+        .select('id, name, division')
+        .ilike('name', `%${editSchoolName}%`)
+        .order('name')
+        .limit(10);
+      
+      if (data) setSchoolOptions(data);
+      setIsSearchingSchool(false);
+    };
+
+    const timeoutId = setTimeout(() => {
+      searchUniversities();
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [editSchoolName, supabase]);
+
   // --- PROFILE EDIT FUNCTIONS ---
   const handleEditToggle = () => {
     if (!coachProfile) return;
     setEditFirstName(coachProfile.first_name || '');
     setEditLastName(coachProfile.last_name || '');
     setEditSchoolName(coachProfile.school_name || '');
+    setEditDivision(coachProfile.division || '');
+    setEditSport(coachProfile.sport || '');
+    setEditCoachTitle(coachProfile.coach_title || '');
     setIsEditingProfile(true);
   };
 
@@ -287,7 +357,10 @@ export default function CollegeCoachDashboard() {
       const { error } = await supabase.from('coaches').update({
         first_name: editFirstName.trim(),
         last_name: editLastName.trim(),
-        school_name: editSchoolName.trim()
+        school_name: editSchoolName.trim(),
+        division: editDivision.trim() || null,
+        sport: editSport.trim(),
+        coach_title: editCoachTitle.trim()
       }).eq('id', coachProfile.id);
 
       if (error) throw error;
@@ -296,7 +369,10 @@ export default function CollegeCoachDashboard() {
         ...prev, 
         first_name: editFirstName.trim(), 
         last_name: editLastName.trim(), 
-        school_name: editSchoolName.trim() 
+        school_name: editSchoolName.trim(),
+        division: editDivision.trim() || null,
+        sport: editSport.trim(),
+        coach_title: editCoachTitle.trim()
       } : null);
       
       setIsEditingProfile(false);
@@ -500,7 +576,7 @@ export default function CollegeCoachDashboard() {
   );
 
   // 🚨 CHECK FOR MISSING PROFILE INFO 🚨
-  const profileIncomplete = coachProfile && (!coachProfile.first_name || !coachProfile.last_name || !coachProfile.school_name);
+  const profileIncomplete = coachProfile && (!coachProfile.first_name || !coachProfile.last_name || !coachProfile.school_name || !coachProfile.sport || !coachProfile.coach_title);
   const isPremium = coachProfile?.is_premium;
 
   const cardProjection = activeCardAthlete ? getAthleteProjection(activeCardAthlete.prs || [], activeCardAthlete.gender) : null;
@@ -513,6 +589,16 @@ export default function CollegeCoachDashboard() {
     else if (cardProjection.overallScore >= 65) { cardAccentColor = 'from-emerald-500 to-teal-900 border-emerald-400'; cardGlowColor = 'bg-emerald-500/40'; }
     else if (cardProjection.overallScore >= 55) { cardAccentColor = 'from-amber-500 to-orange-900 border-amber-400'; cardGlowColor = 'bg-amber-500/40'; }
   }
+
+  // Filter sport suggestions
+  const filteredSports = SPORT_OPTIONS.filter(s => 
+    s.toLowerCase().includes(editSport.toLowerCase()) && s.toLowerCase() !== editSport.toLowerCase()
+  );
+
+  // Filter title suggestions
+  const filteredTitles = COACH_TITLES.filter(t => 
+    t.toLowerCase().includes(editCoachTitle.toLowerCase()) && t.toLowerCase() !== editCoachTitle.toLowerCase()
+  );
 
   return (
     <main className="min-h-screen bg-[#F8FAFC] font-sans pb-32">
@@ -528,9 +614,15 @@ export default function CollegeCoachDashboard() {
       )}
 
       {/* HEADER HERO SECTION */}
-      <div className="bg-slate-900 text-white pt-16 pb-24 px-6 relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-600/20 blur-[100px] rounded-full pointer-events-none"></div>
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center gap-8 relative z-10">
+      <div className="relative pt-16 pb-24 px-6">
+        
+        {/* Background Layer - Pushed back to prevent cutoff! */}
+        <div className="absolute inset-0 bg-slate-900 z-0 overflow-hidden pointer-events-none">
+           <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-600/20 blur-[100px] rounded-full"></div>
+        </div>
+
+        {/* Content Layer */}
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center gap-8 relative z-30 text-white">
           
           <div className="relative w-32 h-32 group shrink-0">
             <div className={`w-full h-full rounded-full border-4 ${isPremium ? 'border-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.3)]' : 'border-slate-800 shadow-xl'} overflow-hidden bg-slate-800 flex items-center justify-center ${isUploadingAvatar ? 'animate-pulse' : ''}`}>
@@ -568,7 +660,7 @@ export default function CollegeCoachDashboard() {
                   </div>
                   <div>
                     <h3 className="text-red-400 font-black text-sm">Profile Incomplete</h3>
-                    <p className="text-red-300/80 text-xs font-medium mt-0.5">Athletes need to know who you are. Please add your name and university.</p>
+                    <p className="text-red-300/80 text-xs font-medium mt-0.5">Athletes need to know who you are. Please add your name, sport, and title.</p>
                   </div>
                 </div>
                 <button 
@@ -581,7 +673,8 @@ export default function CollegeCoachDashboard() {
             )}
             
             {isEditingProfile ? (
-              <div className="bg-slate-800/50 p-5 rounded-2xl border border-slate-700 max-w-lg mx-auto md:mx-0 animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="bg-slate-800/50 p-5 rounded-2xl border border-slate-700 max-w-lg mx-auto md:mx-0 animate-in fade-in slide-in-from-top-2 duration-200 relative">
+                
                 <div className="grid grid-cols-2 gap-3 mb-3">
                   <div>
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">First Name</label>
@@ -592,12 +685,121 @@ export default function CollegeCoachDashboard() {
                     <input type="text" value={editLastName} onChange={e => setEditLastName(e.target.value)} placeholder="Doe" className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 mt-1" />
                   </div>
                 </div>
-                <div className="mb-4">
+
+                <div className="mb-3 relative">
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">University Name</label>
-                  <input type="text" value={editSchoolName} onChange={e => setEditSchoolName(e.target.value)} placeholder="State University" className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 mt-1" />
+                  <div className="relative">
+                    <input 
+                      type="text" 
+                      value={editSchoolName} 
+                      onChange={e => { 
+                        setEditSchoolName(e.target.value); 
+                        setEditDivision(''); 
+                        setShowSchoolDropdown(true); 
+                      }}
+                      onFocus={() => { if (editSchoolName.length >= 2) setShowSchoolDropdown(true); }}
+                      onBlur={() => setShowSchoolDropdown(false)}
+                      placeholder="Search for your university..." 
+                      className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 mt-1 pr-10" 
+                    />
+                    {isSearchingSchool && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 mt-0.5">
+                        <RefreshCw className="w-4 h-4 text-slate-500 animate-spin" />
+                      </div>
+                    )}
+                  </div>
+                  {showSchoolDropdown && schoolOptions.length > 0 && (
+                    <div className="absolute z-50 w-full mt-1 bg-slate-800 border border-slate-600 rounded-xl shadow-xl overflow-hidden max-h-48 overflow-y-auto custom-scrollbar">
+                      {schoolOptions.map(option => (
+                        <button
+                          key={option.id}
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault(); 
+                            setEditSchoolName(option.name);
+                            setEditDivision(option.division || '');
+                            setShowSchoolDropdown(false);
+                          }}
+                          className="w-full text-left px-4 py-2.5 text-sm text-slate-300 hover:bg-slate-700 hover:text-white transition-colors flex justify-between items-center border-b border-slate-700/50 last:border-0"
+                        >
+                          <span className="truncate pr-2">{option.name}</span>
+                          {option.division && (
+                            <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-slate-400 bg-slate-900 px-2 py-0.5 rounded">
+                              {option.division}
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
+
+                <div className="grid grid-cols-2 gap-3 mb-5">
+                  <div className="relative">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Sport</label>
+                    <input 
+                      type="text" 
+                      value={editSport} 
+                      onChange={e => { setEditSport(e.target.value); setShowSportDropdown(true); }}
+                      onFocus={() => setShowSportDropdown(true)}
+                      onBlur={() => setShowSportDropdown(false)}
+                      placeholder="e.g. Track & Field" 
+                      className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 mt-1" 
+                    />
+                    {showSportDropdown && filteredSports.length > 0 && (
+                      <div className="absolute z-50 w-full mt-1 bg-slate-800 border border-slate-600 rounded-xl shadow-xl overflow-hidden max-h-48 overflow-y-auto custom-scrollbar">
+                        {filteredSports.map(sport => (
+                          <button
+                            key={sport}
+                            type="button"
+                            onMouseDown={(e) => {
+                              e.preventDefault(); 
+                              setEditSport(sport);
+                              setShowSportDropdown(false);
+                            }}
+                            className="w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
+                          >
+                            {sport}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <label className={`text-[10px] font-bold uppercase tracking-widest ml-1 transition-colors ${!editSport.trim() ? 'text-slate-600' : 'text-slate-400'}`}>Title</label>
+                    <input 
+                      type="text" 
+                      value={editCoachTitle} 
+                      onChange={e => { setEditCoachTitle(e.target.value); setShowTitleDropdown(true); }}
+                      onFocus={() => setShowTitleDropdown(true)}
+                      onBlur={() => setShowTitleDropdown(false)}
+                      disabled={!editSport.trim()}
+                      placeholder={editSport.trim() ? "e.g. Head Coach" : "Select a sport first"} 
+                      className={`w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 mt-1 transition-all ${!editSport.trim() ? 'opacity-50 cursor-not-allowed bg-slate-800' : ''}`} 
+                    />
+                    {showTitleDropdown && editSport.trim() && filteredTitles.length > 0 && (
+                      <div className="absolute z-50 w-full mt-1 bg-slate-800 border border-slate-600 rounded-xl shadow-xl overflow-hidden max-h-48 overflow-y-auto custom-scrollbar">
+                        {filteredTitles.map(title => (
+                          <button
+                            key={title}
+                            type="button"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              setEditCoachTitle(title);
+                              setShowTitleDropdown(false);
+                            }}
+                            className="w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
+                          >
+                            {title}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 <div className="flex items-center gap-3">
-                  <button onClick={handleSaveProfile} disabled={isSavingProfile || !editFirstName.trim() || !editLastName.trim() || !editSchoolName.trim()} className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 rounded-xl flex items-center justify-center transition-colors shadow-lg disabled:opacity-50">
+                  <button onClick={handleSaveProfile} disabled={isSavingProfile || !editFirstName.trim() || !editLastName.trim() || !editSchoolName.trim() || !editSport.trim() || !editCoachTitle.trim()} className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 rounded-xl flex items-center justify-center transition-colors shadow-lg disabled:opacity-50">
                     <Save className="w-4 h-4 mr-2" /> {isSavingProfile ? 'Saving...' : 'Save Profile'}
                   </button>
                   <button onClick={() => setIsEditingProfile(false)} className="px-4 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-white font-bold flex items-center transition-colors">
@@ -626,7 +828,23 @@ export default function CollegeCoachDashboard() {
                 </h1>
 
                 <p className="text-lg text-slate-300 font-medium flex flex-wrap items-center justify-center md:justify-start gap-x-4 gap-y-2 mt-2">
-                  <span className="flex items-center"><School className="w-4 h-4 mr-1.5 opacity-70" /> {coachProfile?.school_name || 'Set up your University Profile'}</span>
+                  {coachProfile?.coach_title && (
+                    <span className="flex items-center text-white"><Briefcase className="w-4 h-4 mr-1.5 opacity-70" /> {coachProfile.coach_title}</span>
+                  )}
+                  {coachProfile?.sport && (
+                    <span className="flex items-center text-white"><Activity className="w-4 h-4 mr-1.5 opacity-70" /> {coachProfile.sport}</span>
+                  )}
+                  {(coachProfile?.coach_title || coachProfile?.sport) && (
+                    <span className="text-slate-600 hidden md:inline">|</span>
+                  )}
+                  <span className="flex items-center">
+                    <School className="w-4 h-4 mr-1.5 opacity-70" /> {coachProfile?.school_name || 'Set up your University Profile'}
+                    {coachProfile?.division && (
+                      <span className="ml-2 text-[10px] bg-white/10 border border-white/20 px-2 py-0.5 rounded text-white font-bold tracking-widest uppercase">
+                        {coachProfile.division}
+                      </span>
+                    )}
+                  </span>
                   <span className="text-slate-600 hidden md:inline">|</span>
                   <span className="flex items-center"><Mail className="w-4 h-4 mr-1.5 opacity-70" /> {coachProfile?.email}</span>
                 </p>

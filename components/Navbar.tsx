@@ -207,27 +207,32 @@ export default function Navbar() {
   return (
     <>
       <nav className="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-[60]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+        {/* 🚨 Taller, wider container max-w-[1600px] 🚨 */}
+        <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between gap-4">
           
-          <Link href="/" onClick={closeMobileMenu} className="flex items-center gap-2 group shrink-0">
-            <div className="relative w-8 h-8 sm:w-10 sm:h-10 overflow-hidden group-hover:scale-105 transition-transform">
-              <Image 
-                src="/icon.png" 
-                alt="ChasedSports Icon" 
-                fill
-                sizes="(max-width: 768px) 32px, 40px"
-                className="object-contain"
-                priority
-              />
-            </div>
-            <span className="text-xl font-black tracking-tight text-slate-900 hidden sm:block">
-              Chased<span className="text-blue-600">Sports</span>
-            </span>
-          </Link>
+          {/* 🚨 LEFT COLUMN: LOGO (flex-1 to force center) 🚨 */}
+          <div className="flex flex-1 items-center justify-start shrink-0">
+            <Link href="/" onClick={closeMobileMenu} className="flex items-center gap-2 group">
+              <div className="relative w-10 h-10 sm:w-12 sm:h-12 overflow-hidden group-hover:scale-105 transition-transform">
+                <Image 
+                  src="/icon.png" 
+                  alt="ChasedSports Icon" 
+                  fill
+                  sizes="(max-width: 768px) 40px, 48px"
+                  className="object-contain"
+                  priority
+                />
+              </div>
+              <span className="text-2xl font-black tracking-tight text-slate-900 hidden sm:block">
+                Chased<span className="text-blue-600">Sports</span>
+              </span>
+            </Link>
+          </div>
 
-          <div className="flex-1 max-w-md relative hidden md:block" ref={searchRef}>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          {/* 🚨 CENTER COLUMN: SEARCH (Centered explicitly) 🚨 */}
+          <div className="hidden md:flex w-full max-w-2xl px-4 lg:px-8 shrink" ref={searchRef}>
+            <div className="w-full relative shadow-sm rounded-full group">
+              <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
               <input 
                 type="text" 
                 placeholder="Search athletes..." 
@@ -237,46 +242,47 @@ export default function Navbar() {
                   setIsSearchOpen(true);
                 }}
                 onFocus={() => setIsSearchOpen(true)}
-                className="w-full bg-slate-100 border border-transparent focus:border-blue-300 focus:bg-white text-sm font-medium text-slate-900 rounded-full pl-10 pr-4 py-2 transition-all outline-none"
+                className="w-full bg-slate-100/80 hover:bg-slate-100 border border-slate-200 focus:border-blue-300 focus:bg-white text-base font-medium text-slate-900 rounded-full pl-14 pr-6 py-3.5 transition-all outline-none focus:shadow-md"
               />
+              
+              {/* 🚨 Expanded, protected dropdown width 🚨 */}
+              {isSearchOpen && searchQuery.length >= 2 && (
+                <div className="absolute top-full mt-3 left-0 w-full min-w-[350px] bg-white border border-slate-200 rounded-[2rem] shadow-2xl overflow-hidden flex flex-col z-50">
+                  {isSearching ? (
+                    <div className="p-6 text-center text-sm font-bold text-slate-400">Searching...</div>
+                  ) : searchResults.length > 0 ? (
+                    searchResults.map(result => (
+                      <Link key={result.id} href={`/athlete/${result.id}`} onClick={() => { setSearchQuery(''); setSearchResults([]); setIsSearchOpen(false); }} className="flex items-center gap-4 p-4 hover:bg-slate-50 border-b border-slate-100 last:border-0 transition-colors">
+                        <div className="w-12 h-12 rounded-full bg-slate-100 border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center">
+                          {result.avatar_url ? <img src={result.avatar_url} alt="" className="w-full h-full object-cover"/> : <Medal className="w-6 h-6 text-slate-400"/>}
+                        </div>
+                        <div className="truncate">
+                          <p className="text-base font-black text-slate-900 truncate">{result.first_name} {result.last_name}</p>
+                          <p className="text-sm font-medium text-slate-500 truncate">{result.high_school}</p>
+                        </div>
+                      </Link>
+                    ))
+                  ) : (
+                    <div className="p-6 text-center text-sm font-bold text-slate-400">No athletes found.</div>
+                  )}
+                </div>
+              )}
             </div>
-            
-            {isSearchOpen && searchQuery.length >= 2 && (
-              <div className="absolute top-full mt-2 w-full bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden flex flex-col z-50">
-                {isSearching ? (
-                  <div className="p-4 text-center text-sm font-bold text-slate-400">Searching...</div>
-                ) : searchResults.length > 0 ? (
-                  searchResults.map(result => (
-                    <Link key={result.id} href={`/athlete/${result.id}`} onClick={() => { setSearchQuery(''); setSearchResults([]); setIsSearchOpen(false); }} className="flex items-center gap-3 p-3 hover:bg-slate-50 border-b border-slate-100 last:border-0 transition-colors">
-                      <div className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center">
-                        {result.avatar_url ? <img src={result.avatar_url} alt="" className="w-full h-full object-cover"/> : <Medal className="w-4 h-4 text-slate-400"/>}
-                      </div>
-                      <div className="truncate">
-                        <p className="text-sm font-bold text-slate-900 truncate">{result.first_name} {result.last_name}</p>
-                        <p className="text-xs font-medium text-slate-500 truncate">{result.high_school}</p>
-                      </div>
-                    </Link>
-                  ))
-                ) : (
-                  <div className="p-4 text-center text-sm font-bold text-slate-400">No athletes found.</div>
-                )}
-              </div>
-            )}
           </div>
 
-          <div className="hidden md:flex items-center space-x-6 shrink-0">
-            <Link href="/search" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors flex items-center"><School className="w-4 h-4 mr-1.5" /> College Finder</Link>
+          {/* 🚨 RIGHT COLUMN: NAVIGATION (flex-1 to offset logo width) 🚨 */}
+          <div className="hidden md:flex flex-1 items-center justify-end space-x-3 lg:space-x-5 shrink-0">
+            <Link href="/search" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors flex items-center whitespace-nowrap"><School className="w-4 h-4 mr-1.5" /> <span className="hidden lg:inline">College Finder</span></Link>
             
-            {/* 🚨 NEW: Teams Link added specifically for Desktop 🚨 */}
             {session && (
-              <Link href="/dashboard/team" className="text-sm font-bold text-slate-500 hover:text-emerald-600 transition-colors flex items-center">
+              <Link href="/dashboard/team" className="text-sm font-bold text-slate-500 hover:text-emerald-600 transition-colors flex items-center whitespace-nowrap">
                 <Shield className="w-4 h-4 mr-1.5" /> Teams
               </Link>
             )}
             
             <div className="relative group">
-              <button className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors flex items-center py-2">
-                <Activity className="w-4 h-4 mr-1.5" /> Track & Field <ChevronDown className="w-3 h-3 ml-1 opacity-50 group-hover:rotate-180 transition-transform duration-300" />
+              <button className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors flex items-center py-2 whitespace-nowrap">
+                <Activity className="w-4 h-4 mr-1.5" /> <span className="hidden lg:inline">Track & Field</span> <ChevronDown className="w-3 h-3 ml-1 opacity-50 group-hover:rotate-180 transition-transform duration-300" />
               </button>
               
               <div className="absolute top-full right-0 mt-1 w-48 bg-white rounded-2xl shadow-xl border border-slate-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 flex flex-col overflow-hidden transform translate-y-2 group-hover:translate-y-0">
@@ -293,15 +299,15 @@ export default function Navbar() {
 
             {session ? (
               <>
-                <div className="h-4 w-px bg-slate-200 mx-2"></div>
-                <Link href="/dashboard" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors flex items-center"><LayoutDashboard className="w-4 h-4 mr-1.5" /> Homebase</Link>
-                <Link href="/dashboard/messages" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors flex items-center relative">
-                  <Mail className="w-4 h-4 mr-1.5" /> <span>Inbox</span>
-                  {unreadCount > 0 && <span className="absolute -top-2.5 -right-3.5 bg-red-500 text-white text-[10px] leading-none font-black min-w-[18px] h-[18px] flex items-center justify-center rounded-full border-2 border-white shadow-sm px-1">{unreadCount}</span>}
+                <div className="h-6 w-px bg-slate-200 mx-1 lg:mx-2 shrink-0"></div>
+                <Link href="/dashboard" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors flex items-center whitespace-nowrap" title="Dashboard Homebase"><LayoutDashboard className="w-4 h-4" /><span className="hidden lg:inline ml-1.5">Homebase</span></Link>
+                <Link href="/dashboard/messages" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors flex items-center relative whitespace-nowrap" title="Inbox">
+                  <Mail className="w-4 h-4" /> <span className="hidden lg:inline ml-1.5">Inbox</span>
+                  {unreadCount > 0 && <span className="absolute -top-2.5 -right-3 bg-red-500 text-white text-[10px] leading-none font-black min-w-[18px] h-[18px] flex items-center justify-center rounded-full border-2 border-white shadow-sm px-1">{unreadCount}</span>}
                 </Link>
                 
                 {isAthlete && (
-                  <Link href="/shop" className="flex items-center gap-1 hover:-translate-y-0.5 transition-transform">
+                  <Link href="/shop" className="flex items-center gap-1 hover:-translate-y-0.5 transition-transform ml-1">
                     <ShoppingCart className="w-5 h-5 text-blue-600" />
                     <CoinBadge />
                   </Link>
@@ -309,12 +315,12 @@ export default function Navbar() {
 
                 {isAthlete && (
                   isPremium ? (
-                    <Link href="/pro" title="Manage Subscription" className="ml-2 flex items-center gap-1.5 text-xs font-black bg-gradient-to-r from-amber-400 to-amber-500 text-amber-950 px-3 py-1.5 rounded-full hover:scale-105 transition-transform shadow-sm">
+                    <Link href="/pro" title="Manage Subscription" className="ml-1 lg:ml-2 flex items-center gap-1.5 text-xs font-black bg-gradient-to-r from-amber-400 to-amber-500 text-amber-950 px-3 py-1.5 rounded-full hover:scale-105 transition-transform shadow-sm whitespace-nowrap">
                       <Crown className="w-3 h-3" />
                       PRO
                     </Link>
                   ) : (
-                    <Link href="/pro" className="ml-2 flex items-center gap-1.5 text-xs font-black bg-slate-800 text-amber-400 px-3 py-1.5 rounded-full hover:scale-105 transition-transform shadow-sm">
+                    <Link href="/pro" className="ml-1 lg:ml-2 flex items-center gap-1.5 text-xs font-black bg-slate-800 text-amber-400 px-3 py-1.5 rounded-full hover:scale-105 transition-transform shadow-sm whitespace-nowrap">
                       <Zap className="w-3 h-3" />
                       UPGRADE
                     </Link>
@@ -324,7 +330,7 @@ export default function Navbar() {
                 <button 
                   onClick={handleSignOut} 
                   title="Log Out" 
-                  className="relative ml-2 w-10 h-10 rounded-full border-2 border-slate-200 hover:border-red-400 transition-all overflow-hidden flex items-center justify-center bg-slate-100 group shadow-sm shrink-0"
+                  className="relative ml-1 lg:ml-2 w-10 h-10 rounded-full border-2 border-slate-200 hover:border-red-400 transition-all overflow-hidden flex items-center justify-center bg-slate-100 group shadow-sm shrink-0"
                 >
                   {avatarUrl ? <img src={avatarUrl} alt="Profile" className="w-full h-full object-cover group-hover:opacity-30 transition-opacity" /> : <User className="w-5 h-5 text-slate-400 group-hover:opacity-30 transition-opacity" />}
                   <div className="absolute inset-0 bg-red-500/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
@@ -333,7 +339,7 @@ export default function Navbar() {
                 </button>
               </>
             ) : (
-              <Link href="/login" className="text-sm font-bold bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-xl transition-all shadow-sm shadow-blue-600/20">Log In</Link>
+              <Link href="/login" className="text-sm font-bold bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-xl transition-all shadow-sm shadow-blue-600/20 ml-2 whitespace-nowrap">Log In</Link>
             )}
           </div>
 
@@ -357,8 +363,9 @@ export default function Navbar() {
         </div>
       </nav>
 
+      {/* 🚨 Adjusted Mobile Menu Offset to match new h-20 top navigation 🚨 */}
       {isMobileMenuOpen && (
-        <div className="fixed inset-0 top-[64px] z-[50] bg-white overflow-y-auto animate-in slide-in-from-top-5 duration-200 md:hidden">
+        <div className="fixed inset-0 top-[80px] z-[50] bg-white overflow-y-auto animate-in slide-in-from-top-5 duration-200 md:hidden">
           <div className="p-6 flex flex-col gap-6">
             
             <div className="relative w-full" ref={mobileSearchRef}>
@@ -383,13 +390,13 @@ export default function Navbar() {
                     <div className="p-4 text-center text-sm font-bold text-slate-400">Searching...</div>
                   ) : searchResults.length > 0 ? (
                     searchResults.map(result => (
-                      <Link key={result.id} href={`/athlete/${result.id}`} onClick={closeMobileMenu} className="flex items-center gap-3 p-4 hover:bg-slate-50 border-b border-slate-100 last:border-0">
-                        <div className="w-10 h-10 rounded-full bg-slate-100 border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center">
-                          {result.avatar_url ? <img src={result.avatar_url} alt="" className="w-full h-full object-cover"/> : <Medal className="w-5 h-5 text-slate-400"/>}
+                      <Link key={result.id} href={`/athlete/${result.id}`} onClick={closeMobileMenu} className="flex items-center gap-4 p-4 hover:bg-slate-50 border-b border-slate-100 last:border-0">
+                        <div className="w-12 h-12 rounded-full bg-slate-100 border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center">
+                          {result.avatar_url ? <img src={result.avatar_url} alt="" className="w-full h-full object-cover"/> : <Medal className="w-6 h-6 text-slate-400"/>}
                         </div>
                         <div className="truncate">
                           <p className="text-base font-bold text-slate-900 truncate">{result.first_name} {result.last_name}</p>
-                          <p className="text-xs font-medium text-slate-500 truncate">{result.high_school}</p>
+                          <p className="text-sm font-medium text-slate-500 truncate">{result.high_school}</p>
                         </div>
                       </Link>
                     ))
@@ -400,7 +407,6 @@ export default function Navbar() {
               )}
             </div>
 
-            {/* 🚨 NEW: 2-COLUMN GRID FOR PHONE NAVIGATION 🚨 */}
             <div className="grid grid-cols-2 gap-3 mb-2">
               <Link href="/search" onClick={closeMobileMenu} className="bg-slate-50 hover:bg-blue-50 border border-slate-100 p-4 rounded-2xl flex flex-col items-center justify-center gap-2 transition-colors">
                 <School className="w-6 h-6 text-blue-500" />
