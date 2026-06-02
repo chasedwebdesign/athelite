@@ -419,6 +419,7 @@ export default function Home() {
   // --- ACTION: SAVE COLLEGE ---
   const toggleSaveCollege = async (e: React.MouseEvent, collegeId: string) => {
     e.preventDefault(); 
+    e.stopPropagation();
     if (!currentUserId) {
       setErrorMsg("Create a free athlete account to start saving target schools to your dashboard.");
       setTimeout(() => setErrorMsg(null), 5000);
@@ -911,17 +912,23 @@ export default function Home() {
                     // --- DYNAMIC BADGE CALCULATOR W/ FALLBACK & ACADEMIC TAG ---
                     const { badgeColor, badgeText, badgeSub } = getBadgeDetails(college, selectedSport, matchmakerLists.useScoreMatch, athleteScore);
 
+                    const isSaved = savedCollegeIds.has(college.id);
+                    const isProcessing = savingIds.has(college.id);
+
                     return (
-                    <Link key={`${matchmakerView}-${college.id}`} href={`/college/${college.id}?${new URLSearchParams({ ...(selectedSport && { sport: selectedSport }), ...(selectedGender && { gender: selectedGender }) }).toString()}`} className="flex flex-col xl:flex-row xl:items-center gap-4 p-5 hover:bg-slate-800/60 transition-all group">
+                    <div key={`${matchmakerView}-${college.id}`} className="flex flex-col xl:flex-row xl:items-center gap-4 p-5 hover:bg-slate-800/60 transition-all group">
                         
-                        {/* RANK, LOGO, NAME */}
-                        <div className="flex items-center gap-4 flex-1 min-w-0">
-                            <span className="w-6 text-slate-600 font-black text-sm italic group-hover:text-white transition-colors">#{idx+1}</span>
+                        {/* RANK, LOGO, NAME - Wrapped in Link */}
+                        <Link 
+                            href={`/college/${college.id}?${new URLSearchParams({ ...(selectedSport && { sport: selectedSport }), ...(selectedGender && { gender: selectedGender }) }).toString()}`} 
+                            className="flex items-center gap-4 flex-1 min-w-0 group/link"
+                        >
+                            <span className="w-6 text-slate-600 font-black text-sm italic group-hover/link:text-white transition-colors">#{idx+1}</span>
                             <div className="w-10 h-10 bg-slate-950 border border-slate-800 rounded-lg flex items-center justify-center shrink-0">
-                                <School className="w-5 h-5 text-slate-400 group-hover:text-white transition-colors" />
+                                <School className="w-5 h-5 text-slate-400 group-hover/link:text-white transition-colors" />
                             </div>
                             <div className="flex-1 min-w-0">
-                                <h4 className="font-bold text-base truncate text-slate-200 group-hover:text-white transition-colors flex items-center">
+                                <h4 className="font-bold text-base truncate text-slate-200 group-hover/link:text-white transition-colors flex items-center">
                                     {college.name}
                                     {!college.hasSport && selectedSport && (
                                         <span className="text-[9px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded font-black tracking-widest uppercase ml-2 shrink-0 border border-slate-700">Academic Match Only</span>
@@ -933,7 +940,7 @@ export default function Home() {
                                     {college.division}
                                 </p>
                             </div>
-                        </div>
+                        </Link>
 
                         {/* ADVANCED STATS ROW */}
                         <div className="grid grid-cols-2 sm:flex sm:flex-row items-center gap-4 sm:gap-6 pl-14 xl:pl-0 w-full xl:w-auto mt-2 xl:mt-0">
@@ -962,9 +969,29 @@ export default function Home() {
                                 <span className={`font-black tracking-widest leading-none text-center ${!college.hasSport ? 'text-[10px]' : (badgeText.length > 5 ? 'text-xs' : 'text-sm')}`}>{badgeText}</span>
                                 <span className="text-[8px] font-bold opacity-70 mt-1 uppercase tracking-widest">{badgeSub}</span>
                             </div>
+
+                            {/* SAVE BUTTON */}
+                            {!isCoach && (
+                                <button
+                                    onClick={(e) => toggleSaveCollege(e, college.id)}
+                                    disabled={isProcessing}
+                                    className={`p-2.5 rounded-xl border transition-all shadow-sm shrink-0 ${
+                                        isSaved 
+                                            ? 'bg-blue-500/20 border-blue-500/30 text-blue-400 shadow-[0_0_10px_rgba(59,130,246,0.2)]' 
+                                            : 'bg-slate-800/50 border-slate-700/50 text-slate-500 hover:text-blue-400 hover:border-blue-500/30 hover:bg-slate-800'
+                                    }`}
+                                    title={isSaved ? "Remove from Dashboard" : "Save to Target Schools"}
+                                >
+                                    {isProcessing ? (
+                                        <RefreshCw className="w-5 h-5 animate-spin" />
+                                    ) : (
+                                        <Bookmark className={`w-5 h-5 ${isSaved ? 'fill-current' : ''}`} />
+                                    )}
+                                </button>
+                            )}
                         </div>
 
-                    </Link>
+                    </div>
                     );
                 })}
             </div>

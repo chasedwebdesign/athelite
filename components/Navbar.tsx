@@ -5,7 +5,7 @@ import { createClient } from '@/utils/supabase/client';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter, usePathname } from 'next/navigation';
-import { Activity, Mail, Search, LogOut, LayoutDashboard, User, School, Trophy, Globe, Medal, Menu, X, ShoppingCart, Target, ChevronDown, Crown, Zap, Shield } from 'lucide-react'; 
+import { Activity, Mail, Search, LogOut, LayoutDashboard, User, School, Trophy, Globe, Medal, Menu, X, ShoppingCart, Target, ChevronDown, Crown, Zap, Shield, Calculator } from 'lucide-react'; 
 
 // 🚨 IMPORTED CHASEDCASH COMPONENT
 import { ChasedCash } from '@/components/ChasedCash';
@@ -207,10 +207,8 @@ export default function Navbar() {
   return (
     <>
       <nav className="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-[60]">
-        {/* 🚨 Taller, wider container max-w-[1600px] 🚨 */}
         <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between gap-4">
           
-          {/* 🚨 LEFT COLUMN: LOGO (flex-1 to force center) 🚨 */}
           <div className="flex flex-1 items-center justify-start shrink-0">
             <Link href="/" onClick={closeMobileMenu} className="flex items-center gap-2 group">
               <div className="relative w-10 h-10 sm:w-12 sm:h-12 overflow-hidden group-hover:scale-105 transition-transform">
@@ -229,7 +227,6 @@ export default function Navbar() {
             </Link>
           </div>
 
-          {/* 🚨 CENTER COLUMN: SEARCH (Centered explicitly) 🚨 */}
           <div className="hidden md:flex w-full max-w-2xl px-4 lg:px-8 shrink" ref={searchRef}>
             <div className="w-full relative shadow-sm rounded-full group">
               <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
@@ -245,7 +242,6 @@ export default function Navbar() {
                 className="w-full bg-slate-100/80 hover:bg-slate-100 border border-slate-200 focus:border-blue-300 focus:bg-white text-base font-medium text-slate-900 rounded-full pl-14 pr-6 py-3.5 transition-all outline-none focus:shadow-md"
               />
               
-              {/* 🚨 Expanded, protected dropdown width 🚨 */}
               {isSearchOpen && searchQuery.length >= 2 && (
                 <div className="absolute top-full mt-3 left-0 w-full min-w-[350px] bg-white border border-slate-200 rounded-[2rem] shadow-2xl overflow-hidden flex flex-col z-50">
                   {isSearching ? (
@@ -270,13 +266,20 @@ export default function Navbar() {
             </div>
           </div>
 
-          {/* 🚨 RIGHT COLUMN: NAVIGATION (flex-1 to offset logo width) 🚨 */}
           <div className="hidden md:flex flex-1 items-center justify-end space-x-3 lg:space-x-5 shrink-0">
-            <Link href="/search" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors flex items-center whitespace-nowrap"><School className="w-4 h-4 mr-1.5" /> <span className="hidden lg:inline">College Finder</span></Link>
+            {/* 🚨 NEW: PR Analyzer Link 🚨 */}
+            <Link href="/division-checker" className="text-sm font-bold text-slate-500 hover:text-fuchsia-600 transition-colors flex items-center whitespace-nowrap">
+              <Calculator className="w-4 h-4 mr-1.5" /> <span className="hidden lg:inline">PR Analyzer</span>
+            </Link>
+
+            <Link href="/search" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors flex items-center whitespace-nowrap">
+              <School className="w-4 h-4 mr-1.5" /> <span className="hidden lg:inline">College Finder</span>
+            </Link>
             
+            {/* 🚨 DESKTOP: Only show Teams if session exists */}
             {session && (
               <Link href="/dashboard/team" className="text-sm font-bold text-slate-500 hover:text-emerald-600 transition-colors flex items-center whitespace-nowrap">
-                <Shield className="w-4 h-4 mr-1.5" /> Teams
+                <Shield className="w-4 h-4 mr-1.5" /> <span className="hidden lg:inline">Teams</span>
               </Link>
             )}
             
@@ -363,7 +366,6 @@ export default function Navbar() {
         </div>
       </nav>
 
-      {/* 🚨 Adjusted Mobile Menu Offset to match new h-20 top navigation 🚨 */}
       {isMobileMenuOpen && (
         <div className="fixed inset-0 top-[80px] z-[50] bg-white overflow-y-auto animate-in slide-in-from-top-5 duration-200 md:hidden">
           <div className="p-6 flex flex-col gap-6">
@@ -407,20 +409,22 @@ export default function Navbar() {
               )}
             </div>
 
+            {/* 🚨 MOBILE: iOS Style Widget Grid 🚨 */}
             <div className="grid grid-cols-2 gap-3 mb-2">
-              <Link href="/search" onClick={closeMobileMenu} className="bg-slate-50 hover:bg-blue-50 border border-slate-100 p-4 rounded-2xl flex flex-col items-center justify-center gap-2 transition-colors">
+              <Link href="/division-checker" onClick={closeMobileMenu} className="bg-slate-50 hover:bg-fuchsia-50 border border-slate-100 p-4 rounded-2xl flex flex-col items-center justify-center gap-2 transition-colors col-span-1">
+                <Calculator className="w-6 h-6 text-fuchsia-500" />
+                <span className="font-bold text-slate-700 text-sm">PR Analyzer</span>
+              </Link>
+              <Link href="/search" onClick={closeMobileMenu} className="bg-slate-50 hover:bg-blue-50 border border-slate-100 p-4 rounded-2xl flex flex-col items-center justify-center gap-2 transition-colors col-span-1">
                 <School className="w-6 h-6 text-blue-500" />
                 <span className="font-bold text-slate-700 text-sm">College Finder</span>
               </Link>
-              {session ? (
-                <Link href="/dashboard/team" onClick={closeMobileMenu} className="bg-slate-50 hover:bg-emerald-50 border border-slate-100 p-4 rounded-2xl flex flex-col items-center justify-center gap-2 transition-colors">
+              
+              {/* Teams spans bottom row if logged in, otherwise completely hidden */}
+              {session && (
+                <Link href="/dashboard/team" onClick={closeMobileMenu} className="bg-slate-50 hover:bg-emerald-50 border border-slate-100 p-4 rounded-2xl flex flex-col items-center justify-center gap-2 transition-colors col-span-2">
                   <Shield className="w-6 h-6 text-emerald-500" />
                   <span className="font-bold text-slate-700 text-sm">Team HQ</span>
-                </Link>
-              ) : (
-                <Link href="/login" onClick={closeMobileMenu} className="bg-slate-50 hover:bg-emerald-50 border border-slate-100 p-4 rounded-2xl flex flex-col items-center justify-center gap-2 transition-colors">
-                  <Shield className="w-6 h-6 text-emerald-500" />
-                  <span className="font-bold text-slate-700 text-sm">Teams</span>
                 </Link>
               )}
             </div>
