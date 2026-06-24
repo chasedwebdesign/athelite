@@ -15,6 +15,8 @@ interface ChatMessage {
 interface Message {
   id: string;
   athlete_id: string;
+  coach_id: string | null;
+  sender_id: string;
   sender_name: string;
   sender_school: string;
   sender_email: string;
@@ -28,7 +30,7 @@ interface Message {
     last_name: string;
     avatar_url: string | null;
     grad_year?: number | null;
-  };
+  } | any;
 }
 
 export default function InboxPage() {
@@ -37,6 +39,7 @@ export default function InboxPage() {
   
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -56,7 +59,7 @@ export default function InboxPage() {
     scrollToBottom();
   }, [selectedMessage?.chat_history, selectedMessage]);
 
-  // 🚨 DYNAMIC TIMESTAMP SORTER (Fixes the buried message glitch)
+  // 🚨 DYNAMIC TIMESTAMP SORTER
   const getLatestTimestamp = (msg: Message) => {
     if (msg.chat_history && msg.chat_history.length > 0) {
       return new Date(msg.chat_history[msg.chat_history.length - 1].created_at).getTime();
@@ -84,52 +87,60 @@ export default function InboxPage() {
     let channel: any;
 
     async function loadMessages() {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
-        router.push('/login');
-        return;
-      }
-      
-      setCurrentUserId(session.user.id);
-
-      // Determine Role
-      const { data: cData } = await supabase.from('coaches').select('id').eq('id', session.user.id).maybeSingle();
-      if (cData) setViewerRole('coach');
-
-      // Fetch all messages matching the user's ID or email
-      const { data, error } = await supabase
-        .from('messages')
-        .select('*, athletes(first_name, last_name, avatar_url, grad_year)')
-        .or(`athlete_id.eq.${session.user.id},sender_email.eq.${session.user.email}`);
-
-      if (data) {
-        // Sort explicitly by the most recent chat activity, NOT just initial created_at
-        const sortedData = (data as Message[]).sort((a, b) => getLatestTimestamp(b) - getLatestTimestamp(a));
-        setMessages(sortedData);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
         
-        // If a message is currently open, smoothly update it with the new data
-        setSelectedMessage(prev => {
-           if (!prev) return null;
-           const updated = sortedData.find(m => m.id === prev.id);
-           return updated || prev;
-        });
-      }
-      setLoading(false);
+        if (!session) {
+          router.push('/login');
+          return;
+        }
+        
+        setCurrentUserId(session.user.id);
 
-      // 🚨 REALTIME SUBSCRIPTION: Auto-refreshes inbox when someone replies!
-      if (!channel) {
-        channel = supabase
-          .channel('realtime_messages')
-          .on(
-            'postgres_changes',
-            { event: '*', schema: 'public', table: 'messages' },
-            () => {
-               // When a database change is detected, silently reload the inbox
-               loadMessages();
-            }
-          )
-          .subscribe();
+        // Determine Role
+        const { data: cData } = await supabase.from('coaches').select('id').eq('id', session.user.id).maybeSingle();
+        if (cData) setViewerRole('coach');
+
+        // 🚨 FIX: Removed the failing coaches(...) join. We rely natively on sender_school/sender_name.
+        const { data, error } = await supabase
+          .from('messages')
+          .select('*, athletes(first_name, last_name, avatar_url, grad_year)')
+          .or(`athlete_id.eq.${session.user.id},coach_id.eq.${session.user.id},sender_id.eq.${session.user.id}`);
+
+        if (error) {
+          setFetchError(error.message);
+          setLoading(false);
+          return;
+        }
+
+        if (data) {
+          const sortedData = (data as Message[]).sort((a, b) => getLatestTimestamp(b) - getLatestTimestamp(a));
+          setMessages(sortedData);
+          
+          setSelectedMessage(prev => {
+             if (!prev) return null;
+             const updated = sortedData.find(m => m.id === prev.id);
+             return updated || prev;
+          });
+        }
+        
+        setLoading(false);
+
+        if (!channel) {
+          channel = supabase
+            .channel('realtime_messages')
+            .on(
+              'postgres_changes',
+              { event: '*', schema: 'public', table: 'messages' },
+              () => {
+                 loadMessages();
+              }
+            )
+            .subscribe();
+        }
+      } catch (err: any) {
+        setFetchError(err.message || 'An unexpected error occurred while loading messages.');
+        setLoading(false);
       }
     }
 
@@ -146,7 +157,7 @@ export default function InboxPage() {
     if (history.length > 0) {
       return history[history.length - 1].sender_id !== currentUserId;
     }
-    return msg.athlete_id === currentUserId;
+    return msg.sender_id !== currentUserId;
   };
 
   const isExpired = (msg: Message) => {
@@ -155,18 +166,22 @@ export default function InboxPage() {
     return new Date().getTime() - new Date(msg.created_at).getTime() > oneWeek;
   };
 
+  // 🚨 FIX: Dynamic Titling logic safely falls back to native row properties
   const getConversationTitle = (msg: Message) => {
-    if (msg.athlete_id === currentUserId) {
-      return msg.sender_school ? `${msg.sender_school} (${msg.sender_name})` : msg.sender_name;
-    } else {
+    if (viewerRole === 'coach') {
       const athleteData = Array.isArray(msg.athletes) ? msg.athletes[0] : msg.athletes;
       return athleteData ? `${athleteData.first_name} ${athleteData.last_name}` : 'Athlete';
+    } else {
+      if (msg.sender_id !== currentUserId) {
+        return msg.sender_school ? `${msg.sender_school} (${msg.sender_name})` : msg.sender_name;
+      }
+      return 'Coach / University';
     }
   };
 
   const isRecruitingMessage = (msg: Message) => {
     if (viewerRole === 'coach') return true; 
-    return !!msg.sender_school || msg.sender_name.toLowerCase().includes('coach');
+    return !!msg.sender_school || (msg.sender_name && msg.sender_name.toLowerCase().includes('coach'));
   };
 
   const handleOpenMessage = async (message: Message) => {
@@ -225,7 +240,6 @@ export default function InboxPage() {
 
       if (error) throw error;
 
-      // Optimistically update UI so the user doesn't have to wait for the realtime reload
       setMessages(prev => {
         const updated = prev.map(m => m.id === selectedMessage.id ? { ...m, chat_history: updatedHistory, is_read: false } : m);
         return updated.sort((a, b) => getLatestTimestamp(b) - getLatestTimestamp(a));
@@ -254,6 +268,22 @@ export default function InboxPage() {
     );
   }
 
+  // 🚨 ERROR BOUNDARY: Prevents a silent fail if the database schema is missing columns
+  if (fetchError) {
+    return (
+      <div className="min-h-screen bg-[#F8FAFC] flex flex-col items-center justify-center space-y-4 px-6 text-center">
+        <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center border border-red-200 mb-2">
+          <AlertCircle className="w-8 h-8 text-red-500" />
+        </div>
+        <h2 className="text-2xl font-black text-slate-900">Database Connection Error</h2>
+        <p className="text-slate-500 font-medium max-w-md mb-4">{fetchError}</p>
+        <Link href="/dashboard" className="bg-slate-900 text-white px-6 py-3 rounded-xl font-bold shadow-md hover:bg-slate-800 transition-colors">
+          Return to Dashboard
+        </Link>
+      </div>
+    );
+  }
+
   const activeMessages = messages.filter(m => m.status !== 'ended' && !isExpired(m));
   
   let displayedMessages: Message[] = [];
@@ -275,7 +305,6 @@ export default function InboxPage() {
     const isSelected = selectedMessage?.id === message.id;
     const isRecruit = isRecruitingMessage(message);
     
-    // Display the date of the latest activity, not the original created_at
     const latestTime = getLatestTimestamp(message);
     
     return (
@@ -303,7 +332,7 @@ export default function InboxPage() {
         <div className="flex items-center gap-2 w-full pl-0.5">
           {unread && <div className="w-2 h-2 bg-blue-600 rounded-full shrink-0 shadow-sm shadow-blue-500/50"></div>}
           <div className={`text-xs truncate ${unread ? 'font-bold text-slate-800' : 'font-medium text-slate-500'}`}>
-            {(message.status === 'pending' || message.status === 'delivered') && message.athlete_id === currentUserId && <span className="text-amber-500 font-bold mr-1">Action Needed:</span>}
+            {(message.status === 'pending' || message.status === 'delivered') && message.coach_id === currentUserId && <span className="text-amber-500 font-bold mr-1">Action Needed:</span>}
             {message.chat_history && message.chat_history.length > 0 
               ? message.chat_history[message.chat_history.length - 1].content 
               : message.content}
@@ -465,7 +494,7 @@ export default function InboxPage() {
                       <Ban className="w-4 h-4" /> This conversation has been ended.
                     </div>
                   ) : (selectedMessage.status === 'pending' || selectedMessage.status === 'delivered') ? (
-                    selectedMessage.athlete_id === currentUserId ? (
+                    selectedMessage.coach_id === currentUserId || selectedMessage.athlete_id === currentUserId && selectedMessage.sender_id !== currentUserId ? (
                       // RECEIVER SEES: Accept / Decline
                       <div className="p-6 flex flex-col items-center justify-center gap-3">
                         <h4 className="font-black text-slate-900 text-base">Accept this connection request?</h4>

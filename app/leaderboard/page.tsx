@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Suspense } from 'react';
 import { createClient } from '@/utils/supabase/client';
-import { Trophy, Medal, MapPin, Activity, Target, ChevronDown, Users, Info, X } from 'lucide-react';
+import { Trophy, Medal, MapPin, Activity, Target, ChevronDown, Users, Info, X, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 
@@ -33,6 +33,46 @@ const FILTER_EVENTS = [
 
 const FIELD_EVENTS = ['Shot Put', 'Discus', 'Javelin', 'Hammer', 'High Jump', 'Pole Vault', 'Long Jump', 'Triple Jump'];
 
+// ==========================================
+// 🛡️ DATA SANITIZATION HELPERS
+// ==========================================
+const normalizeMetrics = (raw: any): { event: string, mark: string, [key: string]: any }[] => {
+  let data = raw;
+  if (typeof data === 'string') {
+    try { data = JSON.parse(data); } catch (e) { return []; }
+  }
+  if (data && typeof data === 'object' && !Array.isArray(data)) {
+    data = data.prs || data.metrics || data.data || data.events || Object.values(data)[0] || [];
+  }
+  if (!Array.isArray(data)) return [];
+
+  return data.map((item: any) => {
+    if (!item) return null;
+    if (typeof item === 'string') return { event: item, mark: '' };
+    if (Array.isArray(item)) return { event: String(item[0] || ''), mark: String(item[1] || '') };
+    
+    if (typeof item === 'object') {
+       let ev = item.event || item.Event || item.eventName || item.name || item.EventName || item.EVENT;
+       let mk = item.mark || item.Mark || item.result || item.value || item.Result || item.MARK || item.time || item.distance;
+       
+       if (!ev && !mk) {
+          const keys = Object.keys(item);
+          if (keys.length === 1 && typeof item[keys[0]] === 'string') {
+             ev = keys[0];
+             mk = item[keys[0]];
+          }
+       }
+       
+       return {
+         ...item,
+         event: ev ? String(ev).trim() : '',
+         mark: mk ? String(mk).trim() : ''
+       };
+    }
+    return null;
+  }).filter((pr: any) => pr && (pr.event || pr.mark));
+};
+
 function LeaderboardContent() {
   const supabase = createClient();
   const searchParams = useSearchParams();
@@ -50,8 +90,26 @@ function LeaderboardContent() {
 
   useEffect(() => {
     async function fetchAthletes() {
-      const { data } = await supabase.from('athletes').select('*').gt('trust_level', 0);
-      if (data) setAthletes(data as Athlete[]);
+      // Pull both athletes and the joined sports metrics to properly extract PRs
+      const { data } = await supabase
+        .from('athletes')
+        .select('*, athlete_sports(sport_name, metrics)')
+        .gt('trust_level', 0);
+        
+      if (data) {
+        const mappedData = data.map((a: any) => {
+          // Find the specific track and field document from the new schema
+          const trackRecord = a.athlete_sports?.find((s: any) => s.sport_name === 'Track & Field' || s.sport_name === 'Track');
+          const rawMetrics = trackRecord?.metrics || a.prs || [];
+          
+          return {
+            ...a,
+            // Run the raw data through the bulletproof normalizer
+            prs: normalizeMetrics(rawMetrics)
+          };
+        });
+        setAthletes(mappedData as Athlete[]);
+      }
       setLoading(false);
     }
     fetchAthletes();
@@ -68,9 +126,11 @@ function LeaderboardContent() {
       setSelectedConference('All');
   }
 
-  const parseMarkForSorting = (mark: string, event: string): number => {
-    const cleanMark = mark.replace(/[a-zA-Z]/g, '').trim();
+  const parseMarkForSorting = (mark: any, event: string): number => {
+    if (!mark) return 99999;
+    const cleanMark = String(mark).replace(/[a-zA-Z]/g, '').trim();
     const isField = FIELD_EVENTS.includes(event);
+    
     if (cleanMark.includes("'")) {
       const parts = cleanMark.split("'");
       const feet = parseFloat(parts[0]) || 0;
@@ -83,6 +143,7 @@ function LeaderboardContent() {
       const seconds = parseFloat(parts[1]) || 0;
       return (minutes * 60) + seconds; 
     }
+    
     const val = parseFloat(cleanMark) || 99999;
     return isField ? -val : val;
   };
@@ -106,8 +167,8 @@ function LeaderboardContent() {
     });
 
     globalPool.sort((a, b) => {
-      const valA = parseMarkForSorting(a.targetMark!, selectedEvent);
-      const valB = parseMarkForSorting(b.targetMark!, selectedEvent);
+      const valA = parseMarkForSorting(a.targetMark, selectedEvent);
+      const valB = parseMarkForSorting(b.targetMark, selectedEvent);
       return valA - valB;
     });
 
@@ -312,9 +373,32 @@ function LeaderboardContent() {
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-blue-600/20 blur-[100px] rounded-full pointer-events-none"></div>
         <div className="relative z-10 max-w-4xl mx-auto">
           
+          {/* 🌟 PRISTINE BACK BUTTON */}
+          <div className="absolute left-0 top-0 hidden md:block">
+            <Link 
+              href="/dashboard/track" 
+              className="flex items-center px-5 py-2.5 rounded-full bg-slate-800/50 backdrop-blur-md border border-slate-700 hover:bg-blue-600 hover:border-blue-500 hover:scale-105 text-slate-300 hover:text-white text-xs font-black uppercase tracking-wider transition-all shadow-lg group"
+            >
+              <ArrowLeft className="w-4 h-4 mr-2 group-hover:-translate-x-1 transition-transform" /> 
+              Dashboard
+            </Link>
+          </div>
+
           <div className="absolute right-0 top-0 hidden md:block">
-            <button onClick={() => setIsRankModalOpen(true)} className="flex items-center px-4 py-2 rounded-full bg-slate-800 border border-slate-700 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold transition-colors shadow-sm">
+            <button onClick={() => setIsRankModalOpen(true)} className="flex items-center px-4 py-2.5 rounded-full bg-slate-800/50 backdrop-blur-md border border-slate-700 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold transition-all shadow-lg">
               <Info className="w-4 h-4 mr-2" /> Rank Info
+            </button>
+          </div>
+
+          <div className="md:hidden flex justify-between items-center w-full mb-6">
+            <Link 
+              href="/dashboard/track" 
+              className="flex items-center px-4 py-2 rounded-full bg-slate-800 border border-slate-700 hover:bg-slate-700 text-slate-300 hover:text-white text-[10px] font-bold transition-colors shadow-sm"
+            >
+              <ArrowLeft className="w-3.5 h-3.5 mr-1.5" /> Back
+            </Link>
+            <button onClick={() => setIsRankModalOpen(true)} className="flex items-center px-4 py-2 rounded-full bg-slate-800 border border-slate-700 hover:bg-slate-700 text-slate-300 hover:text-white text-[10px] font-bold transition-colors shadow-sm">
+              <Info className="w-3.5 h-3.5 mr-1.5" /> Rank Info
             </button>
           </div>
 
@@ -324,12 +408,6 @@ function LeaderboardContent() {
           <h1 className="text-4xl md:text-6xl font-black text-white tracking-tight mb-6 md:mb-8">
             The Leaderboards
           </h1>
-
-          <div className="md:hidden flex justify-center mb-6">
-            <button onClick={() => setIsRankModalOpen(true)} className="flex items-center px-4 py-2 rounded-full bg-slate-800 border border-slate-700 hover:bg-slate-700 text-slate-300 hover:text-white text-[10px] font-bold transition-colors shadow-sm">
-              <Info className="w-3.5 h-3.5 mr-1.5" /> Rank Info
-            </button>
-          </div>
 
           <div className="flex items-center justify-center mb-6 md:mb-8">
             <div className="flex bg-slate-900/80 p-1.5 rounded-2xl w-full sm:w-[320px] border border-slate-700 shadow-inner">

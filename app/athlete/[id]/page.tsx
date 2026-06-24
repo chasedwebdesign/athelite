@@ -7,11 +7,24 @@ import {
   CheckCircle2, MapPin, Mail, X, Send, Lock, Trophy, Calendar, 
   Share2, ArrowLeft, Activity, Globe, School, UserCircle2, 
   Clock, Star, ShieldCheck, AlertTriangle, Search, BookOpen, 
-  Eye, Link as LinkIcon, FileText, GraduationCap, Medal
+  Eye, Link as LinkIcon, FileText, GraduationCap, Medal, Target
 } from 'lucide-react';
 import Link from 'next/link';
 
 import { AvatarWithBorder } from '@/components/AnimatedBorders'; 
+
+interface AthleteSport {
+  id: string;
+  athlete_id: string;
+  sport_name: string;
+  position: string | null;
+  level_of_play: string | null;
+  athleticism_tier: string | null;
+  custom_fit_score: number;
+  metrics: { name: string; value: string }[];
+  meta_context: { accolades?: any[] } | null;
+  is_active: boolean;
+}
 
 interface AthleteProfile {
   id: string;
@@ -22,7 +35,6 @@ interface AthleteProfile {
   grad_year: number;
   trust_level: number;
   gender: string;
-  prs: { event: string; mark: string; date?: string; meet?: string }[];
   avatar_url?: string;
   equipped_border?: string | null;
   equipped_card?: string | null;
@@ -50,6 +62,12 @@ const EARNED_TITLES = [
   { id: 'prospect', name: 'Prospect', reqPercentile: 1.0, badgeClass: 'bg-slate-100 text-slate-600 border border-slate-300', unlockText: 'Standard Rank' },
 ];
 
+const getOrdinal = (n: number) => {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+};
+
 export default function PublicAthletePortfolio() {
   const params = useParams();
   const router = useRouter();
@@ -57,6 +75,7 @@ export default function PublicAthletePortfolio() {
   const supabase = createClient();
   
   const [athlete, setAthlete] = useState<AthleteProfile | null>(null);
+  const [athleteSports, setAthleteSports] = useState<AthleteSport[]>([]);
   const [posts, setPosts] = useState<AthletePost[]>([]); 
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'accolades' | 'activity'>('accolades');
@@ -92,12 +111,24 @@ export default function PublicAthletePortfolio() {
 
   useEffect(() => {
     async function fetchProfileAndUser() {
+      // 1. Fetch Core Athlete Profile
       const { data: athleteData } = await supabase.from('athletes').select('*').eq('id', athleteId).single();
       if (athleteData) setAthlete(athleteData as AthleteProfile);
 
+      // 2. Fetch Athlete Sports (Replaces old PR array logic)
+      const { data: sportsData } = await supabase
+        .from('athlete_sports')
+        .select('*')
+        .eq('athlete_id', athleteId)
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
+      if (sportsData) setAthleteSports(sportsData as AthleteSport[]);
+
+      // 3. Fetch Posts
       const { data: postData } = await supabase.from('posts').select('*').eq('athlete_id', athleteId).order('created_at', { ascending: false });
       if (postData) setPosts(postData as AthletePost[]);
 
+      // 4. Resolve Auth & View State
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session) {
@@ -270,9 +301,6 @@ export default function PublicAthletePortfolio() {
   const activeTitle = EARNED_TITLES.find(t => t.id === athlete.equipped_title) || EARNED_TITLES[6];
   const isVerified = athlete.trust_level > 0;
 
-  // =========================================
-  // 🚨 JSON PARSE RESUME LOGIC 🚨
-  // =========================================
   let parsedResume = { gpa: '', accolades: [] as string[], schoolPrefs: '' };
   if (athlete.saved_resume) {
     try {
@@ -286,16 +314,10 @@ export default function PublicAthletePortfolio() {
       parsedResume.schoolPrefs = athlete.saved_resume;
     }
   }
-
-  // =========================================
-  // 🚨 DYNAMIC CARD THEME LOGIC 🚨
-  // =========================================
   
-  // 🚨 CRITICAL FIX: Intercept older DB records that say 'default' instead of 'base'
   let cardType = athlete.equipped_card || 'base';
   if (cardType === 'default') cardType = 'base';
   
-  // 🚨 Default to the slick dark mode slate theme
   let containerClass = "bg-slate-900 border-slate-800 text-white shadow-2xl";
   let nameClass = "text-white";
   let metaClass = "text-slate-400";
@@ -335,7 +357,6 @@ export default function PublicAthletePortfolio() {
   return (
     <main className="min-h-screen bg-[#F8FAFC] font-sans pb-32">
       
-      {/* 🚨 DYNAMIC BANNER CSS KEYFRAMES 🚨 */}
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes shimmerSlow { 0% { background-position: -200% center; } 100% { background-position: 200% center; } }
         @keyframes foilShift { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
@@ -347,7 +368,6 @@ export default function PublicAthletePortfolio() {
         .champion-badge { background: linear-gradient(90deg, #991b1b 0%, #ef4444 20%, #991b1b 40%, #ef4444 60%, #991b1b 80%); background-size: 200% auto; animation: shimmerSlow 4s linear infinite; color: white; border: 1px solid #f87171; box-shadow: 0 0 15px rgba(239, 68, 68, 0.5); font-weight: 900; }
         .elite-badge { background: linear-gradient(90deg, #0f172a 0%, #475569 20%, #0f172a 40%, #475569 60%, #0f172a 80%); background-size: 200% auto; animation: shimmerSlow 4s linear infinite; color: white; border: 1px solid #94a3b8; box-shadow: 0 0 15px rgba(148, 163, 184, 0.3); font-weight: 900; }
         
-        /* CARD TEXTURES FROM CUSTOMIZE PAGE */
         .holo-card-base { background: transparent; }
         .holo-card-obsidian { background: linear-gradient(135deg, #0f172a 0%, #334155 25%, #000000 50%, #0f172a 75%, #1e293b 100%); background-size: 300% 300%; }
         .holo-card-crimson { background: linear-gradient(135deg, #450a0a 0%, #dc2626 50%, #450a0a 100%); background-size: 300% 300%; }
@@ -394,7 +414,6 @@ export default function PublicAthletePortfolio() {
         .holo-glare { position: absolute; inset: 0; background: linear-gradient(105deg, transparent 20%, rgba(255,255,255,0.4) 25%, transparent 30%); background-size: 200% auto; animation: shimmerGlare 8s infinite linear; pointer-events: none; z-index: 10; mix-blend-mode: overlay;}
       `}} />
 
-      {/* TOAST NOTIFICATION */}
       {toast && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[200] animate-in slide-in-from-top-5 fade-in duration-300">
           <div className={`rounded-full px-6 py-3 shadow-2xl flex items-center gap-3 font-bold text-sm border ${toast.type === 'error' ? 'bg-red-900 text-white border-red-700' : 'bg-slate-900 text-white border-slate-700'}`}>
@@ -410,7 +429,6 @@ export default function PublicAthletePortfolio() {
             <ArrowLeft className="w-4 h-4 mr-2" /> Back
           </button>
 
-          {/* View count indicator for the athlete themselves to see it's working */}
           {isSelf && (
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2 bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg border border-blue-200">
@@ -425,7 +443,6 @@ export default function PublicAthletePortfolio() {
           )}
         </div>
 
-        {/* 🚨 DYNAMIC BANNER CONTAINER 🚨 */}
         <div className={`rounded-[2.5rem] p-6 sm:p-8 md:p-12 border relative overflow-hidden mb-6 transition-all duration-300 ${containerClass}`}>
           {backgroundEffects}
           
@@ -439,7 +456,6 @@ export default function PublicAthletePortfolio() {
 
             <div className="flex-1 text-center md:text-left w-full">
               
-              {/* 🚨 BRANDING OVER-TITLE 🚨 */}
               <div className="mb-2">
                 <span className={`text-[10px] font-black uppercase tracking-widest flex items-center justify-center md:justify-start gap-1.5 opacity-80`}>
                   <BookOpen className="w-3.5 h-3.5" /> Athletic Portfolio
@@ -522,7 +538,6 @@ export default function PublicAthletePortfolio() {
           </div>
         </div>
 
-        {/* NOTIFICATION FOR COACHES IF UNVERIFIED */}
         {viewerRole === 'coach' && !isVerified && (
            <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-2xl mb-6 flex items-start gap-3 shadow-sm">
              <AlertTriangle className="w-6 h-6 text-amber-500 shrink-0 mt-0.5" />
@@ -551,7 +566,6 @@ export default function PublicAthletePortfolio() {
         {activeTab === 'accolades' && (
           <div className="animate-in fade-in duration-300">
             
-            {/* 🚨 NEW ACADEMICS & INFO SECTION FROM JSON 🚨 */}
             {(parsedResume.gpa || parsedResume.accolades.length > 0 || parsedResume.schoolPrefs) && (
               <div className="bg-white p-6 sm:p-8 rounded-[2rem] border border-slate-200 shadow-sm mb-6 space-y-6">
                 <h3 className="text-xl font-black text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-4">
@@ -586,37 +600,85 @@ export default function PublicAthletePortfolio() {
               </div>
             )}
 
-            {athlete.prs && athlete.prs.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {athlete.prs.map((pr, index) => (
-                  <div key={index} className="bg-white p-5 sm:p-6 rounded-[1.5rem] border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between group hover:border-blue-300 transition-colors gap-3 sm:gap-0">
-                    <div className="flex-1 pr-0 sm:pr-4 min-w-0">
-                      <span className="block text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Event</span>
-                      <span className="font-black text-lg sm:text-xl text-slate-900 truncate block">{pr.event}</span>
-                      {(pr.date || pr.meet) && (
-                        <div className="flex items-center text-[10px] sm:text-xs text-slate-500 font-medium mt-1 sm:mt-2">
-                          <Calendar className="w-3 h-3 sm:w-3.5 sm:h-3.5 mr-1 text-slate-400 shrink-0" /> 
-                          <span className="whitespace-nowrap">{pr.date}</span>
-                          <span className="mx-1.5 sm:mx-2 text-slate-300">•</span> 
-                          <MapPin className="w-3 h-3 sm:w-3.5 sm:h-3.5 mr-1 text-slate-400 shrink-0" /> 
-                          <span className="truncate">{pr.meet}</span>
+            {athleteSports && athleteSports.length > 0 ? (
+              <div className="space-y-6">
+                {athleteSports.map((sport) => (
+                  <div key={sport.id} className="bg-white p-6 sm:p-8 rounded-[2rem] border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                    
+                    {/* Sport Header */}
+                    <div className="flex flex-col sm:flex-row justify-between sm:items-center border-b border-slate-100 pb-5 mb-5 gap-4">
+                      <div>
+                        <h3 className="text-2xl font-black text-slate-900 flex items-center gap-2">
+                          {sport.sport_name}
+                        </h3>
+                        <p className="text-sm font-bold text-slate-500 mt-1 flex items-center gap-2">
+                          <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded-md text-xs uppercase tracking-widest">{sport.position || 'Athlete'}</span>
+                          <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded-md text-xs uppercase tracking-widest">{sport.level_of_play || 'Varsity'}</span>
+                        </p>
+                      </div>
+                      
+                      {sport.athleticism_tier && (
+                        <div className="shrink-0 bg-blue-50 border border-blue-100 text-blue-600 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest text-center shadow-sm">
+                          Tier: {sport.athleticism_tier}
                         </div>
                       )}
                     </div>
-                    <div className="sm:text-right pt-3 sm:pt-0 sm:pl-4 border-t sm:border-t-0 sm:border-l border-slate-100 shrink-0">
-                      <span className="block text-[10px] sm:text-xs font-bold text-blue-400 uppercase tracking-widest mb-0.5 sm:mb-1 flex items-center justify-end gap-1">
-                        Mark {!isVerified && <span title="Self-Reported"><AlertTriangle className="w-3 h-3 text-amber-400" /></span>}
-                      </span>
-                      <span className="font-black text-2xl sm:text-3xl text-blue-600 whitespace-nowrap">{pr.mark}</span>
-                    </div>
+
+                    {/* Metrics Grid */}
+                    {sport.metrics && sport.metrics.length > 0 && (
+                      <div className="mb-6">
+                        <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-2">
+                          <Target className="w-4 h-4 text-slate-400" /> Core Metrics
+                        </h4>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                          {sport.metrics.map((m: any, i: number) => (
+                            <div key={i} className="bg-slate-50 border border-slate-100 p-4 rounded-2xl flex flex-col justify-center items-center text-center">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 truncate w-full" title={m.name}>{m.name}</span>
+                              <span className="font-black text-lg text-slate-800 truncate w-full" title={m.value}>{m.value}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Accolades List */}
+                    {sport.meta_context?.accolades && sport.meta_context.accolades.length > 0 && (
+                      <div className="pt-2 border-t border-slate-100">
+                        <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-2">
+                          <Medal className="w-4 h-4 text-amber-500" /> Season Accolades
+                        </h4>
+                        <div className="flex flex-wrap gap-2">
+                          {sport.meta_context.accolades.map((acc: any, i: number) => (
+                            <div key={i} className="inline-flex items-center bg-amber-50 border border-amber-200 pl-1.5 pr-3 py-1.5 rounded-xl shadow-sm gap-2">
+                              {acc.type === 'state' ? (
+                                <>
+                                  <span className="text-[10px] font-black uppercase tracking-widest text-amber-700 bg-amber-200/50 px-2 py-1 rounded-lg">
+                                    {getOrdinal(acc.placement)} in State
+                                  </span>
+                                  <span className="text-xs font-bold text-amber-900">{acc.contribution}</span>
+                                </>
+                              ) : (
+                                <>
+                                  <span className="text-[10px] font-black uppercase tracking-widest text-indigo-700 bg-indigo-100 border border-indigo-200 px-2 py-1 rounded-lg">
+                                    Honor
+                                  </span>
+                                  <span className="text-xs font-bold text-slate-700">{acc.text}</span>
+                                </>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
                   </div>
                 ))}
               </div>
             ) : (
               <div className="bg-slate-50 p-8 sm:p-10 rounded-[2rem] border border-slate-200 border-dashed text-center">
                 <Activity className="w-10 h-10 sm:w-12 sm:h-12 text-slate-300 mx-auto mb-3" />
-                <h3 className="text-base sm:text-lg font-black text-slate-900 mb-1">No times recorded yet</h3>
-                <p className="text-xs sm:text-sm text-slate-500 font-medium">This athlete has not synced any official results.</p>
+                <h3 className="text-base sm:text-lg font-black text-slate-900 mb-1">No times or sports recorded yet</h3>
+                <p className="text-xs sm:text-sm text-slate-500 font-medium">This athlete has not synced any verified data to their profile.</p>
               </div>
             )}
           </div>
@@ -664,7 +726,6 @@ export default function PublicAthletePortfolio() {
 
       </div>
 
-      {/* MODAL */}
       {isMessageModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">

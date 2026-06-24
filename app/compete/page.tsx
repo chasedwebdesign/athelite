@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
-import { Target, TrendingUp, Crosshair, Crown, Lock, Activity, Zap, Medal, Swords, ScrollText, X, ChevronRight, Flame, Trophy, CheckCircle2, RefreshCw, AlertCircle, Search, MapPin, Skull, Gift, Share2, ShieldCheck, School, Users, HelpCircle } from 'lucide-react';
+import { Target, TrendingUp, Crosshair, Crown, Lock, Activity, Zap, Medal, Swords, ScrollText, X, ChevronRight, Flame, Trophy, CheckCircle2, RefreshCw, AlertCircle, Search, MapPin, Skull, Gift, Share2, ShieldCheck, School, Users, HelpCircle, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 
 // 🚨 IMPORT REUSABLE COMPONENTS
@@ -13,9 +13,62 @@ import { AvatarWithBorder } from '@/components/AnimatedBorders';
 const FIELD_EVENTS = ['Shot Put', 'Discus', 'Javelin', 'Hammer', 'High Jump', 'Pole Vault', 'Long Jump', 'Triple Jump'];
 const DISTANCE_EVENTS = ['800', '1500', '1600', 'Mile', '3000', '3200', '5000', '10,000', '5K', '3 Mile'];
 
+// ==========================================
+// 🛡️ DATA SANITIZATION HELPERS
+// ==========================================
+const normalizeMetrics = (raw: any): { event: string, mark: string, [key: string]: any }[] => {
+  let data = raw;
+  if (typeof data === 'string') {
+    try { data = JSON.parse(data); } catch (e) { return []; }
+  }
+  if (data && typeof data === 'object' && !Array.isArray(data)) {
+    data = data.prs || data.metrics || data.data || data.events || Object.values(data)[0] || [];
+  }
+  if (!Array.isArray(data)) return [];
+
+  return data.map((item: any) => {
+    if (!item) return null;
+    if (typeof item === 'string') return { event: item, mark: '' };
+    if (Array.isArray(item)) return { event: String(item[0] || ''), mark: String(item[1] || '') };
+    
+    if (typeof item === 'object') {
+       let ev = item.event || item.Event || item.eventName || item.name || item.EventName || item.EVENT;
+       let mk = item.mark || item.Mark || item.result || item.value || item.Result || item.MARK || item.time || item.distance;
+       
+       if (!ev && !mk) {
+          const keys = Object.keys(item);
+          if (keys.length === 1 && typeof item[keys[0]] === 'string') {
+             ev = keys[0];
+             mk = item[keys[0]];
+          }
+       }
+       
+       return {
+         ...item,
+         event: ev ? String(ev).trim() : '',
+         mark: mk ? String(mk).trim() : ''
+       };
+    }
+    return null;
+  }).filter((pr: any) => pr && (pr.event || pr.mark));
+};
+
+const extractTrackPrs = (athlete: any) => {
+  const track = athlete?.athlete_sports?.find((s: any) => s.sport_name === 'Track & Field' || s.sport_name === 'Track');
+  const rawMetrics = track?.metrics || [];
+  return normalizeMetrics(rawMetrics);
+};
+
+const extractBasePrs = (athlete: any) => {
+  const track = athlete?.athlete_sports?.find((s: any) => s.sport_name === 'Track & Field' || s.sport_name === 'Track');
+  const rawMetrics = track?.meta_context?.base_metrics || [];
+  return normalizeMetrics(rawMetrics);
+};
+
 // --- MATH HELPERS ---
-const parseMarkToNumber = (mark: string, event: string): number => {
-  if (!mark) return 0;
+const parseMarkToNumber = (markRaw: any, eventRaw: any): number => {
+  if (!markRaw) return 0;
+  const mark = String(markRaw);
   const cleanMark = mark.replace(/[a-zA-Z*]/g, '').trim();
   if (cleanMark.includes("'")) {
     const parts = cleanMark.split("'");
@@ -191,11 +244,24 @@ interface TeamChampEntry {
 interface PR { event: string; mark: string; }
 
 interface AthleteProfile {
-  id: string; first_name: string; last_name: string; high_school: string; state: string;
-  avatar_url: string | null; equipped_border: string | null; prs: PR[] | null; rival_ids: string[] | null;
-  trust_level: number; coins: number; athletic_net_url: string | null; created_at: string;
-  referred_by: string | null; verified_referrals: number; unlocked_borders: string[] | null;
+  id: string; 
+  first_name: string; 
+  last_name: string; 
+  high_school: string; 
+  state: string;
+  avatar_url: string | null; 
+  equipped_border: string | null; 
+  prs: PR[] | null; 
   gender: string | null;
+  rival_ids?: string[] | null;
+  trust_level?: number; 
+  coins?: number; 
+  athletic_net_url?: string | null; 
+  created_at?: string;
+  referred_by?: string | null; 
+  verified_referrals?: number; 
+  unlocked_borders?: string[] | null;
+  athlete_sports?: any[];
 }
 
 export default function CompetePage() {
@@ -243,20 +309,28 @@ export default function CompetePage() {
       if (!session) { router.push('/login'); return; }
 
       try {
-        const { data: aData, error } = await supabase
+        // 🚨 FIXED: Removed legacy `prs` from .select()
+        const { data: aDataRaw, error } = await supabase
           .from('athletes')
-          .select('id, first_name, last_name, high_school, state, gender, avatar_url, equipped_border, trust_level, coins, prs, base_prs, bounty_targets, rival_ids, athletic_net_url, created_at, referred_by, verified_referrals, unlocked_borders')
+          .select('id, first_name, last_name, high_school, state, gender, avatar_url, equipped_border, trust_level, coins, bounty_targets, rival_ids, athletic_net_url, created_at, referred_by, verified_referrals, unlocked_borders, athlete_sports(sport_name, metrics, meta_context)')
           .eq('id', session.user.id)
           .maybeSingle();
 
         if (error) throw error;
 
-        if (aData) {
-          setIsVerified(aData.trust_level > 0);
+        if (aDataRaw) {
+          const mappedPrs = extractTrackPrs(aDataRaw);
+          
+          const aData = {
+             ...aDataRaw,
+             prs: mappedPrs
+          };
+
+          setIsVerified((aData.trust_level ?? 0) > 0);
           setUserCoins(aData.coins || 0);
           setAthleteId(aData.id);
-          setAthletePrs(aData.prs || []);
-          setCurrentUser(aData as AthleteProfile);
+          setAthletePrs(mappedPrs);
+          setCurrentUser(aData as unknown as AthleteProfile);
           
           const refCode = aData.athletic_net_url?.match(/athlete\/(\d+)/i)?.[1] || null;
           setMyReferralCode(refCode);
@@ -269,41 +343,54 @@ export default function CompetePage() {
           
           let activeBounties = aData.bounty_targets || [];
 
-          // 🚨 THE SELF-HEALING FIX: Auto-generate baseline targets for legacy users! 🚨
-          if (activeBounties.length === 0 && aData.prs && aData.prs.length > 0) {
-            activeBounties = aData.prs.map((pr: any) => ({
+          if (activeBounties.length === 0 && mappedPrs.length > 0) {
+            activeBounties = mappedPrs.map((pr: any) => ({
               event: pr.event,
               mark: pr.mark
             }));
-            
-            // Silently save this to the database so they are permanently initialized
             await supabase.from('athletes').update({ bounty_targets: activeBounties }).eq('id', aData.id);
           }
 
           setBountyTargets(activeBounties);
 
+          // FETCH RIVALS
           if (aData.rival_ids && aData.rival_ids.length > 0) {
-            const { data: rData } = await supabase
+            // 🚨 FIXED: Removed legacy `prs` from .select()
+            const { data: rDataRaw } = await supabase
               .from('athletes')
-              .select('id, first_name, last_name, high_school, state, gender, avatar_url, equipped_border, prs')
+              .select('id, first_name, last_name, high_school, state, gender, avatar_url, equipped_border, athlete_sports(sport_name, metrics)')
               .in('id', aData.rival_ids);
-            if (rData) setActiveRivals(rData as AthleteProfile[]);
+              
+            if (rDataRaw) {
+              const rData = rDataRaw.map(r => ({
+                ...r,
+                prs: extractTrackPrs(r)
+              }));
+              setActiveRivals(rData as unknown as AthleteProfile[]);
+            }
           }
 
-          if (aData.state && aData.prs && aData.prs.length > 0) {
-            const topEvent = aData.prs[0];
+          // FETCH RECOMMENDED RIVALS
+          if (aData.state && mappedPrs.length > 0) {
+            const topEvent = mappedPrs[0];
             const myVal = parseMarkToNumber(topEvent.mark, topEvent.event);
             const isField = FIELD_EVENTS.includes(topEvent.event);
 
-            const { data: recs } = await supabase
+            // 🚨 FIXED: Removed legacy `prs` from .select()
+            const { data: recsRaw } = await supabase
               .from('athletes')
-              .select('id, first_name, last_name, high_school, state, gender, avatar_url, equipped_border, prs')
+              .select('id, first_name, last_name, high_school, state, gender, avatar_url, equipped_border, athlete_sports(sport_name, metrics)')
               .eq('state', aData.state)
               .eq('gender', aData.gender)
               .neq('id', aData.id)
-              .limit(15);
+              .limit(30);
             
-            if (recs) {
+            if (recsRaw) {
+               const recs = recsRaw.map(r => ({
+                 ...r,
+                 prs: extractTrackPrs(r)
+               }));
+
                const validRecs = recs.filter(r => {
                  if (aData.rival_ids?.includes(r.id)) return false;
                  const matchPr = r.prs?.find((p: any) => p.event === topEvent.event);
@@ -311,7 +398,7 @@ export default function CompetePage() {
                  const rVal = parseMarkToNumber(matchPr.mark, topEvent.event);
                  return isField ? rVal > myVal : rVal < myVal && rVal > 0;
                });
-               setRecommendedRivals(validRecs.slice(0, 3) as AthleteProfile[]);
+               setRecommendedRivals(validRecs.slice(0, 3) as unknown as AthleteProfile[]);
             }
           }
         }
@@ -319,13 +406,19 @@ export default function CompetePage() {
         console.error("Error loading user data:", err.message);
       }
 
-      // 🚨 DATA FETCH FOR ALL LEADERBOARDS
-      const { data: allAthletes } = await supabase
+      // 🚨 DATA FETCH FOR ALL LEADERBOARDS (FIXED: Removed legacy `prs` from .select())
+      const { data: allAthletesRaw } = await supabase
         .from('athletes')
-        .select('id, first_name, last_name, high_school, avatar_url, equipped_border, prs, base_prs, trust_level, gender, grad_year')
+        .select('id, first_name, last_name, high_school, avatar_url, equipped_border, trust_level, gender, grad_year, athlete_sports(sport_name, metrics, meta_context, custom_fit_score)')
         .gt('trust_level', 0);
 
-      if (allAthletes) {
+      if (allAthletesRaw) {
+        const allAthletes = allAthletesRaw.map(ath => ({
+          ...ath,
+          prs: extractTrackPrs(ath),
+          base_prs: extractBasePrs(ath)
+        }));
+
         const currentYear = new Date().getFullYear();
         const currentMonth = new Date().getMonth();
         const activeGradYearCutoff = currentMonth > 5 ? currentYear + 1 : currentYear;
@@ -337,7 +430,7 @@ export default function CompetePage() {
         for (const ath of allAthletes) {
           let eventImprovements: { event: string; pct: number; oldMark: string; newMark: string }[] = [];
 
-          if (ath.prs && ath.base_prs) {
+          if (ath.prs && ath.base_prs && ath.base_prs.length > 0) {
             ath.prs.forEach((currentRecord: any) => {
               const baseRecord = ath.base_prs.find((b: any) => b.event === currentRecord.event);
               if (baseRecord && baseRecord.mark !== currentRecord.mark) {
@@ -393,11 +486,10 @@ export default function CompetePage() {
           
         setTeamImprovementData(rankedImprovementTeams);
 
-        // 2. TEAM CHAMPS MATH (Recruiting Scores)
+        // 2. TEAM CHAMPS MATH
         const teamChampsMap: Record<string, { name: string; athleteScores: number[]; totalAthletes: number }> = {};
 
         for (const ath of allAthletes) {
-          // Filter out graduated athletes
           const isActive = !ath.grad_year || ath.grad_year >= activeGradYearCutoff;
           if (!isActive) continue;
 
@@ -406,13 +498,21 @@ export default function CompetePage() {
 
           if (!teamChampsMap[hs]) teamChampsMap[hs] = { name: hs, athleteScores: [], totalAthletes: 0 };
 
-          // Find this athlete's single best recruiting score
           let bestScore = 0;
+          
+          if (ath.athlete_sports) {
+            ath.athlete_sports.forEach((s: any) => {
+              if (s.custom_fit_score && s.custom_fit_score > bestScore) {
+                bestScore = s.custom_fit_score;
+              }
+            });
+          }
+
           if (ath.prs && ath.prs.length > 0) {
-             ath.prs.forEach((pr: any) => {
-                const score = getEventScore(pr.mark, pr.event, ath.gender || 'Boys');
-                if (score > bestScore) bestScore = score;
-             });
+            ath.prs.forEach((pr: any) => {
+              const score = getEventScore(pr.mark, pr.event, ath.gender || 'Boys');
+              if (score > bestScore) bestScore = score;
+            });
           }
 
           teamChampsMap[hs].totalAthletes += 1;
@@ -423,7 +523,6 @@ export default function CompetePage() {
 
         const processedTeamChamps = Object.values(teamChampsMap)
           .map(team => {
-             // Sort individual scores descending, then slice top 30
              team.athleteScores.sort((a, b) => b - a);
              const top30 = team.athleteScores.slice(0, 30);
              const teamScore = top30.reduce((sum, s) => sum + s, 0);
@@ -445,7 +544,6 @@ export default function CompetePage() {
     loadCompeteData();
   }, [supabase, router]);
 
-  // 🚨 FIXED: Handle Claim Bounty & Drop Feed Post 🚨
   const handleClaimBounty = async (event: string, reward: number, newPRMark: string) => {
     if (!athleteId) return;
     setIsClaiming(event);
@@ -454,7 +552,6 @@ export default function CompetePage() {
         const newCoins = userCoins + reward;
         const newBountyTargets = bountyTargets.map(bt => bt.event === event ? { ...bt, mark: newPRMark } : bt);
 
-        // 1. Update the athlete's bank and targets
         const { error } = await supabase.from('athletes').update({
             coins: newCoins,
             bounty_targets: newBountyTargets
@@ -462,7 +559,6 @@ export default function CompetePage() {
 
         if (error) throw error;
 
-        // 🚨 2. FIRE THE HOLOGRAPHIC POST TO THE GLOBAL FEED 🚨
         const { error: postError } = await supabase.from('posts').insert({
             athlete_id: athleteId,
             content: `Just destroyed my target in the ${event} and claimed a ${reward} ChasedCash bounty! 💰🔥`,
@@ -491,7 +587,6 @@ export default function CompetePage() {
     }
   };
 
-  // 🚨 FIXED: Handle Rival Overtake & Drop Feed Post 🚨
   const handleClaimOvertake = async (event: string, reward: number, rivalId: string) => {
     if (!athleteId) return;
     setIsClaiming(event + '_overtake');
@@ -513,7 +608,6 @@ export default function CompetePage() {
 
         if (error) throw error;
 
-        // 🚨 POST RIVAL DEFEAT TO GLOBAL FEED 🚨
         const myPr = athletePrs.find(p => p.event === event);
         const { error: postError } = await supabase.from('posts').insert({
             athlete_id: athleteId,
@@ -562,7 +656,7 @@ export default function CompetePage() {
         if (!referrer || referrer.id === currentUser.id) throw new Error("Invalid invite code.");
         await supabase.from('athletes').update({ referred_by: referrer.id }).eq('id', currentUser.id);
         
-        if (currentUser.trust_level > 0) {
+        if ((currentUser.trust_level ?? 0) > 0) {
             const newCoins = (referrer.coins || 0) + 300; 
             const newReferralCount = (referrer.verified_referrals || 0) + 1; 
             let newUnlocked = referrer.unlocked_borders || ['none'];
@@ -581,15 +675,21 @@ export default function CompetePage() {
     if (!searchQuery.trim()) return;
 
     setIsSearching(true);
-    const { data } = await supabase
+    // 🚨 FIXED: Removed legacy `prs` from .select()
+    const { data: searchRaw } = await supabase
       .from('athletes')
-      .select('id, first_name, last_name, high_school, state, avatar_url, equipped_border, prs, trust_level')
+      .select('id, first_name, last_name, high_school, state, avatar_url, equipped_border, trust_level, athlete_sports(sport_name, metrics)')
       .or(`first_name.ilike.%${searchQuery}%,last_name.ilike.%${searchQuery}%,high_school.ilike.%${searchQuery}%`)
       .neq('id', currentUser?.id)
       .limit(10);
 
-    const filtered = (data || []).filter(a => !activeRivals.some(ar => ar.id === a.id));
-    setSearchResults(filtered as AthleteProfile[]);
+    const searchMapped = (searchRaw || []).map(r => ({
+        ...r,
+        prs: extractTrackPrs(r)
+    }));
+
+    const filtered = searchMapped.filter(a => !activeRivals.some(ar => ar.id === a.id));
+    setSearchResults(filtered as unknown as AthleteProfile[]);
     setIsSearching(false);
   };
 
@@ -604,7 +704,7 @@ export default function CompetePage() {
       const updatedRivalIds = [...(currentUser.rival_ids || []), newRival.id];
       
       let newContracts: any[] = [];
-      currentUser.prs?.forEach(myPr => {
+      athletePrs?.forEach(myPr => {
         const rivalPr = newRival.prs?.find(p => p.event === myPr.event);
         if (rivalPr) {
           const isField = FIELD_EVENTS.includes(myPr.event);
@@ -798,8 +898,19 @@ export default function CompetePage() {
         </div>
       )}
 
-      <div className="max-w-5xl mx-auto px-6 pt-12">
+      <div className="max-w-5xl mx-auto px-6 pt-6 md:pt-12">
         
+        {/* 🌟 PRISTINE BACK BUTTON */}
+        <div className="mb-8">
+          <Link 
+            href="/dashboard/track" 
+            className="inline-flex items-center px-4 py-2 rounded-full bg-white border border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-slate-500 hover:text-blue-600 text-xs font-bold transition-all shadow-sm group"
+          >
+            <ArrowLeft className="w-3.5 h-3.5 mr-1.5 group-hover:-translate-x-1 transition-transform" /> 
+            Back to Dashboard
+          </Link>
+        </div>
+
         {/* HEADER */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
           <div>
@@ -1205,7 +1316,7 @@ export default function CompetePage() {
                 <div className="flex-1">
                   <h2 className="text-4xl font-black mb-2 tracking-tight">Team Champs</h2>
                   <p className="text-slate-300 font-medium text-lg leading-relaxed max-w-2xl">
-                    Ranked strictly by the cumulative Recruiting Score of the top 30 athletes on your team. No graduated athletes counted. Depth matters.
+                    Ranked strictly by the cumulative Recruiting Score of the top 30 athletes on your team across all sports. Depth matters.
                   </p>
                 </div>
               </div>

@@ -2,8 +2,15 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { createClient } from '@/utils/supabase/client';
-import { MapPin, Trophy, Search, Activity, ChevronRight, BookOpen, Users, SearchIcon, TrendingUp, Landmark, SlidersHorizontal, ChevronDown, ChevronUp, DollarSign, Percent, Award, RotateCcw, Bookmark, RefreshCw, Target, Lock, Zap, School, AlertCircle, Map, X, Crown, Gem, GraduationCap, Flame, Briefcase, Wallet } from 'lucide-react';
+import { MapPin, Trophy, Search, Activity, ChevronRight, BookOpen, Users, SearchIcon, TrendingUp, Landmark, SlidersHorizontal, ChevronDown, ChevronUp, DollarSign, Percent, Award, RotateCcw, Bookmark, RefreshCw, Target, Lock, Zap, School, AlertCircle, Map, X, Crown, Eye, EyeOff, Flame, Briefcase, Wallet } from 'lucide-react';
 import Link from 'next/link';
+
+// --- IMPORT THE REUSABLE PRO GATE ---
+import ProGate from '@/components/ProGate';
+
+// --- ALIGN WITH PRO GATE LAUNCH TIMELINE ---
+const PRO_LAUNCH_DATE = new Date('2026-08-08T00:00:00Z'); 
+const FOUNDER_FREE_MONTHS = 6;
 
 // --- UMBRELLA MAJOR MAPPING ---
 const UMBRELLA_MAP: Record<string, string> = {
@@ -59,7 +66,7 @@ function getUmbrellaMajor(searchTerm: string): string {
   return searchTerm.charAt(0).toUpperCase() + searchTerm.slice(1);
 }
 
-// --- EXACT DASHBOARD CALCULATOR ---
+// --- TRACK & FIELD DASHBOARD CALCULATOR ---
 const FIELD_EVENTS = ['Shot Put', 'Discus', 'Javelin', 'Hammer', 'High Jump', 'Pole Vault', 'Long Jump', 'Triple Jump'];
 
 const RECRUITING_STANDARDS: Record<string, Record<string, { t1: number, t2: number, t3: number, t4: number, t5: number, t6: number, t7: number, isField?: boolean }>> = {
@@ -91,7 +98,7 @@ const RECRUITING_STANDARDS: Record<string, Record<string, { t1: number, t2: numb
     '100 Meters': { t1: 11.7, t2: 12.1, t3: 12.4, t4: 12.8, t5: 13.2, t6: 13.6, t7: 14.5 },
     '200 Meters': { t1: 24.2, t2: 24.8, t3: 25.5, t4: 26.2, t5: 27.0, t6: 28.5, t7: 31.0 },
     '400 Meters': { t1: 54.5, t2: 57.0, t3: 58.5, t4: 60.5, t5: 63.0, t6: 66.0, t7: 72.0 },
-    '800 Meters': { t1: 130, t2: 135, t3: 140, t4: 145, t5: 152, t6: 160, t7: 175 }, 
+    '800 Meters': { t1: 130, t2: 135, t3: 140, t4: 145, t5: 152, text: '160', t6: 160, t7: 175 }, 
     '1500 Meters': { t1: 268, t2: 282, t3: 291, t4: 300, t5: 314, t6: 330, t7: 375 },
     '1600 Meters': { t1: 290, t2: 305, t3: 315, t4: 325, t5: 340, t6: 360, t7: 400 }, 
     '3000 Meters': { t1: 583, t2: 611, t3: 638, t4: 666, t5: 694, t6: 730, t7: 840 },
@@ -100,7 +107,7 @@ const RECRUITING_STANDARDS: Record<string, Record<string, { t1: number, t2: numb
     '200m Hurdles': { t1: 28.0, t2: 29.0, t3: 30.5, t4: 32.0, t5: 34.0, t6: 36.0, t7: 40.0 },
     '300m Hurdles': { t1: 42.5, t2: 44.5, t3: 46.5, t4: 48.5, t5: 51.0, t6: 54.0, t7: 59.0 },
     '400m Hurdles': { t1: 60.0, t2: 63.0, t3: 66.0, t4: 69.0, t5: 72.0, t6: 76.0, t7: 85.0 },
-    'Long Jump': { t1: 234, t2: 222, t3: 210, t4: 198, t5: 186, t6: 174, t7: 150, isField: true }, 
+    'Long Jump': { t1: 234, t2: 222, t3: 210, t4: 198, t5: 186, text: '174', t6: 174, t7: 150, isField: true }, 
     'Triple Jump': { t1: 480, t2: 456, t3: 432, t4: 408, t5: 384, t6: 360, t7: 312, isField: true },
     'High Jump': { t1: 68, t2: 64, t3: 62, t4: 60, t5: 58, t6: 54, t7: 50, isField: true }, 
     'Pole Vault': { t1: 156, t2: 144, t3: 132, t4: 120, t5: 108, t6: 90, t7: 72, isField: true },
@@ -151,7 +158,7 @@ const getAthleteProjection = (prs: any[], gender: string) => {
       const val = convertMarkToNumber(pr.mark, !!eventStds.isField);
       if (isNaN(val) || val === 0) return; 
       
-      let score = 5;
+      let score = 15;
 
       if (eventStds.isField) {
         if (val >= eventStds.t1) score = 95 + Math.min(4, ((val - eventStds.t1) / (eventStds.t1 * 0.05)) * 4);
@@ -161,7 +168,10 @@ const getAthleteProjection = (prs: any[], gender: string) => {
         else if (val >= eventStds.t5) score = 55 + ((val - eventStds.t5) / (eventStds.t4 - eventStds.t5)) * 10;
         else if (val >= eventStds.t6) score = 40 + ((val - eventStds.t6) / (eventStds.t5 - eventStds.t6)) * 14;
         else if (val >= eventStds.t7) score = 20 + ((val - eventStds.t7) / (eventStds.t6 - eventStds.t7)) * 19;
-        else { const t8 = eventStds.t7 * 0.85; if (val >= t8) { score = 5 + ((val - t8) / (eventStds.t7 - t8)) * 14; } else { score = 5; } }
+        else { 
+            const t8 = eventStds.t7 * 0.85; 
+            if (val >= t8) { score = 15 + ((val - t8) / (eventStds.t7 - t8)) * 4; } else { score = 15; } 
+        }
       } else {
         if (val <= eventStds.t1) score = 95 + Math.min(4, ((eventStds.t1 - val) / (eventStds.t1 * 0.05)) * 4);
         else if (val <= eventStds.t2) score = 85 + ((eventStds.t2 - val) / (eventStds.t2 - eventStds.t1)) * 10;
@@ -170,9 +180,12 @@ const getAthleteProjection = (prs: any[], gender: string) => {
         else if (val <= eventStds.t5) score = 55 + ((eventStds.t5 - val) / (eventStds.t5 - eventStds.t4)) * 10;
         else if (val <= eventStds.t6) score = 40 + ((eventStds.t6 - val) / (eventStds.t6 - eventStds.t5)) * 14;
         else if (val <= eventStds.t7) score = 20 + ((eventStds.t7 - val) / (eventStds.t7 - eventStds.t6)) * 19;
-        else { const t8 = eventStds.t7 * 1.15; if (val <= t8) { score = 5 + ((t8 - val) / (t8 - eventStds.t7)) * 14; } else { score = 5; } }
+        else { 
+            const t8 = eventStds.t7 * 1.15; 
+            if (val <= t8) { score = 15 + ((t8 - val) / (t8 - eventStds.t7)) * 4; } else { score = 15; } 
+        }
       }
-      allBreakdowns.push({ score: Math.min(99, Math.max(5, Math.round(score))) });
+      allBreakdowns.push({ score: Math.min(99, Math.max(15, Math.round(score))) });
     }
   });
 
@@ -264,6 +277,7 @@ interface University {
   tuition_in_state?: number;
   tuition_out_of_state?: number;
   tuition?: number;
+  athleteMatchScore?: number; 
 }
 
 const US_TILE_MAP = [
@@ -284,6 +298,20 @@ function formatCurrency(num: number | null | undefined) {
 
 type MatchmakerCategory = 'fit' | 'cost' | 'salary' | 'funding' | 'roi';
 
+// --- EXTRACTOR HELPER FOR THE NEW 'athlete_sports' TABLE ---
+const extractTrackPrs = (sports: any) => {
+  if (!Array.isArray(sports)) return [];
+  const track = sports?.find((s: any) => s.sport_name === 'Track & Field');
+  if (!track || !track.metrics) return [];
+  
+  let parsed = track.metrics;
+  if (typeof parsed === 'string') {
+    try { parsed = JSON.parse(parsed); } catch (e) { parsed = []; }
+  }
+  if (!Array.isArray(parsed)) return [];
+  return parsed.map((m: any) => ({ event: m.name, mark: m.value }));
+};
+
 export default function Home() {
   const supabase = createClient();
   const [universities, setUniversities] = useState<University[]>([]);
@@ -297,11 +325,18 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<'personalized' | 'all'>('personalized');
   const [matchmakerView, setMatchmakerView] = useState<MatchmakerCategory>('fit');
 
+  // --- Filtration Toggle for Academic Matches ---
+  const [hideAcademicOnly, setHideAcademicOnly] = useState(false);
+
   // --- Auth & Target Schools States ---
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [athleteProfile, setAthleteProfile] = useState<any>(null); 
   const [isAthlete, setIsAthlete] = useState<boolean>(false);
   const [athleteFirstName, setAthleteFirstName] = useState<string>('');
-  const [athleteScore, setAthleteScore] = useState<number>(0);
+  
+  // Best score globally in Hero banner.
+  const [athleteScore, setAthleteScore] = useState<number>(0); 
+  
   const [athleteGender, setAthleteGender] = useState<string>('');
   const [athleteState, setAthleteState] = useState<string>('');
   
@@ -323,6 +358,30 @@ export default function Home() {
   const [maxTuition, setMaxTuition] = useState('');
   const [sortBy, setSortBy] = useState('');
 
+  // --- SNEAKY PAYWALL EVALUATOR (SYNCED TO PRO GATE LAUNCH TIMELINE) ---
+  const isPreLaunch = useMemo(() => new Date() < PRO_LAUNCH_DATE, []);
+  
+  const isLockedProfile = useMemo(() => {
+      // If they have no profile, they do not have access
+      if (!athleteProfile) return true;
+
+      const isPremium = athleteProfile.is_premium === true;
+      const isFounder = athleteProfile.is_founder === true;
+
+      const now = new Date();
+      const founderExpirationDate = new Date(PRO_LAUNCH_DATE);
+      founderExpirationDate.setMonth(founderExpirationDate.getMonth() + FOUNDER_FREE_MONTHS);
+      const isFounderActive = isFounder && now < founderExpirationDate;
+
+      if (isPreLaunch) {
+          // PRE-LAUNCH: Feature locked to everyone except Founders (and Premium)
+          return !(isFounder || isPremium);
+      } else {
+          // POST-LAUNCH: Feature locked to everyone except Premium users and Active Founders
+          return !(isPremium || isFounderActive);
+      }
+  }, [athleteProfile, isPreLaunch]);
+
   // --- 1. Load User, Score & Check Role ---
   useEffect(() => {
     async function fetchUserAndSaves() {
@@ -332,7 +391,7 @@ export default function Home() {
         
         const { data: athleteData } = await supabase
           .from('athletes')
-          .select('id, first_name, gender, prs, state')
+          .select('id, first_name, gender, state, is_premium, is_founder, primary_sport')
           .eq('id', session.user.id)
           .maybeSingle();
 
@@ -342,9 +401,26 @@ export default function Home() {
           setAthleteGender(athleteData.gender || 'Boys');
           if (athleteData.state) setAthleteState(athleteData.state);
           
-          // EXACT Dashboard Calculator integration
-          const proj = getAthleteProjection(athleteData.prs || [], athleteData.gender || 'Boys');
-          setAthleteScore(proj.overallScore);
+          const { data: sportsData } = await supabase
+            .from('athlete_sports')
+            .select('sport_name, metrics, custom_fit_score')
+            .eq('athlete_id', session.user.id);
+
+          setAthleteProfile({ ...athleteData, athlete_sports: sportsData || [] });
+          
+          let bestScore = 0;
+          if (sportsData && sportsData.length > 0) {
+             sportsData.forEach((s: any) => {
+                 if (s.sport_name === 'Track & Field') {
+                     const prs = extractTrackPrs(sportsData);
+                     const trackScore = getAthleteProjection(prs, athleteData.gender || 'Boys').overallScore;
+                     if (trackScore > bestScore) bestScore = trackScore;
+                 } else {
+                     if (s.custom_fit_score && s.custom_fit_score > bestScore) bestScore = s.custom_fit_score;
+                 }
+             });
+          }
+          setAthleteScore(bestScore);
 
           const { data } = await supabase
             .from('saved_colleges')
@@ -359,6 +435,25 @@ export default function Home() {
     }
     fetchUserAndSaves();
   }, [supabase]);
+
+  // --- DYNAMIC HERO SCORE LOGIC ---
+  const activeAthleteScore = useMemo(() => {
+    if (!isAthlete || !athleteProfile) return { score: 0, label: 'Base' };
+
+    const targetSport = selectedSport || athleteProfile.primary_sport || 'Track & Field';
+    let score = 0;
+    const sportsList = athleteProfile.athlete_sports || [];
+    
+    if (targetSport === 'Track & Field') {
+        const prs = extractTrackPrs(sportsList);
+        score = getAthleteProjection(prs, athleteGender).overallScore;
+    } else {
+        const sportRow = sportsList.find((s: any) => s.sport_name === targetSport);
+        score = sportRow?.custom_fit_score || 0;
+    }
+
+    return { score, label: targetSport };
+  }, [selectedSport, athleteProfile, isAthlete, athleteGender]);
 
   // --- 2. Load Initial State (Filters & Results) ---
   useEffect(() => {
@@ -381,6 +476,7 @@ export default function Home() {
         setSortBy(f.sortBy || '');
         setHasSearched(f.hasSearched || false);
         setShowAdvanced(f.showAdvanced || false);
+        setHideAcademicOnly(f.hideAcademicOnly || false);
       }
 
       if (savedResults) setUniversities(JSON.parse(savedResults));
@@ -397,11 +493,11 @@ export default function Home() {
     if (!isInitialized) return; 
     const filters = {
       schoolName, selectedSport, selectedGender, selectedDivision, selectedStates,
-      selectedMajor, maxAcceptance, tuitionType, maxTuition, sortBy, hasSearched, showAdvanced
+      selectedMajor, maxAcceptance, tuitionType, maxTuition, sortBy, hasSearched, showAdvanced, hideAcademicOnly
     };
     sessionStorage.setItem('chasedSportsFilters', JSON.stringify(filters));
     sessionStorage.setItem('chasedSportsTab', activeTab);
-  }, [isInitialized, schoolName, selectedSport, selectedGender, selectedDivision, selectedStates, selectedMajor, maxAcceptance, tuitionType, maxTuition, sortBy, hasSearched, showAdvanced, activeTab]);
+  }, [isInitialized, schoolName, selectedSport, selectedGender, selectedDivision, selectedStates, selectedMajor, maxAcceptance, tuitionType, maxTuition, sortBy, hasSearched, showAdvanced, activeTab, hideAcademicOnly]);
 
   useEffect(() => {
     if (!isInitialized) return;
@@ -478,6 +574,7 @@ export default function Home() {
     setMaxTuition('');
     setSortBy('');
     setHasSearched(false);
+    setHideAcademicOnly(false);
     setActiveTab('personalized');
     setMatchmakerView('fit');
     setUniversities([]);
@@ -497,13 +594,9 @@ export default function Home() {
 
     setLoading(true);
     setHasSearched(true);
-    setActiveTab('personalized'); // Default to the personalized view for maximum impact
+    setActiveTab('personalized'); 
 
-    // Fetch up to 800 schools to ensure we get a solid pool of academic & athletic matches nationwide
-    // NOTICE: We do NOT use !inner so we pull Academic schools even if they don't have the sport.
-    // Also, we do NOT filter programs by gender here, to avoid the Men/Women vs Boys/Girls database string mismatch!
     let selectString = `*, programs(sport, gender, operating_expense, team_performance_rating, average_scholarship)`;
-
     let query = supabase.from('universities').select(selectString);
 
     if (schoolName) query = query.ilike('name', `%${schoolName}%`);
@@ -535,10 +628,7 @@ export default function Home() {
   // --- HELPER: GET CALCULATED TUITION ---
   const getCalculatedTuition = (uni: University) => {
     if (!uni) return { amount: 0, isInState: false };
-    
-    // Strict In-State Logic: ONLY applies if athlete's saved DB profile state matches the college state
     const isHomeState = Boolean(athleteState && uni.state === athleteState);
-    
     let amount = uni.tuition_out_of_state || uni.tuition || 0;
     
     if (isHomeState && uni.tuition_in_state) {
@@ -546,18 +636,16 @@ export default function Home() {
     } else if (isHomeState && uni.tuition) {
         amount = uni.tuition;
     }
-    
     return { amount, isInState: isHomeState };
   };
 
   // --- FILTER & SORT LOGIC ---
   const validUniversities = useMemo(() => {
-    // 1. Process Raw Universities (Determine if they actually have the sport & gender selected)
     let processed = universities.map(uni => {
         let targetProgram = null;
         let hasSport = true;
+        let athleteMatchScore = 0;
         
-        // Advanced string matching logic to fix DB variations (e.g. "Track and Field (Indoor)" vs "Track & Field")
         const normalizeSport = (s: string) => s.toLowerCase().replace(/ and /g, ' & ').replace(/[^a-z0-9]/g, '');
 
         if (selectedSport) {
@@ -569,11 +657,8 @@ export default function Home() {
             targetProgram = uni.programs?.find(p => {
                 const normSearch = normalizeSport(selectedSport);
                 const normDb = normalizeSport(p.sport || '');
-                
-                // Must match sport string variation
                 if (normSearch && !normDb.includes(normSearch) && !normSearch.includes(normDb)) return false;
                 
-                // If gender is determined, must match mapped variations (Colleges use Men/Women, Men's/Women's)
                 if (targetGender) {
                     const pG = (p.gender || '').toLowerCase();
                     const isDbMen = pG === 'men' || pG === 'boys' || pG === "men's" || pG === "boys'" || pG === 'male';
@@ -582,20 +667,33 @@ export default function Home() {
                     if (targetGender === 'men' && !isDbMen) return false;
                     if (targetGender === 'women' && !isDbWomen) return false;
                 }
-                
                 return true;
             });
-            
             if (!targetProgram) hasSport = false;
         } else {
             targetProgram = uni.programs?.[0];
             if (!targetProgram) hasSport = false;
         }
-        
-        return { ...uni, targetProgram, hasSport };
+
+        if (isAthlete && athleteProfile && hasSport && targetProgram) {
+            const sportsList = athleteProfile.athlete_sports || [];
+            const progSport = targetProgram.sport;
+            
+            if (progSport === 'Track & Field') {
+                const prs = extractTrackPrs(sportsList);
+                athleteMatchScore = getAthleteProjection(prs, athleteGender).overallScore;
+            } else {
+                const sportRow = sportsList.find((s: any) => s.sport_name === progSport);
+                athleteMatchScore = sportRow?.custom_fit_score || 0;
+            }
+        }
+        return { ...uni, targetProgram, hasSport, athleteMatchScore };
     });
 
-    // 2. Filter by numeric user inputs
+    if (hideAcademicOnly && (selectedSport || athleteProfile?.primary_sport)) {
+        processed = processed.filter(uni => uni.hasSport);
+    }
+
     let filtered = processed.filter((uni) => {
       const hasAcceptanceData = uni.acceptance_rate != null && uni.acceptance_rate !== '';
       const hasEarnings = uni.median_earnings != null && uni.median_earnings > 0;
@@ -615,11 +713,9 @@ export default function Home() {
         
         if (schoolTuition === 0 || schoolTuition > maxT) return false;
       }
-
       return true;
     });
 
-    // 3. Sort
     if (sortBy) {
       filtered.sort((a, b) => {
         if (sortBy.startsWith('budget')) {
@@ -665,86 +761,61 @@ export default function Home() {
           }
           return valB - valA;
         }
-
         return 0;
       });
     } else {
-        // Default Rank/Sort for Best Colleges Recommendation (if no sort applied)
-        // Sorts primarily by Team Rating (Athletic Caliber) then by Selectivity (Prestige)
         filtered.sort((a, b) => {
              const ratingA = a.hasSport ? getCalculatedRating(a, a.targetProgram) : 0;
              const ratingB = b.hasSport ? getCalculatedRating(b, b.targetProgram) : 0;
-             
-             if (ratingA !== ratingB) {
-                 return ratingB - ratingA;
-             }
+             if (ratingA !== ratingB) return ratingB - ratingA;
 
              const accA = parseFloat(a.acceptance_rate?.replace('%', '') || '100');
              const accB = parseFloat(b.acceptance_rate?.replace('%', '') || '100');
              return accA - accB;
         });
     }
-
     return filtered;
-  }, [universities, maxAcceptance, maxTuition, tuitionType, sortBy, selectedSport, selectedGender, isAthlete, athleteGender]);
+  }, [universities, maxAcceptance, maxTuition, tuitionType, sortBy, selectedSport, selectedGender, isAthlete, athleteGender, athleteProfile, hideAcademicOnly]);
 
   // --- COMPREHENSIVE MATCHMAKER LISTS ---
   const matchmakerLists = useMemo(() => {
     if (!validUniversities.length || !hasSearched) return null;
 
-    const listLimit = 50; // Generate up to top 50 for the long lists
+    const listLimit = 55; // Pull a solid payload window for slicing
+    const isPersonalizedFit = isAthlete && validUniversities.some(u => u.athleteMatchScore && u.athleteMatchScore > 0);
 
-    // Determine if we should apply the strict recruiting score penalty (only valid for Track)
-    const isTrackSearch = !selectedSport || selectedSport.toLowerCase().includes('track');
-    const useScoreMatch = isAthlete && athleteScore > 0 && isTrackSearch;
-
-    // 1. BEST ATHLETIC FITS (Composite Algorithm)
-    // Uses ALL schools, so if an elite academic school lacks the sport, it still gets recommended.
-    let isPersonalizedFit = false;
-    let topAthleticFits: University[] = [];
-    
-    topAthleticFits = [...validUniversities].sort((a, b) => {
+    let topAthleticFits = [...validUniversities].sort((a, b) => {
         const ratingA = a.hasSport ? getCalculatedRating(a, a.targetProgram) : 0;
         const ratingB = b.hasSport ? getCalculatedRating(b, b.targetProgram) : 0;
-        
         let scoreA = 0;
         let scoreB = 0;
 
-        // 1. Athletic Fit (Massive Weight)
-        if (useScoreMatch && a.hasSport && ratingA > 0) {
-            const diffA = Math.abs(ratingA - athleteScore);
-            scoreA += 100 - (diffA * 5); // 100 pts max
+        if (a.hasSport && ratingA > 0 && a.athleteMatchScore && a.athleteMatchScore > 0) {
+            const diffA = Math.abs(ratingA - a.athleteMatchScore);
+            scoreA += 100 - (diffA * 5); 
         } else if (a.hasSport) {
-            scoreA += ratingA; // Up to 100 pts
+            scoreA += ratingA;
         }
 
-        if (useScoreMatch && b.hasSport && ratingB > 0) {
-            const diffB = Math.abs(ratingB - athleteScore);
+        if (b.hasSport && ratingB > 0 && b.athleteMatchScore && b.athleteMatchScore > 0) {
+            const diffB = Math.abs(ratingB - b.athleteMatchScore);
             scoreB += 100 - (diffB * 5);
         } else if (b.hasSport) {
             scoreB += ratingB;
         }
 
-        // 2. Median Salary (High Weight)
-        scoreA += Math.min((a.median_earnings || 0) / 2000, 50); // Up to 50 pts
+        scoreA += Math.min((a.median_earnings || 0) / 2000, 50); 
         scoreB += Math.min((b.median_earnings || 0) / 2000, 50);
-
-        // 3. Prestige / Acceptance Rate (Medium Weight)
         const accA = parseFloat(a.acceptance_rate || '100');
         const accB = parseFloat(b.acceptance_rate || '100');
-        scoreA += ((100 - accA) / 4); // Up to 25 pts
+        scoreA += ((100 - accA) / 4); 
         scoreB += ((100 - accB) / 4);
-
-        // 4. Funding (Low Weight)
         scoreA += Math.min((a.targetProgram?.operating_expense || 0) / 100000, 10);
         scoreB += Math.min((b.targetProgram?.operating_expense || 0) / 100000, 10);
         
         return scoreB - scoreA;
     }).slice(0, listLimit);
 
-    if (useScoreMatch) isPersonalizedFit = true;
-
-    // 2. LOWEST COST (Includes Academic Only)
     const lowestCostMatches = [...validUniversities]
       .filter(u => u.tuition_in_state || u.tuition_out_of_state || u.tuition)
       .sort((a, b) => {
@@ -755,66 +826,48 @@ export default function Home() {
         return Math.max(0, costA - scholA) - Math.max(0, costB - scholB);
       }).slice(0, listLimit);
 
-    // 3. HIGHEST SALARY (Includes Academic Only - Disregards Sport explicitly)
     const highestSalaryMatches = [...validUniversities]
       .filter(u => u.median_earnings && u.median_earnings > 0)
-      .sort((a, b) => {
-        const medianA = a.median_earnings || 0;
-        const medianB = b.median_earnings || 0;
-        return medianB - medianA;
-      })
+      .sort((a, b) => (b.median_earnings || 0) - (a.median_earnings || 0))
       .slice(0, listLimit);
 
-    // 4. TOP FUNDED (Requires Sport Match)
     const sportMatches = validUniversities.filter(u => u.hasSport);
     const topFundedMatches = [...sportMatches]
       .filter(u => u.targetProgram?.operating_expense && u.targetProgram.operating_expense > 0)
       .sort((a, b) => (b.targetProgram?.operating_expense || 0) - (a.targetProgram?.operating_expense || 0))
       .slice(0, listLimit);
 
-    // 5. TOP ROI (Includes Academic Only)
     const topRoiMatches = [...validUniversities]
       .filter(u => u.median_earnings && (u.tuition_in_state || u.tuition_out_of_state || u.tuition))
       .sort((a, b) => {
         const costA = getCalculatedTuition(a).amount || 1;
         const scholA = a.hasSport ? (a.targetProgram?.average_scholarship || 0) : 0;
         const netA = Math.max(1, costA - scholA);
-
         const costB = getCalculatedTuition(b).amount || 1;
         const scholB = b.hasSport ? (b.targetProgram?.average_scholarship || 0) : 0;
         const netB = Math.max(1, costB - scholB);
-
-        const medianA = a.median_earnings || 0;
-        const medianB = b.median_earnings || 0;
-
-        return (medianB / netB) - (medianA / netA);
+        return ((b.median_earnings || 0) / netB) - ((a.median_earnings || 0) / netA);
       }).slice(0, listLimit);
 
     return { 
         isPersonalizedFit, 
-        useScoreMatch,
         fit: topAthleticFits, 
         cost: lowestCostMatches, 
         salary: highestSalaryMatches, 
         funding: topFundedMatches, 
         roi: topRoiMatches 
     };
-  }, [validUniversities, hasSearched, isAthlete, athleteScore, athleteState, selectedSport]);
+  }, [validUniversities, hasSearched, isAthlete]);
 
-
-  // UNLOCKED READINESS METER RENDER FUNCTION
   const renderReadinessMeter = (uni: University) => {
-    if (!uni.hasSport && selectedSport) return null; // Don't show readiness meter for academic-only matches
+    if (!uni.hasSport) return null;
 
-    const isTrackSearch = !selectedSport || selectedSport.toLowerCase().includes('track');
-    const useScoreMatch = isAthlete && athleteScore > 0 && isTrackSearch;
-
+    const useScoreMatch = isAthlete && uni.athleteMatchScore && uni.athleteMatchScore > 0;
     let teamRating = getCalculatedRating(uni, uni.targetProgram);
     if (!teamRating) return null;
 
-    // If we have an athlete score and it's track, do the personalized diff
     if (useScoreMatch) {
-      const diff = teamRating - athleteScore;
+      const diff = teamRating - uni.athleteMatchScore!;
       let percent = 100;
       let colorClass = 'bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.5)]';
       let textClass = 'text-emerald-600';
@@ -846,7 +899,6 @@ export default function Home() {
       );
     }
 
-    // Guest / Non-Track fallback: Just show the raw program standard rating on a 0-100 scale to gamify the UI
     return (
       <div className="mt-5 p-4 bg-slate-50/80 backdrop-blur-md rounded-2xl border border-slate-100/50">
         <div className="flex justify-between items-end mb-2">
@@ -875,10 +927,12 @@ export default function Home() {
         );
     }
 
+    const currentSportConfigLabel = selectedSport || athleteProfile?.primary_sport || 'General Metrics';
+
     return (
         <div className="bg-slate-900 border border-slate-800 rounded-[2rem] overflow-hidden shadow-[0_10px_40px_-10px_rgba(0,0,0,0.5)] animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="p-6 border-b border-slate-800 bg-slate-900/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4 backdrop-blur-md">
-                <div className="flex items-center gap-3">
+            <div className="p-6 border-b border-slate-800 bg-slate-900/80 flex flex-col sm:flex-row items-center justify-between gap-4 backdrop-blur-md">
+                <div className="flex items-center gap-3 self-start sm:self-auto">
                     {matchmakerView === 'fit' && <Target className="w-6 h-6 text-purple-500" />}
                     {matchmakerView === 'cost' && <Wallet className="w-6 h-6 text-emerald-500" />}
                     {matchmakerView === 'salary' && <Briefcase className="w-6 h-6 text-blue-500" />}
@@ -902,95 +956,120 @@ export default function Home() {
                         </p>
                     </div>
                 </div>
+
+                <div className="bg-slate-950/80 border border-slate-800/80 backdrop-blur-md p-2.5 rounded-xl text-left sm:text-right w-full sm:w-auto shrink-0 shadow-inner mt-4 sm:mt-0">
+                   <span className="block text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none mb-1">Target Sport Matrix</span>
+                   <span className="text-xs font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300 uppercase tracking-tight">{currentSportConfigLabel}</span>
+                </div>
             </div>
             
-            <div className="divide-y divide-slate-800/50 max-h-[800px] overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-slate-900 [&::-webkit-scrollbar-thumb]:bg-slate-700 [&::-webkit-scrollbar-thumb]:rounded-full">
+            <div className="divide-y divide-slate-800/50 max-h-[800px] overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-slate-900 [&::-webkit-scrollbar-thumb]:bg-slate-700 [&::-webkit-scrollbar-thumb]:rounded-full relative">
                 {currentList.map((college, idx) => {
                     const tuitionInfo = getCalculatedTuition(college);
                     const netCost = Math.max(0, tuitionInfo.amount - (college.hasSport ? (college.targetProgram?.average_scholarship || 0) : 0));
                     
-                    // --- DYNAMIC BADGE CALCULATOR W/ FALLBACK & ACADEMIC TAG ---
-                    const { badgeColor, badgeText, badgeSub } = getBadgeDetails(college, selectedSport, matchmakerLists.useScoreMatch, athleteScore);
+                    const useScoreMatch = isAthlete && college.athleteMatchScore && college.athleteMatchScore > 0;
+                    const { badgeColor, badgeText, badgeSub } = getBadgeDetails(college, selectedSport, !!useScoreMatch, college.athleteMatchScore || 0);
 
                     const isSaved = savedCollegeIds.has(college.id);
                     const isProcessing = savingIds.has(college.id);
+                    
+                    // 🚨 REQ CHECK: IF SNEAKY PAYWALL IS ENGAGED AND OVER INDEX 2, DEEP BLUR THE CARDS
+                    const isBlurredRow = isLockedProfile && idx > 2;
 
                     return (
-                    <div key={`${matchmakerView}-${college.id}`} className="flex flex-col xl:flex-row xl:items-center gap-4 p-5 hover:bg-slate-800/60 transition-all group">
+                    <div key={`${matchmakerView}-${college.id}`} className="relative">
                         
-                        {/* RANK, LOGO, NAME - Wrapped in Link */}
-                        <Link 
-                            href={`/college/${college.id}?${new URLSearchParams({ ...(selectedSport && { sport: selectedSport }), ...(selectedGender && { gender: selectedGender }) }).toString()}`} 
-                            className="flex items-center gap-4 flex-1 min-w-0 group/link"
-                        >
-                            <span className="w-6 text-slate-600 font-black text-sm italic group-hover/link:text-white transition-colors">#{idx+1}</span>
-                            <div className="w-10 h-10 bg-slate-950 border border-slate-800 rounded-lg flex items-center justify-center shrink-0">
-                                <School className="w-5 h-5 text-slate-400 group-hover/link:text-white transition-colors" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <h4 className="font-bold text-base truncate text-slate-200 group-hover/link:text-white transition-colors flex items-center">
-                                    {college.name}
-                                    {!college.hasSport && selectedSport && (
-                                        <span className="text-[9px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded font-black tracking-widest uppercase ml-2 shrink-0 border border-slate-700">Academic Match Only</span>
-                                    )}
-                                </h4>
-                                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1.5 mt-0.5">
-                                    {college.city}, {college.state} 
-                                    <span className="text-slate-700">•</span>
-                                    {college.division}
-                                </p>
-                            </div>
-                        </Link>
+                        {/* THE BLUR WRAPPER COMPONENT */}
+                        <div className={`flex flex-col xl:flex-row xl:items-center gap-4 p-5 hover:bg-slate-800/60 transition-all group ${isBlurredRow ? 'blur-md opacity-20 pointer-events-none select-none z-0' : ''}`}>
+                            
+                            <Link 
+                                href={`/college/${college.id}?${new URLSearchParams({ ...(selectedSport && { sport: selectedSport }), ...(selectedGender && { gender: selectedGender }) }).toString()}`} 
+                                className="flex items-center gap-4 flex-1 min-w-0 group/link"
+                            >
+                                <span className="w-6 text-slate-600 font-black text-sm italic group-hover/link:text-white transition-colors">#{idx+1}</span>
+                                <div className="w-10 h-10 bg-slate-950 border border-slate-800 rounded-lg flex items-center justify-center shrink-0">
+                                    <School className="w-5 h-5 text-slate-400 group-hover/link:text-white transition-colors" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <h4 className="font-bold text-base truncate text-slate-200 group-hover/link:text-white transition-colors flex items-center">
+                                        {college.name}
+                                        {!college.hasSport && (selectedSport || athleteProfile?.primary_sport) && (
+                                            <span className="text-[9px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded font-black tracking-widest uppercase ml-2 shrink-0 border border-slate-700">Academic Match Only</span>
+                                        )}
+                                    </h4>
+                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1.5 mt-0.5">
+                                        {college.city}, {college.state} 
+                                        <span className="text-slate-700">•</span>
+                                        {college.division}
+                                    </p>
+                                </div>
+                            </Link>
 
-                        {/* ADVANCED STATS ROW */}
-                        <div className="grid grid-cols-2 sm:flex sm:flex-row items-center gap-4 sm:gap-6 pl-14 xl:pl-0 w-full xl:w-auto mt-2 xl:mt-0">
-                            <div className="hidden sm:flex flex-col items-end text-right">
-                                <span className="font-black text-slate-300">{college.acceptance_rate || 'N/A'}</span>
-                                <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">Acceptance</span>
-                            </div>
-                            <div className="hidden sm:flex flex-col items-end text-right">
-                                <span className="font-black text-blue-400">{college.median_earnings ? `$${college.median_earnings.toLocaleString()}` : 'N/A'}</span>
-                                <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">10-Yr Salary</span>
-                            </div>
-                            <div className="flex flex-col items-end text-right">
-                                <span className="font-black text-slate-300 flex items-center gap-1">
-                                    ${tuitionInfo.amount.toLocaleString()}
-                                    {tuitionInfo.isInState && <span className="text-[8px] bg-slate-800 text-slate-400 px-1 py-0.5 rounded uppercase font-black" title="In-State Applied">IN</span>}
-                                </span>
-                                <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">Tuition /yr</span>
-                            </div>
-                            <div className="flex flex-col items-end text-right">
-                                <span className="font-black text-emerald-400">${netCost.toLocaleString()}</span>
-                                <span className="text-[9px] font-bold text-emerald-500/70 uppercase tracking-widest mt-0.5">Net Cost /yr</span>
-                            </div>
+                            <div className="grid grid-cols-2 sm:flex sm:flex-row items-center gap-4 sm:gap-6 pl-14 xl:pl-0 w-full xl:w-auto mt-2 xl:mt-0">
+                                <div className="hidden sm:flex flex-col items-end text-right">
+                                    <span className="font-black text-slate-300">{college.acceptance_rate || 'N/A'}</span>
+                                    <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">Acceptance</span>
+                                </div>
+                                <div className="hidden sm:flex flex-col items-end text-right">
+                                    <span className="font-black text-blue-400">{college.median_earnings ? `$${college.median_earnings.toLocaleString()}` : 'N/A'}</span>
+                                    <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">10-Yr Salary</span>
+                                </div>
+                                <div className="flex flex-col items-end text-right">
+                                    <span className="font-black text-slate-300 flex items-center gap-1">
+                                        ${tuitionInfo.amount.toLocaleString()}
+                                        {tuitionInfo.isInState && <span className="text-[8px] bg-slate-800 text-slate-400 px-1 py-0.5 rounded uppercase font-black" title="In-State Applied">IN</span>}
+                                    </span>
+                                    <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">Tuition /yr</span>
+                                </div>
+                                <div className="flex flex-col items-end text-right">
+                                    <span className="font-black text-emerald-400">${netCost.toLocaleString()}</span>
+                                    <span className="text-[9px] font-bold text-emerald-500/70 uppercase tracking-widest mt-0.5">Net Cost /yr</span>
+                                </div>
 
-                            {/* DYNAMIC BADGE */}
-                            <div className={`flex flex-col items-center justify-center min-w-[90px] h-[42px] px-2 rounded-xl border shadow-sm shrink-0 ${badgeColor}`}>
-                                <span className={`font-black tracking-widest leading-none text-center ${!college.hasSport ? 'text-[10px]' : (badgeText.length > 5 ? 'text-xs' : 'text-sm')}`}>{badgeText}</span>
-                                <span className="text-[8px] font-bold opacity-70 mt-1 uppercase tracking-widest">{badgeSub}</span>
-                            </div>
+                                <div className={`flex flex-col items-center justify-center min-w-[90px] h-[42px] px-2 rounded-xl border shadow-sm shrink-0 ${badgeColor}`}>
+                                    <span className={`font-black tracking-widest leading-none text-center ${!college.hasSport ? 'text-[10px]' : (badgeText.length > 5 ? 'text-xs' : 'text-sm')}`}>{badgeText}</span>
+                                    <span className="text-[8px] font-bold opacity-70 mt-1 uppercase tracking-widest">{badgeSub}</span>
+                                </div>
 
-                            {/* SAVE BUTTON */}
-                            {!isCoach && (
-                                <button
-                                    onClick={(e) => toggleSaveCollege(e, college.id)}
-                                    disabled={isProcessing}
-                                    className={`p-2.5 rounded-xl border transition-all shadow-sm shrink-0 ${
-                                        isSaved 
-                                            ? 'bg-blue-500/20 border-blue-500/30 text-blue-400 shadow-[0_0_10px_rgba(59,130,246,0.2)]' 
-                                            : 'bg-slate-800/50 border-slate-700/50 text-slate-500 hover:text-blue-400 hover:border-blue-500/30 hover:bg-slate-800'
-                                    }`}
-                                    title={isSaved ? "Remove from Dashboard" : "Save to Target Schools"}
-                                >
-                                    {isProcessing ? (
-                                        <RefreshCw className="w-5 h-5 animate-spin" />
-                                    ) : (
-                                        <Bookmark className={`w-5 h-5 ${isSaved ? 'fill-current' : ''}`} />
-                                    )}
-                                </button>
-                            )}
+                                {!isCoach && (
+                                    <button
+                                        onClick={(e) => toggleSaveCollege(e, college.id)}
+                                        disabled={isProcessing}
+                                        className={`p-2.5 rounded-xl border transition-all shadow-sm shrink-0 ${
+                                            isSaved 
+                                                ? 'bg-blue-500/20 border-blue-500/30 text-blue-400 shadow-[0_0_10px_rgba(59,130,246,0.2)]' 
+                                                : 'bg-slate-800/50 border-slate-700/50 text-slate-500 hover:text-blue-400 hover:border-blue-500/30 hover:bg-slate-800'
+                                        }`}
+                                    >
+                                        {isProcessing ? (
+                                            <RefreshCw className="w-5 h-5 animate-spin" />
+                                        ) : (
+                                            <Bookmark className={`w-5 h-5 ${isSaved ? 'fill-current' : ''}`} />
+                                        )}
+                                    </button>
+                                )}
+                            </div>
                         </div>
 
+                        {/* 🚨 REQ CHECK: INJECT GORGEOUS INTERACTIVE CONVERSION LOCK BOX DIRECTLY BENEATH ROW #3 */}
+                        {idx === 2 && isLockedProfile && (
+                           <div className="absolute inset-x-0 bottom-[-280px] h-[280px] bg-gradient-to-t from-slate-950 via-slate-900/95 to-transparent flex flex-col items-center justify-end pb-8 z-50 text-center px-4 border-b border-slate-800/60 pointer-events-auto">
+                              <Crown className="w-8 h-8 text-amber-400 mb-2 drop-shadow-[0_0_15px_rgba(251,191,36,0.6)] animate-bounce" />
+                              <h4 className="font-black text-white text-lg sm:text-xl tracking-tight">
+                                {isPreLaunch ? "Unlock Early Access Matchmaking" : "Unlock 50+ Top Targeted Programs"}
+                              </h4>
+                              <p className="text-slate-400 text-xs max-w-sm mt-1 mb-5 font-semibold">
+                                {isPreLaunch 
+                                    ? "You are viewing the preview tier. Become a Founder to unlock your complete targeted recruitment match matrix list before global launch."
+                                    : "You are viewing the preview tier. Upgrade to a ChasedSports Pro account to unlock your complete targeted recruitment match matrix list."
+                                }
+                              </p>
+                              <Link href="/pro" className="bg-gradient-to-r from-amber-500 via-orange-500 to-fuchsia-500 hover:from-amber-400 hover:to-fuchsia-400 text-slate-950 font-black text-xs uppercase tracking-widest px-8 py-3.5 rounded-xl shadow-xl shadow-amber-500/10 active:scale-[0.98] transition-all">
+                                 {isPreLaunch ? "Claim Founder Access" : "Upgrade to Pro Profile"}
+                              </Link>
+                           </div>
+                        )}
                     </div>
                     );
                 })}
@@ -1038,7 +1117,7 @@ export default function Home() {
               <div className="flex-grow">
                 <h3 className="text-xl font-black text-slate-900 leading-tight mb-3 group-hover:text-blue-600 transition-colors flex flex-col items-start gap-2">
                   {uni.name}
-                  {!uni.hasSport && selectedSport && (
+                  {!uni.hasSport && (selectedSport || athleteProfile?.primary_sport) && (
                       <span className="text-[9px] bg-slate-100 border border-slate-200 text-slate-500 px-2 py-0.5 rounded font-black tracking-widest uppercase">Academic Match Only</span>
                   )}
                 </h3>
@@ -1109,7 +1188,6 @@ export default function Home() {
                           ? 'bg-blue-50 border-blue-200 text-blue-600' 
                           : 'bg-white border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-200 hover:shadow-md'
                       }`}
-                      title={isSaved ? "Remove from Dashboard" : "Save to Target Schools"}
                     >
                       {isProcessing ? (
                         <RefreshCw className="w-4 h-4 animate-spin" />
@@ -1135,7 +1213,7 @@ export default function Home() {
         })}
       </div>
     );
-  }, [validUniversities, loading, isInitialized, hasSearched, selectedSport, selectedGender, savedCollegeIds, savingIds, isCoach, isAthlete, athleteScore, athleteState]); 
+  }, [validUniversities, loading, isInitialized, hasSearched, selectedSport, selectedGender, savedCollegeIds, savingIds, isCoach, isAthlete, athleteScore, athleteState, athleteProfile]); 
 
   return (
     <main className="min-h-screen bg-[#F8FAFC] font-sans selection:bg-blue-500/30">
@@ -1195,11 +1273,11 @@ export default function Home() {
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-blue-600/20 blur-[120px] rounded-full pointer-events-none"></div>
         <div className="max-w-5xl mx-auto relative z-10 text-center space-y-6">
           
-          {isAthlete && athleteScore > 0 ? (
+          {isAthlete && activeAthleteScore.score > 0 ? (
             <>
               <div className="inline-flex items-center px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-400/20 text-emerald-400 text-sm font-bold tracking-wide mb-4 shadow-[0_0_20px_rgba(16,185,129,0.15)]">
                 <Target className="w-4 h-4 mr-2" />
-                Base Recruiting Score: {athleteScore}
+                {activeAthleteScore.label} Score: {activeAthleteScore.score}
               </div>
               <h1 className="text-5xl md:text-7xl font-black tracking-tighter text-white">
                 Welcome back, <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-300">{athleteFirstName}</span>
@@ -1357,99 +1435,103 @@ export default function Home() {
             </button>
           </div>
 
-          {/* --- BONUS SETTINGS (Advanced - Open to Everyone) --- */}
+          {/* --- BONUS SETTINGS (Advanced) --- */}
           <div className={`transition-all duration-500 ease-in-out overflow-hidden ${showAdvanced ? 'max-h-[800px] opacity-100' : 'max-h-0 opacity-0'}`}>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 pt-6 mt-2 border-t border-slate-100/50">
-              
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Specific School</label>
-                <div className="relative flex items-center">
-                  <div className="absolute left-3 pointer-events-none">
-                    <SearchIcon className="h-4 w-4 text-slate-400" />
-                  </div>
-                  <input 
-                    type="text" 
-                    placeholder="e.g. Oregon State or Stanford"
-                    value={schoolName}
-                    onChange={(e) => setSchoolName(e.target.value)}
-                    className="w-full bg-slate-50/80 backdrop-blur-sm border border-slate-200/60 text-slate-800 rounded-xl pl-9 pr-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-semibold shadow-sm placeholder:font-normal placeholder:text-slate-400 transition-all"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Max Acceptance %</label>
-                <div className="relative flex items-center">
-                  <div className="absolute left-3 pointer-events-none">
-                    <Percent className="h-4 w-4 text-slate-400" />
-                  </div>
-                  <input 
-                    type="number" 
-                    placeholder="e.g. 50"
-                    value={maxAcceptance}
-                    onChange={(e) => setMaxAcceptance(e.target.value)}
-                    className="w-full bg-slate-50/80 backdrop-blur-sm border border-slate-200/60 text-slate-800 rounded-xl pl-9 pr-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-semibold shadow-sm placeholder:font-normal placeholder:text-slate-400 transition-all"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Max Tuition Cost</label>
-                <div className="flex gap-2">
-                  <select 
-                    value={tuitionType}
-                    onChange={(e) => setTuitionType(e.target.value)}
-                    className="w-1/3 bg-slate-50/80 backdrop-blur-sm border border-slate-200/60 text-slate-800 rounded-xl px-2 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white text-sm font-semibold shadow-sm appearance-none cursor-pointer"
-                  >
-                    <option value="in_state">In-State</option>
-                    <option value="out_of_state">Out-State</option>
-                  </select>
-                  <div className="relative flex items-center w-2/3">
-                    <div className="absolute left-3 pointer-events-none">
-                      <DollarSign className="h-4 w-4 text-slate-400" />
-                    </div>
-                    <input 
-                      type="number" 
-                      placeholder="e.g. 30000"
-                      value={maxTuition}
-                      onChange={(e) => setMaxTuition(e.target.value)}
-                      className="w-full bg-slate-50/80 backdrop-blur-sm border border-slate-200/60 text-slate-800 rounded-xl pl-8 pr-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-semibold shadow-sm placeholder:font-normal placeholder:text-slate-400 transition-all"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Sort Results By</label>
-                <select 
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
-                  className="w-full bg-slate-50/80 backdrop-blur-sm border border-slate-200/60 text-slate-800 rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-semibold shadow-sm appearance-none cursor-pointer transition-all"
-                >
-                  <option value="">Don't Sort</option>
+            <div className="pt-4 pr-6 pb-2"> 
+              <ProGate athleteProfile={athleteProfile} featureName="Advanced Matchmaker Filters">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 pt-6 mt-2 border-t border-slate-100/50">
                   
-                  <optgroup label="Tuition Cost">
-                    <option value="tuition_low">Lowest to Highest</option>
-                    <option value="tuition_high">Highest to Lowest</option>
-                  </optgroup>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Specific School</label>
+                    <div className="relative flex items-center">
+                      <div className="absolute left-3 pointer-events-none">
+                        <SearchIcon className="h-4 w-4 text-slate-400" />
+                      </div>
+                      <input 
+                        type="text" 
+                        placeholder="e.g. Oregon State or Stanford"
+                        value={schoolName}
+                        onChange={(e) => setSchoolName(e.target.value)}
+                        className="w-full bg-slate-50/80 backdrop-blur-sm border border-slate-200/60 text-slate-800 rounded-xl pl-9 pr-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-semibold shadow-sm placeholder:font-normal placeholder:text-slate-400 transition-all"
+                      />
+                    </div>
+                  </div>
 
-                  <optgroup label="Acceptance Rate">
-                    <option value="acceptance_high">Highest to Lowest</option>
-                    <option value="acceptance_low">Lowest to Highest</option>
-                  </optgroup>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Max Acceptance %</label>
+                    <div className="relative flex items-center">
+                      <div className="absolute left-3 pointer-events-none">
+                        <Percent className="h-4 w-4 text-slate-400" />
+                      </div>
+                      <input 
+                        type="number" 
+                        placeholder="e.g. 50"
+                        value={maxAcceptance}
+                        onChange={(e) => setMaxAcceptance(e.target.value)}
+                        className="w-full bg-slate-50/80 backdrop-blur-sm border border-slate-200/60 text-slate-800 rounded-xl pl-9 pr-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-semibold shadow-sm placeholder:font-normal placeholder:text-slate-400 transition-all"
+                      />
+                    </div>
+                  </div>
 
-                  <optgroup label="10-Year Salary">
-                    <option value="salary_high">Highest to Lowest</option>
-                    <option value="salary_low">Lowest to Highest</option>
-                  </optgroup>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Max Tuition Cost</label>
+                    <div className="flex gap-2">
+                      <select 
+                        value={tuitionType}
+                        onChange={(e) => setTuitionType(e.target.value)}
+                        className="w-1/3 bg-slate-50/80 backdrop-blur-sm border border-slate-200/60 text-slate-800 rounded-xl px-2 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white text-sm font-semibold shadow-sm appearance-none cursor-pointer"
+                      >
+                        <option value="in_state">In-State</option>
+                        <option value="out_of_state">Out-State</option>
+                      </select>
+                      <div className="relative flex items-center w-2/3">
+                        <div className="absolute left-3 pointer-events-none">
+                          <DollarSign className="h-4 w-4 text-slate-400" />
+                        </div>
+                        <input 
+                          type="number" 
+                          placeholder="e.g. 30000"
+                          value={maxTuition}
+                          onChange={(e) => setMaxTuition(e.target.value)}
+                          className="w-full bg-slate-50/80 backdrop-blur-sm border border-slate-200/60 text-slate-800 rounded-xl pl-8 pr-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-semibold shadow-sm placeholder:font-normal placeholder:text-slate-400 transition-all"
+                        />
+                      </div>
+                    </div>
+                  </div>
 
-                  <optgroup label="Sport Budget">
-                    <option value="budget_high">Highest to Lowest</option>
-                    <option value="budget_low">Lowest to Highest</option>
-                  </optgroup>
-                </select>
-              </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Sort Results By</label>
+                    <select 
+                      value={sortBy}
+                      onChange={(e) => setSortBy(e.target.value)}
+                      className="w-full bg-slate-50/80 backdrop-blur-sm border border-slate-200/60 text-slate-800 rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-semibold shadow-sm appearance-none cursor-pointer transition-all"
+                    >
+                      <option value="">Don't Sort</option>
+                      
+                      <optgroup label="Tuition Cost">
+                        <option value="tuition_low">Lowest to Highest</option>
+                        <option value="tuition_high">Highest to Lowest</option>
+                      </optgroup>
 
+                      <optgroup label="Acceptance Rate">
+                        <option value="acceptance_high">Highest to Lowest</option>
+                        <option value="acceptance_low">Lowest to Highest</option>
+                      </optgroup>
+
+                      <optgroup label="10-Year Salary">
+                        <option value="salary_high">Highest to Lowest</option>
+                        <option value="salary_low">Lowest to Highest</option>
+                      </optgroup>
+
+                      <optgroup label="Sport Budget">
+                        <option value="budget_high">Highest to Lowest</option>
+                        <option value="budget_low">Lowest to Highest</option>
+                      </optgroup>
+                    </select>
+                  </div>
+
+                </div>
+              </ProGate>
             </div>
           </div>
 
@@ -1495,23 +1577,35 @@ export default function Home() {
         ) : (
           <div>
             
-            {/* 🚨 MAIN TABS UI 🚨 */}
+            {/* 🚨 REQ: RE-ENGINEERED HIGH-CONTRAST MAIN NAVIGATION TAB OVERLAY BAR 🚨 */}
             {hasSearched && !errorMsg && (
-                <div className="mb-8 flex justify-center animate-in fade-in duration-500">
-                    <div className="bg-white/80 backdrop-blur-md border border-slate-200/80 rounded-full p-1.5 inline-flex shadow-sm">
+                <div className="mb-10 flex justify-center animate-in fade-in duration-500">
+                    <div className="bg-slate-900 border-2 border-slate-800 rounded-2xl p-2 inline-flex shadow-2xl items-center gap-3">
                         <button
                             onClick={() => setActiveTab('personalized')}
-                            className={`px-6 py-2.5 rounded-full text-sm font-black transition-all flex items-center ${activeTab === 'personalized' ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-md' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'}`}
+                            className={`px-6 py-3 rounded-xl text-sm font-black transition-all flex items-center ${activeTab === 'personalized' ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-xl shadow-blue-500/10' : 'text-slate-400 hover:text-white'}`}
                         >
                             <Zap className={`w-4 h-4 mr-2 ${activeTab === 'personalized' ? 'text-amber-300' : 'text-amber-500'}`} />
-                            Matchmaker
+                            Matchmaker Dashboard
                         </button>
+                        
+                        {/* THE PROMINENT DIRECTORY INTERCEPT BUTTON WRAPPER */}
                         <button
                             onClick={() => setActiveTab('all')}
-                            className={`px-6 py-2.5 rounded-full text-sm font-black transition-all flex items-center ${activeTab === 'all' ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-md' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'}`}
+                            className={`px-7 py-3 rounded-xl text-sm font-black transition-all flex items-center relative overflow-hidden border ${
+                              activeTab === 'all' 
+                                ? 'bg-gradient-to-r from-emerald-600 to-teal-600 border-emerald-500 text-white shadow-xl shadow-emerald-500/20 scale-[1.03]' 
+                                : 'bg-gradient-to-r from-blue-950 to-indigo-950/60 border-blue-500/40 hover:border-blue-400 text-blue-400 hover:text-blue-300 hover:scale-[1.02] shadow-lg'
+                            }`}
                         >
                             <School className="w-4 h-4 mr-2" />
-                            All Programs ({validUniversities.length})
+                            All 800+ Programs Directory
+                            
+                            {/* Pulsing Alert Indicator Ring to eliminate button overlook */}
+                            <span className="absolute top-2 right-2 flex h-2 w-2">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
+                            </span>
                         </button>
                     </div>
                 </div>
@@ -1519,11 +1613,11 @@ export default function Home() {
 
             {/* TAB CONTENT: MATCHMAKER */}
             {activeTab === 'personalized' && (
-                <div className="animate-in fade-in slide-in-from-bottom-8 duration-500 mb-16">
+                <div className="animate-in fade-in slide-in-from-bottom-8 duration-500 mb-16 space-y-6">
                     
-                    {/* SUB-NAVIGATION CATEGORIES */}
-                    <div className="mb-6 overflow-x-auto pb-2 [&::-webkit-scrollbar]:hidden">
-                        <div className="flex sm:justify-center gap-2 min-w-max px-2">
+                    {/* SUB-NAVIGATION CATEGORIES W/ TOGGLE INTERCEPTOR BAR */}
+                    <div className="bg-white/40 backdrop-blur-md p-3 rounded-2xl border border-slate-200/60 flex flex-col lg:flex-row justify-between items-center gap-4">
+                        <div className="flex flex-wrap gap-2">
                             <button 
                                 onClick={() => setMatchmakerView('fit')}
                                 className={`px-5 py-2.5 rounded-xl text-sm font-black transition-all flex items-center border ${matchmakerView === 'fit' ? 'bg-purple-50 text-purple-700 border-purple-200 shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:border-purple-200 hover:text-purple-600'}`}
@@ -1559,6 +1653,21 @@ export default function Home() {
                                 <TrendingUp className="w-4 h-4 mr-2" />
                                 Best ROI
                             </button>
+                        </div>
+
+                        {/* GLOWING TOGGLE SWITCH TO FILTER OUT ACADEMIC ONLY MATCHES */}
+                        <div className="shrink-0">
+                           <button 
+                             onClick={() => setHideAcademicOnly(!hideAcademicOnly)}
+                             className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 border-2 ${
+                               hideAcademicOnly 
+                                 ? 'bg-red-500/10 border-red-500 text-red-500 shadow-[0_0_15px_rgba(239,68,68,0.25)]' 
+                                 : 'bg-white border-slate-200 text-slate-500 hover:border-slate-400 hover:text-slate-700'
+                             }`}
+                           >
+                             {hideAcademicOnly ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                             {hideAcademicOnly ? 'Hiding Academic Only' : 'Show All Programs'}
+                           </button>
                         </div>
                     </div>
 

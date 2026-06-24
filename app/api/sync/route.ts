@@ -2,16 +2,17 @@ import { NextResponse } from 'next/server';
 import puppeteerCore from 'puppeteer-core'; 
 import { createClient } from '@supabase/supabase-js';
 
+// Vercel Serverless Function Config
 export const maxDuration = 60; 
 export const dynamic = 'force-dynamic';
 
-// 🚨 ADMIN SUPABASE CLIENT (Bypasses RLS) 🚨
+// 🚨 ADMIN SUPABASE CLIENT (Bypasses RLS strictly for the kill-switch counter) 🚨
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!, 
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// Set your global limit (e.g., 300 scrapes per day)
+// Global safety limit to protect against massive scraping bills
 const DAILY_GLOBAL_LIMIT = 300; 
 
 const TRACK_EVENTS = [
@@ -77,21 +78,19 @@ export async function POST(req: Request) {
     try {
       console.log(`☁️ Connecting securely to ZenRows... (Attempt ${attempt}/${MAX_RETRIES})`);
       
-      // 🚨 ZENROWS MAGIC: We point Puppeteer to ZenRows, and they handle Cloudflare, residential proxies, and fingerprinting!
+      // 🚨 ZENROWS MAGIC: Handles Cloudflare, residential proxies, and fingerprinting automatically.
       browser = await puppeteerCore.connect({
         browserWSEndpoint: `wss://browser.zenrows.com?apikey=${ZENROWS_API_KEY}`
       });
       
       const page = await browser.newPage();
       
-      // ZenRows already handles stealth and user agents internally.
-      
       console.log(`🚀 Step 1: Loading Athlete Page -> ${url}`);
       
-      // We give it 30s because ZenRows is doing heavy CAPTCHA solving behind the scenes before the page loads.
+      // 30s timeout because ZenRows is doing heavy CAPTCHA solving behind the scenes.
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
       
-      // Failsafe: if ZenRows somehow passes back a Cloudflare check page, wait a few seconds.
+      // Failsafe: if ZenRows passes back a Cloudflare check page, wait a few seconds.
       const pageTitle = await page.title();
       if (pageTitle.includes('Just a moment') || pageTitle.includes('Attention Required') || pageTitle.toLowerCase() === 'www.athletic.net') {
           console.log("🛡️ Cloudflare check detected! ZenRows is solving it...");
@@ -140,6 +139,7 @@ export async function POST(req: Request) {
 
       await new Promise(r => setTimeout(r, 200));
 
+      // Execute script context inside the headless browser
       let extractedData = await page.evaluate((eventsList: string[], fieldEventsList: string[]) => {
         
         const trashSelectors = ['.feed', '.news-feed', '.training-log', '.side-nav', '.nav', '.sidebar', '.menu', '[class*="training"]', '.blurred', '[style*="filter: blur"]'];
@@ -416,6 +416,8 @@ export async function POST(req: Request) {
         try { browser.disconnect(); } catch (e) {} 
       }
 
+      // NOTE: This JSON is sent straight back to the frontend files (track/page.tsx, compete/page.tsx)
+      // which then take this data and update the `athlete_sports` table via Supabase!
       return NextResponse.json({ 
         success: true, 
         data: {

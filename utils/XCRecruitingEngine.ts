@@ -54,11 +54,12 @@ export const calculateSingleXCScore = (seconds: number, thresholds: XCThresholds
   if (seconds <= thresholds.t4) return Math.round(65 + ((thresholds.t4 - seconds) / (thresholds.t4 - thresholds.t3)) * 10);
   if (seconds <= thresholds.t5) return Math.round(55 + ((thresholds.t5 - seconds) / (thresholds.t5 - thresholds.t4)) * 10);
   if (seconds <= thresholds.t6) return Math.round(40 + ((thresholds.t6 - seconds) / (thresholds.t6 - thresholds.t5)) * 15);
-  if (seconds <= thresholds.t7) return Math.round(20 + ((thresholds.t7 - seconds) / (thresholds.t7 - thresholds.t6)) * 20);
+  if (seconds <= thresholds.t7) return Math.round(20 + ((thresholds.t7 - seconds) / (thresholds.t7 - thresholds.t6)) * 19);
   
   const distanceFromFloor = seconds - thresholds.t7;
-  const floorPenalty = Math.min(10, (distanceFromFloor / 120) * 5);
-  return Math.max(10, Math.round(20 - floorPenalty));
+  // 🚨 NEW UX UPGRADE: Limit the penalty to 5 points so the absolute floor rests securely at 15
+  const floorPenalty = Math.min(5, (distanceFromFloor / 120) * 5);
+  return Math.max(15, Math.round(20 - floorPenalty));
 };
 
 export const compileCrossCountryFitScore = (
@@ -106,8 +107,9 @@ export const compileCrossCountryFitScore = (
     }
   }
 
+  // 🚨 NEW UX UPGRADE: Minimum composite clamp set to 15
   const finalComposite = runningWeightsAccumulated > 0 
-    ? Math.min(99, Math.max(10, Math.round(totalWeightedScore / runningWeightsAccumulated)))
+    ? Math.min(99, Math.max(15, Math.round(totalWeightedScore / runningWeightsAccumulated)))
     : 0;
 
   return { compositeScore: finalComposite, parsedMetrics: processedResults };

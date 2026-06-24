@@ -3,8 +3,12 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
-import { Crown, Rocket, FileText, BarChart3, ShieldCheck, Trophy, Mail, Zap, ArrowRight, Loader2, Search, CheckCircle2, ChevronLeft, Tag, Settings } from 'lucide-react';
+import { Crown, Rocket, FileText, BarChart3, ShieldCheck, Trophy, Mail, Search, ArrowRight, Loader2, CheckCircle2, ChevronLeft, Tag, Settings, Sparkles } from 'lucide-react';
 import Link from 'next/link';
+
+// 🚨 SYNCHRONIZED LAUNCH TIMELINE 🚨
+const PRO_LAUNCH_DATE = new Date('2026-08-08T00:00:00Z'); 
+const FOUNDER_FREE_MONTHS = 6;
 
 export default function PremiumPage() {
   const supabase = createClient();
@@ -14,11 +18,15 @@ export default function PremiumPage() {
   const [athleteId, setAthleteId] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [isPremium, setIsPremium] = useState(false);
+  const [isFounder, setIsFounder] = useState(false);
   
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [isManaging, setIsManaging] = useState(false);
+  const [clientDate, setClientDate] = useState<Date | null>(null);
 
   useEffect(() => {
+    setClientDate(new Date());
+
     async function loadUser() {
       const { data: { session } } = await supabase.auth.getSession();
       
@@ -35,7 +43,7 @@ export default function PremiumPage() {
 
       const { data: aData } = await supabase
         .from('athletes')
-        .select('id, is_premium')
+        .select('id, is_premium, is_founder')
         .eq('id', session.user.id)
         .maybeSingle();
 
@@ -43,6 +51,7 @@ export default function PremiumPage() {
         setAthleteId(aData.id);
         setUserEmail(session.user.email || null);
         setIsPremium(aData.is_premium || false);
+        setIsFounder(aData.is_founder || false);
       }
       
       setLoading(false);
@@ -72,7 +81,6 @@ export default function PremiumPage() {
     }
   };
 
-  // 🚨 NEW PORTAL REDIRECT LOGIC 🚨
   const handleManageBilling = async () => {
     setIsManaging(true);
     try {
@@ -90,7 +98,18 @@ export default function PremiumPage() {
     }
   };
 
-  if (loading) {
+  // --- TIME GATING CALCULATIONS ---
+  const isPreLaunch = clientDate ? clientDate < PRO_LAUNCH_DATE : false;
+  
+  const founderExpirationDate = new Date(PRO_LAUNCH_DATE);
+  founderExpirationDate.setMonth(founderExpirationDate.getMonth() + FOUNDER_FREE_MONTHS);
+  
+  const isFounderActive = clientDate ? isFounder && clientDate < founderExpirationDate : false;
+  
+  const formattedLaunchDate = PRO_LAUNCH_DATE.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  const formattedExpirationDate = founderExpirationDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
+  if (loading || !clientDate) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
         <div className="w-12 h-12 border-4 border-amber-900 border-t-amber-400 rounded-full animate-spin"></div>
@@ -112,7 +131,7 @@ export default function PremiumPage() {
 
       <div className="max-w-6xl mx-auto px-6 pt-12 relative z-10">
         
-        <Link href="/dashboard/track" className="inline-flex items-center text-sm font-bold text-slate-400 hover:text-white transition-colors mb-12 bg-slate-900/50 px-4 py-2 rounded-full border border-slate-800 backdrop-blur-md">
+        <Link href="/dashboard" className="inline-flex items-center text-sm font-bold text-slate-400 hover:text-white transition-colors mb-12 bg-slate-900/50 px-4 py-2 rounded-full border border-slate-800 backdrop-blur-md">
           <ChevronLeft className="w-4 h-4 mr-1" /> Back to Dashboard
         </Link>
 
@@ -136,10 +155,9 @@ export default function PremiumPage() {
              <p className="text-slate-400 font-medium mb-8">Your profile is currently boosted with Pro features. Go make some noise in the Recruiting feed!</p>
              
              <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-               <Link href="/dashboard/track" className="w-full sm:w-auto inline-flex justify-center bg-white text-slate-900 font-black px-8 py-3.5 rounded-xl hover:bg-slate-100 transition-colors">
+               <Link href="/dashboard" className="w-full sm:w-auto inline-flex justify-center bg-white text-slate-900 font-black px-8 py-3.5 rounded-xl hover:bg-slate-100 transition-colors">
                  Go to Dashboard
                </Link>
-               {/* 🚨 NEW MANAGE SUBSCRIPTION BUTTON 🚨 */}
                <button 
                  onClick={handleManageBilling}
                  disabled={isManaging}
@@ -212,37 +230,85 @@ export default function PremiumPage() {
             <div className="lg:col-span-5 relative">
               <div className="sticky top-8">
                 
-                <div className="bg-slate-900/90 backdrop-blur-xl border border-slate-700 rounded-[2.5rem] p-8 shadow-[0_0_50px_rgba(0,0,0,0.5)]">
-                  
-                  <div className="text-center mb-8 pb-8 border-b border-slate-800">
-                    <h3 className="text-xl font-black text-white mb-4">ChasedSports Pro</h3>
-                    <div className="flex items-center justify-center gap-3 mb-2">
-                      <span className="text-6xl font-black text-white tracking-tighter">$7.99<span className="text-3xl text-slate-400">/mo</span></span>
+                {/* 🚨 DYNAMIC GATING: Renders Founder States OR Standard Paywall 🚨 */}
+                {isPreLaunch && isFounder ? (
+                  <div className="bg-slate-900/90 backdrop-blur-xl border border-amber-500/50 rounded-[2.5rem] p-8 shadow-[0_0_50px_rgba(245,158,11,0.2)] relative overflow-hidden">
+                    <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-amber-400 to-amber-600"></div>
+                    <div className="text-center mb-8 pb-8 border-b border-slate-800">
+                        <div className="flex justify-center mb-4">
+                           <Sparkles className="w-10 h-10 text-amber-400 animate-pulse" />
+                        </div>
+                        <h3 className="text-xl font-black text-white mb-2">Founder Member</h3>
+                        <div className="flex items-center justify-center gap-3 mb-2">
+                            <span className="text-4xl sm:text-5xl font-black text-amber-400 tracking-tighter">Early Access</span>
+                        </div>
+                        <p className="text-slate-400 font-medium text-sm mt-4">
+                            Because you joined before {formattedLaunchDate}, all Pro features are currently <strong className="text-white">100% unlocked</strong> for your account. 
+                        </p>
+                        <p className="text-emerald-400 font-black uppercase tracking-widest text-[10px] bg-emerald-500/10 inline-block px-3 py-2 rounded-lg border border-emerald-500/20 mt-4 mb-2">
+                            + Includes 6 Months Free Post-Launch
+                        </p>
                     </div>
-                    <p className="text-amber-400 font-bold text-sm bg-amber-500/10 inline-block px-3 py-1 rounded-lg border border-amber-500/20 mt-2 mb-5">
-                      Billed monthly. Cancel anytime.
-                    </p>
-                    
-                    <div className="flex items-center justify-center gap-2 text-slate-400 text-xs sm:text-sm font-medium bg-slate-950 py-2.5 px-4 rounded-xl border border-slate-800 w-fit mx-auto">
-                      <Tag className="w-4 h-4 text-emerald-400 shrink-0" /> Have a promo code? Enter it at checkout.
-                    </div>
+                    <Link 
+                        href="/dashboard"
+                        className="w-full font-black text-lg py-4 sm:py-5 rounded-2xl transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-yellow-400 text-amber-950 hover:shadow-[0_0_40px_rgba(245,158,11,0.4)]"
+                    >
+                        Return to Dashboard <ArrowRight className="w-6 h-6" />
+                    </Link>
                   </div>
+                ) : !isPreLaunch && isFounderActive ? (
+                  <div className="bg-slate-900/90 backdrop-blur-xl border border-amber-500/50 rounded-[2.5rem] p-8 shadow-[0_0_50px_rgba(245,158,11,0.2)] relative overflow-hidden">
+                    <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-amber-400 to-amber-600"></div>
+                    <div className="text-center mb-8 pb-8 border-b border-slate-800">
+                        <h3 className="text-xl font-black text-white mb-4">Founder Trial Active</h3>
+                        <div className="flex items-center justify-center gap-3 mb-2">
+                            <span className="text-4xl sm:text-5xl font-black text-amber-400 tracking-tighter">100% Free</span>
+                        </div>
+                        <p className="text-slate-400 font-medium text-sm mt-4">
+                            Your 6-month free Founder Pro trial is currently active. Enjoy full access to all premium features until it expires.
+                        </p>
+                        <p className="text-red-400 font-bold text-sm bg-red-500/10 inline-block px-3 py-1.5 rounded-lg border border-red-500/20 mt-4 mb-2">
+                            Trial Expires: {formattedExpirationDate}
+                        </p>
+                    </div>
+                    <Link 
+                        href="/dashboard"
+                        className="w-full font-black text-lg py-4 sm:py-5 rounded-2xl transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-yellow-400 text-amber-950 hover:shadow-[0_0_40px_rgba(245,158,11,0.4)]"
+                    >
+                        Return to Dashboard <ArrowRight className="w-6 h-6" />
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="bg-slate-900/90 backdrop-blur-xl border border-slate-700 rounded-[2.5rem] p-8 shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+                    <div className="text-center mb-8 pb-8 border-b border-slate-800">
+                      <h3 className="text-xl font-black text-white mb-4">ChasedSports Pro</h3>
+                      <div className="flex items-center justify-center gap-3 mb-2">
+                        <span className="text-6xl font-black text-white tracking-tighter">$7.99<span className="text-3xl text-slate-400">/mo</span></span>
+                      </div>
+                      <p className="text-amber-400 font-bold text-sm bg-amber-500/10 inline-block px-3 py-1 rounded-lg border border-amber-500/20 mt-2 mb-5">
+                        Billed monthly. Cancel anytime.
+                      </p>
+                      
+                      <div className="flex items-center justify-center gap-2 text-slate-400 text-xs sm:text-sm font-medium bg-slate-950 py-2.5 px-4 rounded-xl border border-slate-800 w-fit mx-auto">
+                        <Tag className="w-4 h-4 text-emerald-400 shrink-0" /> Have a promo code? Enter it at checkout.
+                      </div>
+                    </div>
 
-                  <button 
-                    onClick={handleCheckout}
-                    disabled={isRedirecting}
-                    className="w-full font-black text-lg py-4 sm:py-5 rounded-2xl transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-yellow-400 text-amber-950 hover:shadow-[0_0_40px_rgba(245,158,11,0.4)] disabled:opacity-70 disabled:cursor-not-allowed"
-                  >
-                    {isRedirecting ? <Loader2 className="w-6 h-6 animate-spin" /> : <>
-                       Upgrade to Pro <ArrowRight className="w-6 h-6" />
-                    </>}
-                  </button>
-                  
-                  <p className="text-center text-xs font-bold text-slate-500 mt-4 flex items-center justify-center gap-1.5">
-                    <ShieldCheck className="w-3.5 h-3.5 text-slate-400" /> Secure checkout powered by Stripe.
-                  </p>
-
-                </div>
+                    <button 
+                      onClick={handleCheckout}
+                      disabled={isRedirecting}
+                      className="w-full font-black text-lg py-4 sm:py-5 rounded-2xl transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-yellow-400 text-amber-950 hover:shadow-[0_0_40px_rgba(245,158,11,0.4)] disabled:opacity-70 disabled:cursor-not-allowed"
+                    >
+                      {isRedirecting ? <Loader2 className="w-6 h-6 animate-spin" /> : <>
+                          Upgrade to Pro <ArrowRight className="w-6 h-6" />
+                      </>}
+                    </button>
+                    
+                    <p className="text-center text-xs font-bold text-slate-500 mt-4 flex items-center justify-center gap-1.5">
+                      <ShieldCheck className="w-3.5 h-3.5 text-slate-400" /> Secure checkout powered by Stripe.
+                    </p>
+                  </div>
+                )}
                 
                 <div className="absolute -inset-4 bg-gradient-to-br from-amber-500/20 to-purple-600/20 blur-2xl -z-20 rounded-[3rem] pointer-events-none"></div>
               </div>

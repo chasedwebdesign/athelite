@@ -1,16 +1,70 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Component, ErrorInfo, ReactNode } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/utils/supabase/client';
 import { 
   ChevronDown, Search, ArrowRight, Target, Trophy, 
-  Activity, ShieldCheck, Zap, Calculator, Check
+  Activity, ShieldCheck, Zap, Calculator, Check, AlertCircle,
+  Database, TrendingUp, RefreshCcw
 } from 'lucide-react';
 import Image from 'next/image';
 
+// Import Universal Constants & Registry
+import SportEditorRegistry from '@/components/dashboard/sports/SportEditorRegistry';
+import { 
+  SPORT_CONFIGS_META, ALL_SPORTS, evaluateMetric
+} from '@/utils/constants/RecruitingStandards';
+
 // ==========================================
-// 🚨 RECRUITING STANDARDS ENGINE 🚨
+// 🚨 LOCAL ERROR BOUNDARY TO PREVENT CRASHES
+// ==========================================
+interface EBProps { children: ReactNode; onReset: () => void }
+interface EBState { hasError: boolean }
+
+class EditorErrorBoundary extends Component<EBProps, EBState> {
+  constructor(props: EBProps) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(_: Error): EBState {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error("Sport Editor Crash Intercepted:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex flex-col items-center justify-center p-8 text-center bg-rose-50 rounded-[2rem] border border-rose-200 shadow-inner animate-in zoom-in-95 duration-300">
+          <div className="w-16 h-16 bg-rose-100 rounded-full flex items-center justify-center mb-4 border border-rose-200">
+             <AlertCircle className="w-8 h-8 text-rose-500" />
+          </div>
+          <h3 className="text-lg font-black text-rose-700 mb-2">Invalid Format Detected</h3>
+          <p className="text-sm font-medium text-rose-600/80 mb-6 max-w-sm">
+            The input contains unrecognized characters (like semicolons). Please use standard times (e.g. 16:45) or distances.
+          </p>
+          <button 
+            onClick={() => {
+              this.setState({ hasError: false });
+              this.props.onReset();
+            }}
+            className="flex items-center gap-2 bg-rose-600 hover:bg-rose-500 text-white text-sm font-black px-6 py-3 rounded-xl transition-all shadow-md active:scale-95"
+          >
+            <RefreshCcw className="w-4 h-4" /> Reset Editor
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// ==========================================
+// 🚨 RECRUITING STANDARDS ENGINE (TRACK & FIELD)
 // ==========================================
 const FIELD_EVENTS = ['Shot Put', 'Discus', 'Javelin', 'Hammer', 'High Jump', 'Pole Vault', 'Long Jump', 'Triple Jump'];
 
@@ -67,11 +121,13 @@ const convertMarkToNumber = (markStr: string, isField: boolean): number => {
     const inches = parseFloat(clean[1]) || 0;
     return (feet * 12) + inches;
   } else {
-    if (markStr.includes(':')) {
-      const parts = markStr.split(':');
+    // Sanitize semicolons to colons to prevent crashes
+    const sanitizedMark = markStr.replace(/;/g, ':');
+    if (sanitizedMark.includes(':')) {
+      const parts = sanitizedMark.split(':');
       return (parseFloat(parts[0]) * 60) + parseFloat(parts[1]);
     }
-    return parseFloat(markStr.replace(/[a-zA-Z]/g, '').trim()) || 99999;
+    return parseFloat(sanitizedMark.replace(/[a-zA-Z]/g, '').trim()) || 99999;
   }
 };
 
@@ -91,18 +147,29 @@ const formatMarkFromNumber = (val: number, isField: boolean): string => {
   }
 };
 
+export const getTierStyles = (score: number) => {
+  if (score >= 95) return { tier: 'Power 4 D1', nextTier: 'MAX RANK', scoreRequired: 99, colorClass: 'text-fuchsia-400', bgClass: 'bg-fuchsia-500/10', barClass: 'bg-fuchsia-500', borderClass: 'border-fuchsia-500/50', glowClass: 'shadow-[0_0_30px_rgba(217,70,239,0.4)]' };
+  if (score >= 85) return { tier: 'Mid-Major D1', nextTier: 'Power 4 D1', scoreRequired: 95, colorClass: 'text-purple-400', bgClass: 'bg-purple-500/10', barClass: 'bg-purple-500', borderClass: 'border-purple-500/50', glowClass: 'shadow-[0_0_30px_rgba(168,85,247,0.3)]' };
+  if (score >= 75) return { tier: 'Top D2 / Walk-On', nextTier: 'Mid-Major D1', scoreRequired: 85, colorClass: 'text-blue-400', bgClass: 'bg-blue-500/10', barClass: 'bg-blue-500', borderClass: 'border-blue-500/50', glowClass: 'shadow-[0_0_20px_rgba(59,130,246,0.3)]' };
+  if (score >= 65) return { tier: 'D2 / D3 Prospect', nextTier: 'Top D2 / Walk-On', scoreRequired: 75, colorClass: 'text-emerald-400', bgClass: 'bg-emerald-500/10', barClass: 'bg-emerald-500', borderClass: 'border-emerald-500/50', glowClass: 'shadow-[0_0_20px_rgba(16,185,129,0.2)]' };
+  if (score >= 55) return { tier: 'NAIA Prospect', nextTier: 'D2 / D3 Prospect', scoreRequired: 65, colorClass: 'text-amber-400', bgClass: 'bg-amber-500/10', barClass: 'bg-amber-500', borderClass: 'border-amber-500/50', glowClass: 'shadow-[0_0_15px_rgba(245,158,11,0.15)]' };
+  if (score >= 40) return { tier: 'Strong Varsity', nextTier: 'NAIA Prospect', scoreRequired: 55, colorClass: 'text-slate-600', bgClass: 'bg-slate-500/20', barClass: 'bg-slate-400', borderClass: 'border-slate-400/50', glowClass: '' };
+  if (score >= 20) return { tier: 'Varsity Contributor', nextTier: 'Strong Varsity', scoreRequired: 40, colorClass: 'text-slate-500', bgClass: 'bg-slate-500/10', barClass: 'bg-slate-500', borderClass: 'border-slate-500/30', glowClass: '' };
+  return { tier: 'Developmental', nextTier: 'Varsity Contributor', scoreRequired: 20, colorClass: 'text-slate-400', bgClass: 'bg-slate-500/5', barClass: 'bg-slate-600', borderClass: 'border-slate-600/30', glowClass: '' };
+};
+
 interface CalculationResult {
   score: number;
   currentTier: string;
   nextTier: string;
-  targetMarkFormatted: string;
-  deltaFormatted: string;
+  targetMarkFormatted?: string;
+  deltaFormatted?: string;
   label: string;
   desc: string;
   color: string;
   bg: string;
   border: string;
-  isField: boolean;
+  isField?: boolean;
 }
 
 export default function DivisionChecker() {
@@ -111,44 +178,107 @@ export default function DivisionChecker() {
 
   const [gender, setGender] = useState<'Boys' | 'Girls'>('Boys');
   
-  // 🚨 SMART COMBOBOX STATES 🚨
+  // SPORT STATES
+  const [sportSearch, setSportSearch] = useState<string>('Track & Field');
+  const [selectedSport, setSelectedSport] = useState<string>('Track & Field');
+  const [isSportDropdownOpen, setIsSportDropdownOpen] = useState(false);
+  const sportDropdownRef = useRef<HTMLDivElement>(null);
+
+  // TRACK & FIELD SPECIFIC STATES
   const [eventSearch, setEventSearch] = useState<string>('100 Meters');
   const [selectedEvent, setSelectedEvent] = useState<string>('100 Meters');
   const [isEventDropdownOpen, setIsEventDropdownOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
+  const eventDropdownRef = useRef<HTMLDivElement>(null);
   const [mark, setMark] = useState<string>('');
+
+  // UNIVERSAL SPORT METRICS (Gathered from Registry)
+  const [localSportStats, setLocalSportStats] = useState<any>({ metrics: [], metaContext: {}, level: '', position: '' });
+
   const [isCalculating, setIsCalculating] = useState(false);
   const [result, setResult] = useState<CalculationResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // 🚨 AUTHENTICATION CHECK 🚨
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
     });
   }, [supabase]);
 
+  // ==========================================
+  // 🚨 UI CLEANUP: MASK INTERNAL SCORE BADGES & ACCOLADES
+  // ==========================================
+  useEffect(() => {
+    const hideSpoilers = () => {
+      const wrapper = document.querySelector('.public-registry-wrapper');
+      if (!wrapper) return;
+
+      // 1. Hide buttons
+      const buttons = Array.from(wrapper.querySelectorAll('button'));
+      buttons.forEach(btn => {
+         const text = (btn.innerText || btn.textContent || '').toUpperCase();
+         if (text.includes('SAVE') || text.includes('ACCOLADE')) {
+             btn.style.display = 'none';
+         }
+      });
+
+      // 2. Hide live Spoilers & Accolades surgically via TreeWalker
+      const walker = document.createTreeWalker(wrapper, NodeFilter.SHOW_TEXT, null);
+      let node;
+      while ((node = walker.nextNode())) {
+          const txt = (node.nodeValue || '').trim().toUpperCase();
+          if (txt === 'SEASON ACCOLADES & IMPACT' || 
+              txt.includes('NORMALIZATION LOG TRACE') || 
+              txt.includes('RECRUITMENT RATING')) {
+              
+              let parent = node.parentElement;
+              // Traverse upwards just enough to find the card container, then break immediately.
+              while (parent && parent !== wrapper) {
+                  const cls = parent.className || '';
+                  if (typeof cls === 'string' && (cls.includes('bg-slate-950') || cls.includes('bg-slate-900') || cls.includes('bg-slate-800'))) {
+                      parent.style.display = 'none';
+                      break; // Critical fix: Stops traversal to prevent hiding the whole app
+                  }
+                  parent = parent.parentElement;
+              }
+          }
+      }
+    };
+
+    hideSpoilers();
+    const observer = new MutationObserver(hideSpoilers);
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [selectedSport]);
+
   const isFieldEvent = FIELD_EVENTS.includes(selectedEvent);
   const placeholderText = isFieldEvent ? "e.g. 45' 2\"" : (selectedEvent.includes('1500') || selectedEvent.includes('1600') || selectedEvent.includes('800') || selectedEvent.includes('3200')) ? "e.g. 4:15.50" : "e.g. 10.84";
 
-  // Filter events based on typing
+  const filteredSports = (ALL_SPORTS || []).filter((s: string) => s.toLowerCase().includes(sportSearch.toLowerCase()));
   const filteredEvents = ALL_EVENTS.filter(e => e.toLowerCase().includes(eventSearch.toLowerCase()));
 
-  // Handle clicking outside the custom dropdown
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+      if (sportDropdownRef.current && !sportDropdownRef.current.contains(e.target as Node)) {
+        setIsSportDropdownOpen(false);
+        if (!ALL_SPORTS.includes(sportSearch)) setSportSearch(selectedSport);
+      }
+      if (eventDropdownRef.current && !eventDropdownRef.current.contains(e.target as Node)) {
         setIsEventDropdownOpen(false);
-        // Reset search to the last valid selected event if they clicked away
-        if (!ALL_EVENTS.includes(eventSearch)) {
-          setEventSearch(selectedEvent);
-        }
+        if (!ALL_EVENTS.includes(eventSearch)) setEventSearch(selectedEvent);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [eventSearch, selectedEvent]);
+  }, [sportSearch, selectedSport, eventSearch, selectedEvent]);
+
+  const handleSelectSport = (sport: string) => {
+    setSportSearch(sport);
+    setSelectedSport(sport);
+    setIsSportDropdownOpen(false);
+    setLocalSportStats({ metrics: [], metaContext: {}, level: '', position: '' }); 
+    setResult(null);
+    setError(null);
+  };
 
   const handleSelectEvent = (ev: string) => {
     setEventSearch(ev);
@@ -158,90 +288,147 @@ export default function DivisionChecker() {
     setResult(null);
   };
 
+  const finalizeCalculation = (rating: number, extraData: Partial<CalculationResult>) => {
+    rating = Math.min(99, Math.max(15, Math.round(rating)));
+    const tierStyles = getTierStyles(rating);
+
+    let label = 'JV Standard'; 
+    let desc = 'Keep working hard in practice to hit the Varsity standard!'; 
+    if (rating >= 95) { label = 'Power 4 D1 Recruit'; desc = 'You are hitting priority marks for top-tier D1 programs.'; }
+    else if (rating >= 85) { label = 'Mid-Major D1 Recruit'; desc = 'You are hitting scholarship-level marks for D1 and elite D2 programs.'; }
+    else if (rating >= 75) { label = 'D1 Walk-On / Top D2'; desc = 'You have a highly competitive profile for D2 scholarships or D1 walk-on spots.'; }
+    else if (rating >= 65) { label = 'Solid D2 / High D3'; desc = 'You are a priority recruit for strong D2 and D3 programs.'; }
+    else if (rating >= 55) { label = 'D3 / NAIA Prospect'; desc = 'You have solid next-level potential for D3 or NAIA programs.'; }
+    else if (rating >= 40) { label = 'Strong Varsity'; desc = 'You are a great high school competitor. A bit more work and you are college bound.'; }
+
+    setResult({
+      ...extraData,
+      score: rating,
+      label,
+      desc,
+      color: tierStyles.colorClass,
+      bg: tierStyles.bgClass,
+      border: tierStyles.borderClass,
+    } as CalculationResult);
+
+    setIsCalculating(false);
+  };
+
   const handleCalculate = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!ALL_EVENTS.includes(selectedEvent)) {
-      setError("Please select a valid event from the list.");
-      return;
-    }
-    if (!mark.trim()) {
-      setError("Please enter a valid mark.");
-      return;
-    }
     setError(null);
+
+    if (selectedSport === 'Track & Field') {
+      if (!ALL_EVENTS.includes(selectedEvent)) return setError("Please select a valid event.");
+      if (!mark.trim()) return setError("Please enter a valid personal record.");
+    }
+
     setIsCalculating(true);
     setResult(null);
 
-    // Simulate dopamine loading state
-    setTimeout(() => {
-      const std = RECRUITING_STANDARDS[gender][selectedEvent];
-      if (!std) {
-        setError("Event standards not found.");
-        setIsCalculating(false);
-        return;
+    if (selectedSport === 'Track & Field') {
+      // --- 🚨 MANUAL TRACK AND FIELD ALGORITHM 🚨 ---
+      setTimeout(() => {
+        const std = RECRUITING_STANDARDS[gender][selectedEvent];
+        if (!std) {
+          setError("Event standards not found.");
+          setIsCalculating(false);
+          return;
+        }
+
+        const val = convertMarkToNumber(mark, !!std.isField);
+        let currentTier = 'JV Standard';
+        let nextTier = 'Varsity';
+        let targetMarkNum = std.t7;
+        let delta = 0;
+        let rating = 50;
+
+        if (std.isField) {
+          if (val >= std.t1) { rating = 95 + Math.min(4, ((val - std.t1) / (std.t1 * 0.05)) * 4); currentTier = 'Power 4 D1'; nextTier = 'Elite'; targetMarkNum = std.t1 * 1.05; }
+          else if (val >= std.t2) { rating = 85 + ((val - std.t2) / (std.t1 - std.t2)) * 10; currentTier = 'Mid-Major D1'; nextTier = 'Power 4 D1'; targetMarkNum = std.t1; }
+          else if (val >= std.t3) { rating = 75 + ((val - std.t3) / (std.t2 - std.t3)) * 10; currentTier = 'Top D2 / Walk-on'; nextTier = 'Mid-Major D1'; targetMarkNum = std.t2; }
+          else if (val >= std.t4) { rating = 65 + ((val - std.t4) / (std.t3 - std.t4)) * 10; currentTier = 'Solid D2 / High D3'; nextTier = 'Top D2'; targetMarkNum = std.t3; }
+          else if (val >= std.t5) { rating = 55 + ((val - std.t5) / (std.t4 - std.t5)) * 10; currentTier = 'D3 / NAIA'; nextTier = 'Solid D2'; targetMarkNum = std.t4; }
+          else if (val >= std.t6) { rating = 40 + ((val - std.t6) / (std.t5 - std.t6)) * 14; currentTier = 'Strong Varsity'; nextTier = 'D3 / NAIA'; targetMarkNum = std.t5; }
+          else if (val >= std.t7) { rating = 20 + ((val - std.t7) / (std.t6 - std.t7)) * 19; currentTier = 'Varsity Standard'; nextTier = 'Strong Varsity'; targetMarkNum = std.t6; }
+          else { const t8 = std.t7 * 0.85; if (val >= t8) { rating = 5 + ((val - t8) / (std.t7 - t8)) * 14; } else { rating = 5; }; currentTier = 'JV Standard'; nextTier = 'Varsity Standard'; targetMarkNum = std.t7; }
+          delta = targetMarkNum - val;
+        } else {
+          if (val <= std.t1) { rating = 95 + Math.min(4, ((std.t1 - val) / (std.t1 * 0.05)) * 4); currentTier = 'Power 4 D1'; nextTier = 'Elite'; targetMarkNum = std.t1 * 0.95; }
+          else if (val <= std.t2) { rating = 85 + ((std.t2 - val) / (std.t2 - std.t1)) * 10; currentTier = 'Mid-Major D1'; nextTier = 'Power 4 D1'; targetMarkNum = std.t1; }
+          else if (val <= std.t3) { rating = 75 + ((std.t3 - val) / (std.t3 - std.t2)) * 10; currentTier = 'Top D2 / Walk-on'; nextTier = 'Mid-Major D1'; targetMarkNum = std.t2; }
+          else if (val <= std.t4) { rating = 65 + ((std.t4 - val) / (std.t4 - std.t3)) * 10; currentTier = 'Solid D2 / High D3'; nextTier = 'Top D2'; targetMarkNum = std.t3; }
+          else if (val <= std.t5) { rating = 55 + ((std.t5 - val) / (std.t5 - std.t4)) * 10; currentTier = 'D3 / NAIA'; nextTier = 'Solid D2'; targetMarkNum = std.t4; }
+          else if (val <= std.t6) { rating = 40 + ((std.t6 - val) / (std.t6 - std.t5)) * 14; currentTier = 'Strong Varsity'; nextTier = 'D3 / NAIA'; targetMarkNum = std.t5; }
+          else if (val <= std.t7) { rating = 20 + ((std.t7 - val) / (std.t7 - std.t6)) * 19; currentTier = 'Varsity Standard'; nextTier = 'Strong Varsity'; targetMarkNum = std.t6; }
+          else { const t8 = std.t7 * 1.15; if (val <= t8) { rating = 5 + ((t8 - val) / (t8 - std.t7)) * 14; } else { rating = 5; }; currentTier = 'JV Standard'; nextTier = 'Varsity Standard'; targetMarkNum = std.t7; }
+          delta = val - targetMarkNum; 
+        }
+
+        finalizeCalculation(rating, {
+          currentTier,
+          nextTier,
+          targetMarkFormatted: formatMarkFromNumber(targetMarkNum, !!std.isField),
+          deltaFormatted: !!std.isField ? `+${formatMarkFromNumber(delta, true)}` : `-${delta.toFixed(2)}s`,
+          isField: !!std.isField
+        });
+      }, 800); 
+
+    } else {
+      // --- 🚨 FIXED EXTRACTION ALGORITHM FOR OTHER SPORTS 🚨 ---
+      const wrapper = document.querySelector('.public-registry-wrapper');
+      if (wrapper) {
+         // Auto-fire the hidden internal registry save so it recalculates
+         const buttons = Array.from(wrapper.querySelectorAll('button'));
+         const saveBtn = buttons.find(b => (b.innerText || '').includes('Save'));
+         if (saveBtn) saveBtn.click();
       }
 
-      const val = convertMarkToNumber(mark, !!std.isField);
-      let score = 5;
-      let currentTier = 'JV Standard';
-      let nextTier = 'Varsity';
-      let targetMarkNum = std.t7;
-      let delta = 0;
+      setTimeout(() => {
+         let finalScore = 0;
+         
+         if (wrapper) {
+            // Use textContent since it safely bypasses "display: none" restrictions.
+            const text = wrapper.textContent || '';
+            
+            // Tier 1 Priority: Try to grab the exact highly-adjusted Normalization Score string
+            const scoreMatch = text.match(/SCORE:\s*(\d{1,2})\s*\/\s*99/i);
+            
+            // Tier 2 Priority: Grab the default Recruitment Rating component block output
+            const ratingMatch = text.match(/RECRUITMENT\s*RATING[\s\S]*?\b(\d{2})\b/i);
 
-      if (std.isField) {
-        if (val >= std.t1) { score = 95 + Math.min(4, ((val - std.t1) / (std.t1 * 0.05)) * 4); currentTier = 'Power 4 D1'; nextTier = 'Elite'; targetMarkNum = std.t1 * 1.05; }
-        else if (val >= std.t2) { score = 85 + ((val - std.t2) / (std.t1 - std.t2)) * 10; currentTier = 'Mid-Major D1'; nextTier = 'Power 4 D1'; targetMarkNum = std.t1; }
-        else if (val >= std.t3) { score = 75 + ((val - std.t3) / (std.t2 - std.t3)) * 10; currentTier = 'Top D2 / Walk-on'; nextTier = 'Mid-Major D1'; targetMarkNum = std.t2; }
-        else if (val >= std.t4) { score = 65 + ((val - std.t4) / (std.t3 - std.t4)) * 10; currentTier = 'Solid D2 / High D3'; nextTier = 'Top D2'; targetMarkNum = std.t3; }
-        else if (val >= std.t5) { score = 55 + ((val - std.t5) / (std.t4 - std.t5)) * 10; currentTier = 'D3 / NAIA'; nextTier = 'Solid D2'; targetMarkNum = std.t4; }
-        else if (val >= std.t6) { score = 40 + ((val - std.t6) / (std.t5 - std.t6)) * 14; currentTier = 'Strong Varsity'; nextTier = 'D3 / NAIA'; targetMarkNum = std.t5; }
-        else if (val >= std.t7) { score = 20 + ((val - std.t7) / (std.t6 - std.t7)) * 19; currentTier = 'Varsity Standard'; nextTier = 'Strong Varsity'; targetMarkNum = std.t6; }
-        else { const t8 = std.t7 * 0.85; if (val >= t8) { score = 5 + ((val - t8) / (std.t7 - t8)) * 14; } else { score = 5; }; currentTier = 'JV Standard'; nextTier = 'Varsity Standard'; targetMarkNum = std.t7; }
-        delta = targetMarkNum - val;
-      } else {
-        if (val <= std.t1) { score = 95 + Math.min(4, ((std.t1 - val) / (std.t1 * 0.05)) * 4); currentTier = 'Power 4 D1'; nextTier = 'Elite'; targetMarkNum = std.t1 * 0.95; }
-        else if (val <= std.t2) { score = 85 + ((std.t2 - val) / (std.t2 - std.t1)) * 10; currentTier = 'Mid-Major D1'; nextTier = 'Power 4 D1'; targetMarkNum = std.t1; }
-        else if (val <= std.t3) { score = 75 + ((std.t3 - val) / (std.t3 - std.t2)) * 10; currentTier = 'Top D2 / Walk-on'; nextTier = 'Mid-Major D1'; targetMarkNum = std.t2; }
-        else if (val <= std.t4) { score = 65 + ((std.t4 - val) / (std.t4 - std.t3)) * 10; currentTier = 'Solid D2 / High D3'; nextTier = 'Top D2'; targetMarkNum = std.t3; }
-        else if (val <= std.t5) { score = 55 + ((std.t5 - val) / (std.t5 - std.t4)) * 10; currentTier = 'D3 / NAIA'; nextTier = 'Solid D2'; targetMarkNum = std.t4; }
-        else if (val <= std.t6) { score = 40 + ((std.t6 - val) / (std.t6 - std.t5)) * 14; currentTier = 'Strong Varsity'; nextTier = 'D3 / NAIA'; targetMarkNum = std.t5; }
-        else if (val <= std.t7) { score = 20 + ((std.t7 - val) / (std.t7 - std.t6)) * 19; currentTier = 'Varsity Standard'; nextTier = 'Strong Varsity'; targetMarkNum = std.t6; }
-        else { const t8 = std.t7 * 1.15; if (val <= t8) { score = 5 + ((t8 - val) / (t8 - std.t7)) * 14; } else { score = 5; }; currentTier = 'JV Standard'; nextTier = 'Varsity Standard'; targetMarkNum = std.t7; }
-        delta = val - targetMarkNum; 
-      }
-      
-      score = Math.min(99, Math.max(5, Math.round(score)));
+            if (scoreMatch && scoreMatch[1]) {
+                finalScore = parseInt(scoreMatch[1], 10);
+            } else if (ratingMatch && ratingMatch[1]) {
+                finalScore = parseInt(ratingMatch[1], 10);
+            }
+         }
 
-      let label = 'JV Standard'; let desc = 'Keep working hard in practice to hit the Varsity standard!'; let color = 'text-slate-500'; let bg = 'bg-slate-100/80'; let border = 'border-slate-300/50';
-      if (score >= 95) { label = 'Power 4 D1 Recruit'; desc = 'You are hitting priority marks for top-tier D1 programs.'; color = 'text-fuchsia-600'; bg = 'bg-fuchsia-50/80'; border = 'border-fuchsia-200/60'; }
-      else if (score >= 85) { label = 'Mid-Major D1 Recruit'; desc = 'You are hitting scholarship-level marks for D1 and elite D2 programs.'; color = 'text-purple-600'; bg = 'bg-purple-50/80'; border = 'border-purple-200/60'; }
-      else if (score >= 75) { label = 'D1 Walk-On / Top D2'; desc = 'You have a highly competitive profile for D2 scholarships or D1 walk-on spots.'; color = 'text-blue-600'; bg = 'bg-blue-50/80'; border = 'border-blue-200/60'; }
-      else if (score >= 65) { label = 'Solid D2 / High D3'; desc = 'You are a priority recruit for strong D2 and D3 programs.'; color = 'text-emerald-600'; bg = 'bg-emerald-50/80'; border = 'border-emerald-200/60'; }
-      else if (score >= 55) { label = 'D3 / NAIA Prospect'; desc = 'You have solid next-level potential for D3 or NAIA programs.'; color = 'text-amber-600'; bg = 'bg-amber-50/80'; border = 'border-amber-200/60'; }
-      else if (score >= 40) { label = 'Strong Varsity'; desc = 'You are a great high school competitor. A bit more work and you are college bound.'; color = 'text-slate-700'; bg = 'bg-slate-100/80'; border = 'border-slate-300/50'; }
+         // Tier 3 Fallback: Utilize the raw evaluateMetric function internally if scrape misses
+         if (finalScore === 0 && localSportStats.metrics && localSportStats.metrics.length > 0) {
+           localSportStats.metrics.forEach((m: any) => {
+             try {
+               const evalResult = evaluateMetric(gender, selectedSport, m.name, m.value, localSportStats.level || 'Varsity');
+               if (evalResult && evalResult.score > finalScore) finalScore = evalResult.score;
+             } catch(e) {}
+           });
+         }
 
-      setResult({
-        score,
-        currentTier,
-        nextTier,
-        targetMarkFormatted: formatMarkFromNumber(targetMarkNum, !!std.isField),
-        deltaFormatted: !!std.isField ? `+${formatMarkFromNumber(delta, true)}` : `-${delta.toFixed(2)}s`,
-        label,
-        desc,
-        color,
-        bg,
-        border,
-        isField: !!std.isField
-      });
+         // Absolute Fallback:
+         if (finalScore === 0) finalScore = localSportStats.calculatedRating || 50;
 
-      setIsCalculating(false);
-    }, 600); 
+         finalizeCalculation(finalScore, {
+            currentTier: 'Dynamic Evaluator',
+            nextTier: 'Next Level of Play'
+         });
+      }, 800);
+    }
   };
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] font-sans selection:bg-blue-200 relative overflow-hidden flex flex-col">
       
-      {/* 🚨 AMBIENT BACKGROUND ANIMATIONS (Apple Style) 🚨 */}
+      {/* 🚨 AMBIENT BACKGROUND ANIMATIONS 🚨 */}
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes float {
           0%, 100% { transform: translateY(0) scale(1); }
@@ -251,8 +438,13 @@ export default function DivisionChecker() {
           0%, 100% { transform: translateY(0) scale(1); }
           50% { transform: translateY(20px) scale(0.95); }
         }
+        @keyframes pulse-ring {
+          0% { transform: scale(0.8); opacity: 0.5; }
+          100% { transform: scale(1.3); opacity: 0; }
+        }
         .orb-1 { animation: float 12s ease-in-out infinite; }
         .orb-2 { animation: float-reverse 15s ease-in-out infinite; }
+        .radar-pulse { animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite; }
         
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
@@ -284,8 +476,8 @@ export default function DivisionChecker() {
         )}
       </nav>
 
-      {/* MAIN CONTENT CONTENT */}
-      <main className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 relative z-10 w-full max-w-2xl mx-auto">
+      {/* MAIN CONTENT */}
+      <main className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 relative z-10 w-full max-w-4xl mx-auto">
         
         {/* HERO COPY */}
         <div className="text-center mb-8 sm:mb-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -296,183 +488,291 @@ export default function DivisionChecker() {
             Where do you <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-500">stack up?</span>
           </h1>
           <p className="text-base sm:text-lg text-slate-500 font-medium max-w-md mx-auto text-balance">
-            Enter your PR below to see exactly what college division your mark aligns with right now.
+            Select your sport below to instantly calculate your recruiting score and college division projection.
           </p>
         </div>
 
-        {/* 🚨 GLASSMORPHIC CALCULATOR CARD (30%) 🚨 */}
-        <div className="w-full bg-white/50 backdrop-blur-3xl border border-white/60 rounded-[2.5rem] shadow-[0_8px_32px_0_rgba(31,38,135,0.07)] p-6 sm:p-10 mb-8 transition-all relative z-20 animate-in fade-in slide-in-from-bottom-8 duration-700 delay-100">
+        {/* 🚨 GLASSMORPHIC CALCULATOR CARD 🚨 */}
+        <div className="w-full max-w-3xl mx-auto bg-white/50 backdrop-blur-3xl border border-white/60 rounded-[2.5rem] shadow-[0_8px_32px_0_rgba(31,38,135,0.07)] p-6 sm:p-10 mb-8 transition-all relative z-20 animate-in fade-in slide-in-from-bottom-8 duration-700 delay-100">
           <form onSubmit={handleCalculate} className="space-y-6 sm:space-y-8">
             
-            {/* Gender Toggle - Apple iOS Style */}
-            <div className="bg-slate-200/50 backdrop-blur-md p-1.5 rounded-2xl flex relative w-full max-w-[240px] mx-auto shadow-inner border border-slate-300/30">
-              <button 
-                type="button"
-                onClick={() => setGender('Boys')}
-                className={`flex-1 py-2.5 text-sm font-black rounded-xl transition-all duration-300 z-10 ${gender === 'Boys' ? 'bg-white shadow-md text-blue-600 border border-slate-200/50' : 'text-slate-500 hover:text-slate-700'}`}
-              >
-                Boys
-              </button>
-              <button 
-                type="button"
-                onClick={() => setGender('Girls')}
-                className={`flex-1 py-2.5 text-sm font-black rounded-xl transition-all duration-300 z-10 ${gender === 'Girls' ? 'bg-white shadow-md text-fuchsia-600 border border-slate-200/50' : 'text-slate-500 hover:text-slate-700'}`}
-              >
-                Girls
-              </button>
+            {/* Top Row: Gender & Sport Selectors */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 sm:gap-6 items-end">
+               <div className="w-full">
+                 <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 pl-1 mb-2 block">Athletic Division</label>
+                 <div className="bg-slate-200/50 backdrop-blur-md p-1.5 rounded-2xl flex relative w-full shadow-inner border border-slate-300/30">
+                   <button 
+                     type="button"
+                     onClick={() => { setGender('Boys'); setResult(null); }}
+                     className={`flex-1 py-3.5 text-sm font-black rounded-xl transition-all duration-300 z-10 ${gender === 'Boys' ? 'bg-white shadow-md text-blue-600 border border-slate-200/50' : 'text-slate-500 hover:text-slate-700'}`}
+                   >
+                     Boys
+                   </button>
+                   <button 
+                     type="button"
+                     onClick={() => { setGender('Girls'); setResult(null); }}
+                     className={`flex-1 py-3.5 text-sm font-black rounded-xl transition-all duration-300 z-10 ${gender === 'Girls' ? 'bg-white shadow-md text-fuchsia-600 border border-slate-200/50' : 'text-slate-500 hover:text-slate-700'}`}
+                   >
+                     Girls
+                   </button>
+                 </div>
+               </div>
+
+               {/* 🚨 SMART COMBOBOX: SEARCHABLE SPORT INPUT 🚨 */}
+               <div className="space-y-2 relative" ref={sportDropdownRef}>
+                 <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 pl-1">Select Sport</label>
+                 <div className="relative group">
+                   <input 
+                     type="text"
+                     value={sportSearch}
+                     onChange={(e) => {
+                       setSportSearch(e.target.value);
+                       setIsSportDropdownOpen(true);
+                       setResult(null);
+                     }}
+                     onFocus={() => {
+                       setSportSearch(''); 
+                       setIsSportDropdownOpen(true);
+                     }}
+                     placeholder="Search sport..."
+                     className="w-full bg-white/60 hover:bg-white/90 border border-slate-200 hover:border-blue-300 rounded-2xl pl-12 pr-5 py-3.5 text-slate-900 font-bold text-base focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10 shadow-sm transition-all placeholder:text-slate-400 placeholder:font-medium"
+                   />
+                   <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
+                   <ChevronDown className={`absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 transition-transform duration-300 ${isSportDropdownOpen ? 'rotate-180' : ''}`} />
+                 </div>
+
+                 {/* Dropdown Options */}
+                 {isSportDropdownOpen && (
+                   <div className="absolute top-full left-0 right-0 mt-2 bg-white/95 backdrop-blur-xl border border-slate-200 rounded-2xl shadow-[0_20px_40px_-10px_rgba(0,0,0,0.15)] z-50 max-h-60 overflow-y-auto custom-scrollbar p-1 animate-in fade-in slide-in-from-top-2 duration-200">
+                     {filteredSports.length > 0 ? (
+                       filteredSports.map((sport: string) => (
+                         <button
+                           key={sport}
+                           type="button"
+                           onClick={() => handleSelectSport(sport)}
+                           className={`w-full text-left px-4 py-3 rounded-xl text-sm transition-colors flex items-center justify-between ${selectedSport === sport ? 'bg-blue-50 text-blue-700 font-black' : 'text-slate-700 font-bold hover:bg-slate-100'}`}
+                         >
+                           {sport}
+                           {selectedSport === sport && <Check className="w-4 h-4 text-blue-500" />}
+                         </button>
+                       ))
+                     ) : (
+                       <div className="px-4 py-4 text-slate-400 text-sm italic text-center font-medium">No sports found.</div>
+                     )}
+                   </div>
+                 )}
+               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 sm:gap-6">
-              
-              {/* 🚨 SMART COMBOBOX: SEARCHABLE EVENT INPUT 🚨 */}
-              <div className="space-y-2 relative" ref={dropdownRef}>
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 pl-1">Select Event</label>
-                <div className="relative group">
-                  <input 
-                    type="text"
-                    value={eventSearch}
-                    onChange={(e) => {
-                      setEventSearch(e.target.value);
-                      setIsEventDropdownOpen(true);
-                      setResult(null);
-                    }}
-                    onFocus={() => {
-                      setEventSearch(''); // Clear to show all options on focus
-                      setIsEventDropdownOpen(true);
-                    }}
-                    placeholder="Search event..."
-                    className="w-full bg-white/60 hover:bg-white/90 border border-slate-200 hover:border-blue-300 rounded-2xl pl-12 pr-5 py-4 text-slate-900 font-bold text-base focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10 shadow-sm transition-all placeholder:text-slate-400 placeholder:font-medium"
-                  />
-                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
-                  <ChevronDown className={`absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 transition-transform duration-300 ${isEventDropdownOpen ? 'rotate-180' : ''}`} />
-                </div>
+            {/* DYNAMIC INPUTS BASED ON SPORT */}
+            <div className="bg-slate-50/50 rounded-[2rem] p-4 sm:p-6 shadow-inner border border-slate-200/60 transition-all public-registry-wrapper">
+              {selectedSport === 'Track & Field' ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 sm:gap-6 animate-in fade-in duration-300">
+                  <div className="space-y-2 relative" ref={eventDropdownRef}>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 pl-1">Select Event</label>
+                    <div className="relative group">
+                      <input 
+                        type="text"
+                        value={eventSearch}
+                        onChange={(e) => {
+                          setEventSearch(e.target.value);
+                          setIsEventDropdownOpen(true);
+                          setResult(null);
+                        }}
+                        onFocus={() => {
+                          setEventSearch(''); 
+                          setIsEventDropdownOpen(true);
+                        }}
+                        placeholder="Search event..."
+                        className="w-full bg-white/60 hover:bg-white/90 border border-slate-200 hover:border-blue-300 rounded-2xl pl-12 pr-5 py-4 text-slate-900 font-bold text-base focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10 shadow-sm transition-all placeholder:text-slate-400 placeholder:font-medium"
+                      />
+                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
+                      <ChevronDown className={`absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 transition-transform duration-300 ${isEventDropdownOpen ? 'rotate-180' : ''}`} />
+                    </div>
 
-                {/* Dropdown Options */}
-                {isEventDropdownOpen && (
-                  <div className="absolute top-full left-0 right-0 mt-2 bg-white/90 backdrop-blur-xl border border-slate-200 rounded-2xl shadow-[0_20px_40px_-10px_rgba(0,0,0,0.15)] z-50 max-h-60 overflow-y-auto custom-scrollbar p-1 animate-in fade-in slide-in-from-top-2 duration-200">
-                    {filteredEvents.length > 0 ? (
-                      filteredEvents.map(ev => (
-                        <button
-                          key={ev}
-                          type="button"
-                          onClick={() => handleSelectEvent(ev)}
-                          className={`w-full text-left px-4 py-3 rounded-xl text-sm transition-colors flex items-center justify-between ${selectedEvent === ev ? 'bg-blue-50 text-blue-700 font-black' : 'text-slate-700 font-bold hover:bg-slate-100'}`}
-                        >
-                          {ev}
-                          {selectedEvent === ev && <Check className="w-4 h-4 text-blue-500" />}
-                        </button>
-                      ))
-                    ) : (
-                      <div className="px-4 py-4 text-slate-400 text-sm italic text-center font-medium">No events found.</div>
+                    {isEventDropdownOpen && (
+                      <div className="absolute top-full left-0 right-0 mt-2 bg-white/90 backdrop-blur-xl border border-slate-200 rounded-2xl shadow-[0_20px_40px_-10px_rgba(0,0,0,0.15)] z-50 max-h-60 overflow-y-auto custom-scrollbar p-1 animate-in fade-in slide-in-from-top-2 duration-200">
+                        {filteredEvents.length > 0 ? (
+                          filteredEvents.map(ev => (
+                            <button
+                              key={ev}
+                              type="button"
+                              onClick={() => handleSelectEvent(ev)}
+                              className={`w-full text-left px-4 py-3 rounded-xl text-sm transition-colors flex items-center justify-between ${selectedEvent === ev ? 'bg-blue-50 text-blue-700 font-black' : 'text-slate-700 font-bold hover:bg-slate-100'}`}
+                            >
+                              {ev}
+                              {selectedEvent === ev && <Check className="w-4 h-4 text-blue-500" />}
+                            </button>
+                          ))
+                        ) : (
+                          <div className="px-4 py-4 text-slate-400 text-sm italic text-center font-medium">No events found.</div>
+                        )}
+                      </div>
                     )}
                   </div>
-                )}
-              </div>
 
-              {/* Mark Input */}
-              <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 pl-1">Your Personal Record</label>
-                <div className="relative group">
-                  <input 
-                    type="text" 
-                    value={mark}
-                    onChange={(e) => {
-                      setMark(e.target.value);
-                      setResult(null);
-                    }}
-                    placeholder={placeholderText}
-                    className="w-full bg-white/60 hover:bg-white/90 border border-slate-200 hover:border-blue-300 rounded-2xl pl-12 pr-5 py-4 text-slate-900 font-black text-base focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10 shadow-sm transition-all placeholder:text-slate-300 placeholder:font-medium tracking-wide"
-                  />
-                  <Trophy className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-yellow-500 transition-colors" />
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 pl-1">Your Personal Record</label>
+                    <div className="relative group">
+                      <input 
+                        type="text" 
+                        value={mark}
+                        onChange={(e) => {
+                          setMark(e.target.value);
+                          setResult(null);
+                        }}
+                        placeholder={placeholderText}
+                        className="w-full bg-white/60 hover:bg-white/90 border border-slate-200 hover:border-blue-300 rounded-2xl pl-12 pr-5 py-4 text-slate-900 font-black text-base focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10 shadow-sm transition-all placeholder:text-slate-300 placeholder:font-medium tracking-wide"
+                      />
+                      <Trophy className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-yellow-500 transition-colors" />
+                    </div>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="animate-in fade-in duration-300">
+                   {SPORT_CONFIGS_META[selectedSport] ? (
+                      <EditorErrorBoundary onReset={() => setLocalSportStats({ metrics: [], metaContext: {}, level: '', position: '' })}>
+                        <SportEditorRegistry 
+                          sport={selectedSport}
+                          sportStats={localSportStats}
+                          genderKey={gender}
+                          athleteProfile={null}
+                          config={SPORT_CONFIGS_META[selectedSport]}
+                          onSync={(data) => {
+                            setLocalSportStats(data);
+                            setResult(null);
+                            setError(null);
+                          }}
+                          showToast={(msg, type) => setError(type === 'error' ? msg : null)}
+                        />
+                      </EditorErrorBoundary>
+                   ) : (
+                      <div className="text-center py-6 text-slate-500 font-bold flex flex-col items-center justify-center gap-2">
+                         <Activity className="w-6 h-6 text-slate-300" />
+                         Please select a supported sport.
+                      </div>
+                   )}
+                </div>
+              )}
             </div>
 
-            {error && <p className="text-rose-500 text-sm font-bold text-center animate-in fade-in bg-rose-50 py-2 rounded-lg border border-rose-100">{error}</p>}
+            {error && (
+               <div className="flex items-center justify-center gap-2 text-rose-600 text-sm font-bold animate-in fade-in bg-rose-50 py-3 px-4 rounded-xl border border-rose-200 shadow-sm">
+                  <AlertCircle className="w-4 h-4 shrink-0" /> {error}
+               </div>
+            )}
 
-            {/* Action Button (10% Accent Color) */}
+            {/* Action Button */}
             <button 
               type="submit" 
-              disabled={isCalculating || !mark}
+              disabled={isCalculating || (selectedSport !== 'Track & Field' && !SPORT_CONFIGS_META[selectedSport])}
               className="w-full bg-slate-900 hover:bg-black text-white font-black py-4 sm:py-5 rounded-2xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.3)] transition-all hover:-translate-y-1 active:scale-[0.98] disabled:opacity-50 disabled:hover:translate-y-0 disabled:active:scale-100 flex items-center justify-center gap-2 text-base sm:text-lg mt-4 group"
             >
               {isCalculating ? (
                 <Activity className="w-5 h-5 animate-pulse" />
               ) : (
-                <>Analyze My PR <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" /></>
+                <>See Where You Stand <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" /></>
               )}
             </button>
           </form>
         </div>
 
-        {/* 🚨 DYNAMIC RESULTS VIEW 🚨 */}
+        {/* 🚨 REBUILT DYNAMIC FOMO / RESULTS VIEW 🚨 */}
         {result && !isCalculating && (
           <div className="w-full animate-in slide-in-from-bottom-8 fade-in duration-500 ease-out mb-12">
             
-            <div className={`w-full rounded-[2.5rem] border ${result.bg} ${result.border} backdrop-blur-xl p-8 sm:p-10 relative overflow-hidden shadow-[0_20px_60px_-15px_rgba(0,0,0,0.1)] transition-all duration-500 group hover:shadow-2xl`}>
-              <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none scale-150 transform translate-x-4 -translate-y-4 group-hover:scale-[1.6] group-hover:-rotate-12 transition-transform duration-700">
-                <Target className={`w-48 h-48 ${result.color}`} />
-              </div>
+            <div className={`w-full rounded-[2.5rem] border-2 ${result.bg} ${result.border} backdrop-blur-xl relative overflow-hidden shadow-[0_20px_60px_-15px_rgba(0,0,0,0.2)] flex flex-col md:flex-row group transition-all duration-500 hover:shadow-2xl`}>
               
-              <div className="relative z-10 flex flex-col sm:flex-row gap-8 items-start sm:items-center">
-                
-                <div className="flex-1">
-                  <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-1.5">
-                    <ShieldCheck className="w-3.5 h-3.5" /> Projected Division
-                  </p>
-                  <h2 className={`text-3xl sm:text-4xl font-black tracking-tight mb-3 ${result.color}`}>
-                    {result.label}
-                  </h2>
-                  <p className="text-slate-600 font-medium text-sm sm:text-base leading-relaxed max-w-md">
-                    {result.desc}
-                  </p>
+              {/* ================================== */}
+              {/* LEFT SIDE: SCORING & TIER          */}
+              {/* ================================== */}
+              <div className="p-8 sm:p-10 md:w-[55%] flex flex-col justify-center relative z-10">
+                <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none scale-150 transform translate-x-4 -translate-y-4 group-hover:scale-[1.6] group-hover:-rotate-12 transition-transform duration-700">
+                  <Target className={`w-48 h-48 ${result.color}`} />
                 </div>
+                
+                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4" /> Projected Division
+                </p>
+                <h2 className={`text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight mb-4 ${result.color} drop-shadow-sm`}>
+                  {result.label}
+                </h2>
+                <p className="text-slate-700 font-medium text-sm sm:text-base leading-relaxed max-w-md mb-8">
+                  {result.desc}
+                </p>
 
-                <div className="w-full sm:w-auto shrink-0 flex flex-row sm:flex-col justify-between sm:justify-center items-center gap-4 bg-white/70 backdrop-blur-md p-5 rounded-[1.5rem] border border-white/60 shadow-sm hover:bg-white/90 transition-colors">
-                   <div className="text-center">
-                      <span className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-0.5">Recruit Score</span>
-                      <div className="flex items-end justify-center gap-0.5">
-                        <span className={`text-4xl font-black leading-none ${result.color}`}>{Math.round(result.score)}</span>
-                        <span className="text-xs font-bold text-slate-400 pb-1">/99</span>
+                <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-center">
+                   {/* Recruit Score Badge */}
+                   <div className="bg-white/80 backdrop-blur-md px-6 py-4 rounded-[1.5rem] border border-white/60 shadow-sm flex items-center justify-center gap-4 hover:bg-white transition-colors">
+                      <div className="text-center">
+                         <span className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-0.5">Recruit Score</span>
+                         <div className="flex items-end justify-center gap-0.5">
+                           <span className={`text-4xl font-black leading-none ${result.color}`}>{Math.round(result.score)}</span>
+                           <span className="text-xs font-bold text-slate-400 pb-1">/99</span>
+                         </div>
                       </div>
                    </div>
                    
-                   <div className="w-px h-10 sm:w-10 sm:h-px bg-slate-200"></div>
-                   
-                   <div className="text-center">
-                      <span className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-0.5">Next Tier Goal</span>
-                      <span className="text-xl font-black text-slate-800 block leading-none mb-1">{result.targetMarkFormatted}</span>
-                      <span className={`text-[10px] font-bold ${result.isField ? 'text-emerald-500' : 'text-blue-500'}`}>
-                        {result.deltaFormatted} Needed
-                      </span>
-                   </div>
+                   {/* Next Tier Delta (If Applicable) */}
+                   {result.targetMarkFormatted && (
+                     <div className="bg-white/50 backdrop-blur-md px-6 py-4 rounded-[1.5rem] border border-white/60 shadow-sm flex flex-col justify-center">
+                        <span className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-0.5">Next Tier Goal</span>
+                        <span className="text-xl font-black text-slate-800 block leading-none mb-1">{result.targetMarkFormatted}</span>
+                        <span className={`text-[10px] font-bold ${result.isField ? 'text-emerald-600' : 'text-blue-600'}`}>
+                          {result.deltaFormatted} Needed
+                        </span>
+                     </div>
+                   )}
                 </div>
-
               </div>
-            </div>
 
-            {/* 🚨 ACQUISITION HOOK / CTA 🚨 */}
-            <div className="mt-6 bg-white/60 backdrop-blur-2xl border border-white/60 rounded-[2.5rem] p-8 sm:p-10 text-center shadow-[0_10px_40px_-10px_rgba(0,0,0,0.05)] relative overflow-hidden group hover:border-blue-300 transition-colors duration-500">
-              <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-5 border border-blue-100 group-hover:scale-110 transition-transform duration-500 shadow-sm">
-                <Search className="w-8 h-8 text-blue-600" />
+              {/* ================================== */}
+              {/* RIGHT SIDE: FOMO ACQUISITION CTA   */}
+              {/* ================================== */}
+              <div className="bg-slate-950 md:w-[45%] p-8 sm:p-10 text-white relative z-10 flex flex-col justify-center border-t md:border-t-0 md:border-l border-slate-800">
+                {/* Ambient Deep Dark FX */}
+                <div className="absolute inset-0 opacity-[0.03] bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] pointer-events-none"></div>
+                <div className="absolute -top-32 -right-32 w-64 h-64 bg-blue-500/20 blur-[80px] rounded-full pointer-events-none"></div>
+                
+                <div className="relative z-10">
+                   <div className="flex items-center gap-3 mb-6">
+                     <div className="relative w-12 h-12 bg-blue-500/20 rounded-xl flex items-center justify-center border border-blue-500/30 shrink-0 shadow-inner">
+                       <Database className="w-6 h-6 text-blue-400 z-10" />
+                       <div className="absolute inset-0 rounded-xl border border-blue-400 radar-pulse pointer-events-none"></div>
+                     </div>
+                     <div>
+                       <div className="text-[10px] font-black uppercase tracking-widest text-emerald-400 flex items-center gap-1.5 mb-0.5">
+                         <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]"></div> System Database
+                       </div>
+                       <p className="text-xs font-bold text-slate-400">1,000+ College Programs</p>
+                     </div>
+                   </div>
+
+                   <h3 className="text-2xl sm:text-3xl font-black tracking-tight mb-3 text-white leading-tight">
+                     {session ? "Take it to the Next Level." : "Stop Guessing. Start Targeting."}
+                   </h3>
+                   <p className="text-slate-400 text-sm font-medium mb-8 leading-relaxed text-balance">
+                     {session 
+                       ? `A score doesn't recruit itself. Add these verified stats to your portfolio and use the College Matchmaker to find out exactly which programs align with your performance tier.`
+                       : `Your score is just the beginning. Claim your free ChasedSports profile to unlock the Matchmaker, compare your stats against actual college rosters, and build your target list.`
+                     }
+                   </p>
+                   
+                   <Link 
+                     href={session ? "/dashboard" : "/login"} 
+                     className="w-full inline-flex items-center justify-center gap-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black px-6 py-4 rounded-[1.25rem] shadow-[0_0_30px_rgba(37,99,235,0.3)] transition-all hover:-translate-y-1 active:scale-[0.98] group/btn"
+                   >
+                     {session ? 'Add to Portfolio & Find Matches' : 'Claim My Free Profile'} 
+                     <ArrowRight className="w-5 h-5 group-hover/btn:translate-x-1 transition-transform" />
+                   </Link>
+                   
+                   <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest text-center mt-5 flex items-center justify-center gap-1.5">
+                     <TrendingUp className="w-3.5 h-3.5" /> {session ? "Takes 10 seconds to sync" : "100% Free for High School Athletes"}
+                   </p>
+                </div>
               </div>
-              <h3 className="text-2xl font-black text-slate-900 tracking-tight mb-2">
-                {session ? "Update your athletic profile" : "Want coaches to see this?"}
-              </h3>
-              <p className="text-sm font-medium text-slate-500 mb-8 max-w-sm mx-auto">
-                {session 
-                  ? "Head to your dashboard to add this PR to your verified portfolio so college coaches can easily find you."
-                  : "Create your free Athletic Portfolio, sync your official Athletic.net times, and get indexed on our national database for college coaches."
-                }
-              </p>
-              <Link 
-                href={session ? "/dashboard" : "/login"} 
-                className="inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-black px-8 py-4 rounded-xl shadow-lg transition-transform hover:-translate-y-1 active:scale-[0.98] w-full sm:w-auto"
-              >
-                <Zap className="w-5 h-5" /> {session ? 'Go to Dashboard' : 'Claim My Portfolio'}
-              </Link>
-            </div>
 
+            </div>
           </div>
         )}
       </main>

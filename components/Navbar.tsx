@@ -5,7 +5,7 @@ import { createClient } from '@/utils/supabase/client';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter, usePathname } from 'next/navigation';
-import { Activity, Mail, Search, LogOut, LayoutDashboard, User, School, Trophy, Globe, Medal, Menu, X, ShoppingCart, Target, ChevronDown, Crown, Zap, Shield, Calculator } from 'lucide-react'; 
+import { Mail, Search, LogOut, LayoutDashboard, User, School, Medal, Menu, X, ShoppingCart, Crown, Zap, Shield, Calculator } from 'lucide-react'; 
 
 // 🚨 IMPORTED CHASEDCASH COMPONENT
 import { ChasedCash } from '@/components/ChasedCash';
@@ -24,6 +24,7 @@ export default function Navbar() {
   const [isAthlete, setIsAthlete] = useState(false);
   const [viewerRole, setViewerRole] = useState<'guest' | 'athlete' | 'coach'>('guest');
   const [isPremium, setIsPremium] = useState(false);
+  const [isFounder, setIsFounder] = useState(false);
   
   // --- UI STATE ---
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false); 
@@ -107,9 +108,10 @@ export default function Navbar() {
       setSession(session);
 
       if (session) {
+        // Updated query to include `is_founder`
         const { data: athleteProfile } = await supabase
           .from('athletes')
-          .select('avatar_url, coins, is_premium')
+          .select('avatar_url, coins, is_premium, is_founder')
           .eq('id', session.user.id)
           .maybeSingle();
 
@@ -119,16 +121,19 @@ export default function Navbar() {
           setAvatarUrl(athleteProfile.avatar_url);
           setCoins(athleteProfile.coins || 0);
           setIsPremium(athleteProfile.is_premium || false);
+          setIsFounder(athleteProfile.is_founder || false);
         } else {
+          // Check coach if athlete fetch fails
           const { data: coachProfile } = await supabase
             .from('coaches')
-            .select('id, avatar_url')
+            .select('id, avatar_url, is_founder')
             .eq('id', session.user.id)
             .maybeSingle();
             
           if (coachProfile) {
             setViewerRole('coach');
             setAvatarUrl(coachProfile.avatar_url);
+            setIsFounder(coachProfile.is_founder || false);
           }
         }
 
@@ -267,38 +272,19 @@ export default function Navbar() {
           </div>
 
           <div className="hidden md:flex flex-1 items-center justify-end space-x-3 lg:space-x-5 shrink-0">
-            {/* 🚨 NEW: PR Analyzer Link 🚨 */}
             <Link href="/division-checker" className="text-sm font-bold text-slate-500 hover:text-fuchsia-600 transition-colors flex items-center whitespace-nowrap">
-              <Calculator className="w-4 h-4 mr-1.5" /> <span className="hidden lg:inline">PR Analyzer</span>
+              <Calculator className="w-4 h-4 mr-1.5" /> <span className="hidden lg:inline">Division Tracker</span>
             </Link>
 
             <Link href="/search" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors flex items-center whitespace-nowrap">
               <School className="w-4 h-4 mr-1.5" /> <span className="hidden lg:inline">College Finder</span>
             </Link>
             
-            {/* 🚨 DESKTOP: Only show Teams if session exists */}
             {session && (
               <Link href="/dashboard/team" className="text-sm font-bold text-slate-500 hover:text-emerald-600 transition-colors flex items-center whitespace-nowrap">
                 <Shield className="w-4 h-4 mr-1.5" /> <span className="hidden lg:inline">Teams</span>
               </Link>
             )}
-            
-            <div className="relative group">
-              <button className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors flex items-center py-2 whitespace-nowrap">
-                <Activity className="w-4 h-4 mr-1.5" /> <span className="hidden lg:inline">Track & Field</span> <ChevronDown className="w-3 h-3 ml-1 opacity-50 group-hover:rotate-180 transition-transform duration-300" />
-              </button>
-              
-              <div className="absolute top-full right-0 mt-1 w-48 bg-white rounded-2xl shadow-xl border border-slate-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 flex flex-col overflow-hidden transform translate-y-2 group-hover:translate-y-0">
-                {session && (
-                  <Link href="/dashboard/track" className="px-4 py-3 bg-blue-50/50 hover:bg-blue-100 font-black text-sm text-blue-700 flex items-center border-b border-slate-100 transition-colors">
-                    <Activity className="w-4 h-4 mr-2" /> Track Portal
-                  </Link>
-                )}
-                <Link href="/feed" className="px-4 py-3 hover:bg-slate-50 font-bold text-sm text-slate-700 flex items-center transition-colors"><Globe className="w-4 h-4 mr-2 text-indigo-500"/> The Feed</Link>
-                <Link href="/leaderboard" className="px-4 py-3 hover:bg-slate-50 font-bold text-sm text-slate-700 flex items-center transition-colors"><Trophy className="w-4 h-4 mr-2 text-amber-500"/> Leaderboards</Link>
-                <Link href="/compete" className="px-4 py-3 hover:bg-slate-50 font-bold text-sm text-slate-700 flex items-center transition-colors"><Target className="w-4 h-4 mr-2 text-red-500"/> The Arena</Link>
-              </div>
-            </div>
 
             {session ? (
               <>
@@ -317,7 +303,12 @@ export default function Navbar() {
                 )}
 
                 {isAthlete && (
-                  isPremium ? (
+                  isFounder ? (
+                    <Link href="/pro" title="Founder Status" className="ml-1 lg:ml-2 flex items-center gap-1.5 text-xs font-black bg-gradient-to-r from-fuchsia-500 to-indigo-600 text-white px-3 py-1.5 rounded-full hover:scale-105 transition-transform shadow-sm whitespace-nowrap">
+                      <Crown className="w-3 h-3" />
+                      EARLY ACCESS
+                    </Link>
+                  ) : isPremium ? (
                     <Link href="/pro" title="Manage Subscription" className="ml-1 lg:ml-2 flex items-center gap-1.5 text-xs font-black bg-gradient-to-r from-amber-400 to-amber-500 text-amber-950 px-3 py-1.5 rounded-full hover:scale-105 transition-transform shadow-sm whitespace-nowrap">
                       <Crown className="w-3 h-3" />
                       PRO
@@ -413,7 +404,7 @@ export default function Navbar() {
             <div className="grid grid-cols-2 gap-3 mb-2">
               <Link href="/division-checker" onClick={closeMobileMenu} className="bg-slate-50 hover:bg-fuchsia-50 border border-slate-100 p-4 rounded-2xl flex flex-col items-center justify-center gap-2 transition-colors col-span-1">
                 <Calculator className="w-6 h-6 text-fuchsia-500" />
-                <span className="font-bold text-slate-700 text-sm">PR Analyzer</span>
+                <span className="font-bold text-slate-700 text-sm">Division Tracker</span>
               </Link>
               <Link href="/search" onClick={closeMobileMenu} className="bg-slate-50 hover:bg-blue-50 border border-slate-100 p-4 rounded-2xl flex flex-col items-center justify-center gap-2 transition-colors col-span-1">
                 <School className="w-6 h-6 text-blue-500" />
@@ -430,18 +421,6 @@ export default function Navbar() {
             </div>
 
             <div className="flex flex-col gap-2">
-              <div className="bg-slate-50 rounded-2xl p-2 border border-slate-100 my-2">
-                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 mt-2 pl-3">Track & Field</h4>
-                {session && (
-                  <Link href="/dashboard/track" onClick={closeMobileMenu} className="flex items-center gap-4 p-3 rounded-xl hover:bg-white text-slate-700 font-bold transition-colors">
-                    <Activity className="w-5 h-5 text-blue-500" /> Track Portal
-                  </Link>
-                )}
-                <Link href="/feed" onClick={closeMobileMenu} className="flex items-center gap-4 p-3 rounded-xl hover:bg-white text-slate-700 font-bold transition-colors"><Globe className="w-5 h-5 text-indigo-500" /> The Feed</Link>
-                <Link href="/leaderboard" onClick={closeMobileMenu} className="flex items-center gap-4 p-3 rounded-xl hover:bg-white text-slate-700 font-bold transition-colors"><Trophy className="w-5 h-5 text-amber-500" /> Leaderboards</Link>
-                <Link href="/compete" onClick={closeMobileMenu} className="flex items-center gap-4 p-3 rounded-xl hover:bg-white text-slate-700 font-bold transition-colors"><Target className="w-5 h-5 text-red-500" /> The Arena</Link>
-              </div>
-              
               {session ? (
                 <>
                   <div className="h-px bg-slate-100 my-2"></div>
@@ -454,7 +433,11 @@ export default function Navbar() {
                   <Link href="/dashboard/messages" onClick={closeMobileMenu} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-50 text-slate-700 font-bold text-lg transition-colors"><Mail className="w-6 h-6 text-slate-500" /> Inbox {unreadCount > 0 && <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full ml-auto">{unreadCount} new</span>}</Link>
                   
                   {isAthlete && (
-                    isPremium ? (
+                    isFounder ? (
+                      <Link href="/pro" onClick={closeMobileMenu} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-fuchsia-50 text-fuchsia-600 font-bold text-lg transition-colors text-left w-full">
+                        <Crown className="w-6 h-6" /> Early Access
+                      </Link>
+                    ) : isPremium ? (
                       <Link href="/pro" onClick={closeMobileMenu} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-50 text-amber-600 font-bold text-lg transition-colors text-left w-full">
                         <Crown className="w-6 h-6" /> Manage Pro
                       </Link>
