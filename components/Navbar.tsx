@@ -5,7 +5,7 @@ import { createClient } from '@/utils/supabase/client';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter, usePathname } from 'next/navigation';
-import { Mail, Search, LogOut, LayoutDashboard, User, School, Medal, Menu, X, ShoppingCart, Crown, Zap, Shield, Calculator } from 'lucide-react'; 
+import { Mail, Search, LogOut, LayoutDashboard, User, School, Medal, Menu, X, ShoppingCart, Crown, Zap, Shield, Calculator, Flame } from 'lucide-react'; 
 
 // 🚨 IMPORTED CHASEDCASH COMPONENT
 import { ChasedCash } from '@/components/ChasedCash';
@@ -279,6 +279,10 @@ export default function Navbar() {
             <Link href="/search" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors flex items-center whitespace-nowrap">
               <School className="w-4 h-4 mr-1.5" /> <span className="hidden lg:inline">College Finder</span>
             </Link>
+
+            <Link href="/feed" className="text-sm font-bold text-slate-500 hover:text-orange-500 transition-colors flex items-center whitespace-nowrap">
+              <Flame className="w-4 h-4 mr-1.5" /> <span className="hidden lg:inline">Feed</span>
+            </Link>
             
             {session && (
               <Link href="/dashboard/team" className="text-sm font-bold text-slate-500 hover:text-emerald-600 transition-colors flex items-center whitespace-nowrap">
@@ -411,9 +415,15 @@ export default function Navbar() {
                 <span className="font-bold text-slate-700 text-sm">College Finder</span>
               </Link>
               
-              {/* Teams spans bottom row if logged in, otherwise completely hidden */}
+              {/* Feed automatically fills the full width if Team HQ isn't present, or sits neatly as a 2x2 grid if it is */}
+              <Link href="/feed" onClick={closeMobileMenu} className={`bg-slate-50 hover:bg-orange-50 border border-slate-100 p-4 rounded-2xl flex flex-col items-center justify-center gap-2 transition-colors ${session ? 'col-span-1' : 'col-span-2'}`}>
+                <Flame className="w-6 h-6 text-orange-500" />
+                <span className="font-bold text-slate-700 text-sm">Feed</span>
+              </Link>
+
+              {/* Teams spans bottom right block if logged in, forming perfect 2x2 square */}
               {session && (
-                <Link href="/dashboard/team" onClick={closeMobileMenu} className="bg-slate-50 hover:bg-emerald-50 border border-slate-100 p-4 rounded-2xl flex flex-col items-center justify-center gap-2 transition-colors col-span-2">
+                <Link href="/dashboard/team" onClick={closeMobileMenu} className="bg-slate-50 hover:bg-emerald-50 border border-slate-100 p-4 rounded-2xl flex flex-col items-center justify-center gap-2 transition-colors col-span-1">
                   <Shield className="w-6 h-6 text-emerald-500" />
                   <span className="font-bold text-slate-700 text-sm">Team HQ</span>
                 </Link>

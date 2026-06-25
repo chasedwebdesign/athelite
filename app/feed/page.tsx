@@ -194,12 +194,10 @@ export default function FeedPage() {
   const [feedTab, setFeedTab] = useState<'feed' | 'network'>('feed');
   const [searchQuery, setSearchQuery] = useState('');
   
-  // COACH FINDER FILTERS (For Athletes)
   const [filterDivision, setFilterDivision] = useState('');
   const [filterCoachSport, setFilterCoachSport] = useState('');
   const [filterTitle, setFilterTitle] = useState('');
 
-  // ATHLETE FINDER FILTERS (For Coaches)
   const [filterAthleteState, setFilterAthleteState] = useState('');
   const [filterGradYear, setFilterGradYear] = useState('');
   const [filterSport, setFilterSport] = useState('');
@@ -207,7 +205,6 @@ export default function FeedPage() {
   const [filterTargetScore, setFilterTargetScore] = useState('');
   const [showMobileFilters, setShowMobileFilters] = useState(false); 
 
-  // Feed Discussion Creator
   const [newDiscussionContent, setNewDiscussionContent] = useState('');
   const [isSubmittingDiscussion, setIsSubmittingDiscussion] = useState(false);
 
@@ -215,7 +212,6 @@ export default function FeedPage() {
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
   const [isSubmittingComment, setIsSubmittingComment] = useState<Record<string, boolean>>({});
 
-  // Messaging State 
   const [isMessageModalOpen, setIsMessageModalOpen] = useState(false);
   const [messageRecipient, setMessageRecipient] = useState<{ id: string, name: string, school: string, role: string } | null>(null);
   const [messageContent, setMessageContent] = useState('');
@@ -225,24 +221,20 @@ export default function FeedPage() {
   const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
   const [isCheckingThread, setIsCheckingThread] = useState(false);
 
-  // Edit/Delete States for Posts & Comments
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [editPostContent, setEditPostContent] = useState('');
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editCommentContent, setEditCommentContent] = useState('');
   
-  // 🚨 CUSTOM CONFIRMATION MODALS (No native alerts!) 🚨
   const [postToDelete, setPostToDelete] = useState<string | null>(null);
   const [commentToDelete, setCommentToDelete] = useState<{postId: string, commentId: string} | null>(null);
 
-  // Report & Modal States
   const [reportModal, setReportModal] = useState<{type: 'post'|'comment', id: string, targetId: string, content: string} | null>(null);
   const [reportReason, setReportReason] = useState('Inappropriate Language');
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
   const [showScoringModal, setShowScoringModal] = useState(false);
 
-  // Profile Edit State (For Coaches)
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [editFirstName, setEditFirstName] = useState('');
   const [editLastName, setEditLastName] = useState('');
@@ -266,7 +258,9 @@ export default function FeedPage() {
     setTimeout(() => setToast(null), 4000);
   };
 
-  useEffect(() => { fetchFeedAndUser(); }, [supabase]);
+  useEffect(() => { 
+    fetchFeedAndUser(); 
+  }, []); 
 
   useEffect(() => {
     if (feedTab === 'network') {
@@ -296,7 +290,7 @@ export default function FeedPage() {
     };
     const timeoutId = setTimeout(searchUniversities, 300);
     return () => clearTimeout(timeoutId);
-  }, [editSchoolName, supabase]);
+  }, [editSchoolName]);
 
   async function fetchFeedAndUser() {
     const { data: { session } } = await supabase.auth.getSession();
@@ -334,7 +328,6 @@ export default function FeedPage() {
       }
     }
 
-    // 🚨 AUTO-WELCOMER (Checks DB directly, absolutely no LocalStorage trap!) 🚨
     if (isAthlete && currentTrustLevel >= 1 && uId) {
        const welcomeMsg = `A new athlete has verified! Welcome ${currentFirstName} to the trusted network.`;
        
@@ -352,7 +345,6 @@ export default function FeedPage() {
        }
     }
 
-    // 🚨 FETCH FEED DATA 🚨
     const { data: feedData } = await supabase
       .from('posts')
       .select(`
@@ -402,7 +394,6 @@ export default function FeedPage() {
     }
   }
 
-  // --- COACH PROFILE EDIT FUNCTIONS ---
   const handleEditToggle = () => {
     if (!coachProfile) return;
     setEditFirstName(coachProfile.first_name || '');
@@ -438,7 +429,6 @@ export default function FeedPage() {
     finally { setIsSavingProfile(false); }
   };
 
-  // --- DISCUSSION POST CREATOR ---
   const handleCreateDiscussion = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newDiscussionContent.trim() || !currentUserId || viewerRole !== 'athlete') return;
@@ -478,7 +468,6 @@ export default function FeedPage() {
     finally { setIsSubmittingDiscussion(false); }
   };
 
-  // --- POST & COMMENT MANAGEMENT ---
   const handleSavePostEdit = async (postId: string) => {
     if (!editPostContent.trim()) return;
     let finalContent = editPostContent.trim();
@@ -564,7 +553,6 @@ export default function FeedPage() {
   const handleToggleFire = async (postId: string, postAuthorId: string) => {
     if (!currentUserId) { router.push('/login'); return; }
     
-    // 🚨 VERIFICATION CHECK FOR HYPE 🚨
     if (viewerRole === 'athlete' && (currentUserProfile?.trust_level || 0) === 0) {
         showToast("You must be verified (Trust Level 1) to give Hype.", "error");
         return;
@@ -577,6 +565,7 @@ export default function FeedPage() {
     if (!targetPost) return;
     const hasLiked = targetPost.likes?.includes(currentUserId);
 
+    // Optimistically update the UI to feel lightning fast
     setPosts(currentPosts => currentPosts.map(post => {
       if (post.id === postId) {
         const likes = post.likes || [];
@@ -585,45 +574,60 @@ export default function FeedPage() {
       return post;
     }));
     
+    // Toggle the actual like mapping array in the DB
     await supabase.rpc('toggle_post_like', { p_post_id: postId, p_user_id: currentUserId });
     
+    // =========================================================================
+    // 🚨 ANTI-FARMING SECURE CHASEDCASH REWARD ALGORITHM 🚨
+    // =========================================================================
     if (!hasLiked && postAuthorId !== currentUserId) {
-      const abuseKey = `rewarded_hypes_${currentUserId}`;
-      const rewardedHypes = JSON.parse(localStorage.getItem(abuseKey) || '{}');
+      try {
+        // We use the messages table as a secure, server-side audit log to prevent un-hype/re-hype farming
+        const rewardRef = `[HYPE_REF:${postId}_${currentUserId}]`;
 
-      if (!rewardedHypes[postId]) {
-        try {
-          // GIVER REWARD (Only if they are an athlete with a coin wallet)
+        // Check if this exact user has ever triggered a reward for this exact post
+        const { data: existingReward } = await supabase
+          .from('messages')
+          .select('id')
+          .eq('athlete_id', postAuthorId)
+          .eq('sender_school', 'ChasedRewards')
+          .like('content', `%${rewardRef}%`)
+          .maybeSingle();
+
+        if (!existingReward) {
+          // 1. Give 5 ChasedCash to the LIKER (if they are an athlete)
           if (viewerRole === 'athlete' && currentUserProfile) {
-             await supabase.from('athletes').update({ coins: (currentUserProfile.coins || 0) + 5 }).eq('id', currentUserId);
-             setCurrentUserProfile(prev => prev ? { ...prev, coins: (prev.coins || 0) + 5 } : null);
+             // Fetch absolute latest to prevent race conditions instead of relying on local state
+             const { data: myData } = await supabase.from('athletes').select('coins').eq('id', currentUserId).single();
+             const myNewCoins = (myData?.coins || 0) + 5;
+             await supabase.from('athletes').update({ coins: myNewCoins }).eq('id', currentUserId);
+             setCurrentUserProfile(prev => prev ? { ...prev, coins: myNewCoins } : null);
           }
 
-          // RECEIVER REWARD
+          // 2. Give 5 ChasedCash to the POSTER
           const { data: receiverData } = await supabase.from('athletes').select('coins, first_name').eq('id', postAuthorId).single();
           if (receiverData) {
             await supabase.from('athletes').update({ coins: (receiverData.coins || 0) + 5 }).eq('id', postAuthorId);
 
             const senderName = viewerRole === 'coach' ? `Coach ${coachProfile?.last_name || ''}` : `${currentUserProfile?.first_name || ''} ${currentUserProfile?.last_name || ''}`;
+            
+            // Insert the audit log via the direct messaging system so the user gets notified AND we block future farming
             await supabase.from('messages').insert({
                 athlete_id: postAuthorId,
                 sender_name: 'ChasedSports System',
                 sender_school: 'ChasedRewards',
                 sender_email: 'rewards@chasedsports.com',
-                content: `🔥 ${senderName.trim()} just hyped your post! Just a reminder: Every time you receive hype on your posts, you gain 5 ChasedCash per like! Keep up the great work.`,
+                content: `🔥 ${senderName.trim()} just hyped your post! Just a reminder: Every time you receive hype on your posts, you gain 5 ChasedCash per like! Keep up the great work.\n\n${rewardRef}`,
                 is_read: false,
                 status: 'active'
             });
           }
 
-          rewardedHypes[postId] = true;
-          localStorage.setItem(abuseKey, JSON.stringify(rewardedHypes));
-
           setCoinPopId(postId);
           setTimeout(() => setCoinPopId(null), 1000);
-        } catch (e) {
-           console.error("Hype Reward Error", e);
         }
+      } catch (e) {
+         console.error("Hype Reward Error", e);
       }
     }
   };
@@ -631,7 +635,6 @@ export default function FeedPage() {
   const handleAddComment = async (e: React.FormEvent, postId: string) => {
     e.preventDefault(); 
     
-    // 🚨 VERIFICATION CHECK FOR COMMENTING 🚨
     if (viewerRole === 'athlete' && (currentUserProfile?.trust_level || 0) === 0) {
         showToast("You must be verified (Trust Level 1) to comment.", "error");
         return;
@@ -1226,7 +1229,7 @@ export default function FeedPage() {
                      
                      <div className="absolute inset-0 bg-blue-500/5 opacity-0 group-focus-within:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
                      <div className="flex gap-4">
-                        <AvatarWithBorder avatarUrl={currentUserProfile?.avatar_url} sizeClasses="w-12 h-12 shadow-md hidden sm:block" borderId={currentUserProfile?.equipped_border || 'none'} />
+                        <AvatarWithBorder avatarUrl={currentUserProfile?.avatar_url || ''} sizeClasses="w-12 h-12 shadow-md hidden sm:block" borderId={currentUserProfile?.equipped_border || 'none'} />
                         <div className="flex-1">
                           <form onSubmit={handleCreateDiscussion} className="flex flex-col gap-3">
                              <textarea 
@@ -1345,7 +1348,7 @@ export default function FeedPage() {
                                                     <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-5 flex-1 w-full min-w-0">
                                                         <div className="relative shrink-0">
                                                             <Link href={`/athlete/${post.athlete_id}`} className="relative shrink-0 transition-transform shadow-xl rounded-full border-2 border-white/40 bg-slate-900 block group-hover:scale-105 duration-300">
-                                                                <AvatarWithBorder avatarUrl={post.athletes.avatar_url} sizeClasses="w-16 h-16 sm:w-20 sm:h-20" borderId={post.athletes.equipped_border || 'none'} />
+                                                                <AvatarWithBorder avatarUrl={post.athletes.avatar_url || ''} sizeClasses="w-16 h-16 sm:w-20 sm:h-20" borderId={post.athletes.equipped_border || 'none'} />
                                                             </Link>
                                                         </div>
 
@@ -1422,7 +1425,7 @@ export default function FeedPage() {
                                                             {allComments.map(comment => (
                                                                 <div key={comment.id} className="flex items-start gap-3 group/comment">
                                                                     <div className="shrink-0 pt-1">
-                                                                        <AvatarWithBorder avatarUrl={comment.avatar_url} borderId={comment.border} sizeClasses="w-8 h-8 shadow-sm" />
+                                                                        <AvatarWithBorder avatarUrl={comment.avatar_url || ''} borderId={comment.border || 'none'} sizeClasses="w-8 h-8 shadow-sm" />
                                                                     </div>
                                                                     <div className="bg-black/30 backdrop-blur-md border border-white/10 p-3 rounded-2xl rounded-tl-none text-white w-full max-w-[85%] shadow-inner relative">
                                                                         <div className="absolute top-2 right-2 z-50 more-dropdown opacity-0 group-hover/comment:opacity-100 transition-opacity">
@@ -1519,7 +1522,7 @@ export default function FeedPage() {
                                             <div className="relative z-20 flex justify-between items-start mb-4">
                                                 <div className="flex items-center gap-4">
                                                     <Link href={`/athlete/${post.athlete_id}`} className="shrink-0 hover:scale-105 transition-transform shadow-md rounded-full border border-white/5">
-                                                        <AvatarWithBorder avatarUrl={post.athletes.avatar_url} sizeClasses="w-12 h-12" borderId={post.athletes.equipped_border || 'none'} />
+                                                        <AvatarWithBorder avatarUrl={post.athletes.avatar_url || ''} sizeClasses="w-12 h-12" borderId={post.athletes.equipped_border || 'none'} />
                                                     </Link>
                                                     <div>
                                                         <div className="flex items-center gap-2 mb-0.5">
@@ -1634,7 +1637,7 @@ export default function FeedPage() {
                                                         {allComments.map(comment => (
                                                             <div key={comment.id} className="flex items-start gap-3 group/comment">
                                                                 <div className="shrink-0 pt-1">
-                                                                    <AvatarWithBorder avatarUrl={comment.avatar_url} borderId={comment.border} sizeClasses="w-8 h-8 shadow-sm" />
+                                                                    <AvatarWithBorder avatarUrl={comment.avatar_url || ''} borderId={comment.border || 'none'} sizeClasses="w-8 h-8 shadow-sm" />
                                                                 </div>
                                                                 <div className="bg-black/20 border border-white/5 p-3 rounded-2xl rounded-tl-none text-slate-200 w-full max-w-[85%] shadow-inner relative">
                                                                     <div className="absolute top-2 right-2 z-50 more-dropdown opacity-0 group-hover/comment:opacity-100 transition-opacity">
@@ -1839,7 +1842,7 @@ export default function FeedPage() {
                                 <div key={coach.id} className="bg-gradient-to-b from-white/[0.05] to-transparent backdrop-blur-xl border border-white/10 rounded-[2rem] p-6 hover:border-indigo-500/40 hover:shadow-[0_0_30px_rgba(99,102,241,0.15)] transition-all duration-500 flex flex-col justify-between h-full group hover:-translate-y-1 relative overflow-hidden">
                                     <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-blue-500/10 to-transparent rounded-bl-full z-0 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                                     <div className="flex items-start gap-4 mb-6 relative z-10">
-                                        <AvatarWithBorder avatarUrl={coach.avatar_url} sizeClasses="w-16 h-16 shadow-md border border-white/5" borderId="none" />
+                                        <AvatarWithBorder avatarUrl={coach.avatar_url || ''} sizeClasses="w-16 h-16 shadow-md border border-white/5" borderId="none" />
                                         <div className="pt-1 w-full min-w-0">
                                             <h3 className="font-bold text-lg text-white group-hover:text-blue-400 transition-colors leading-tight truncate">Coach {coach.last_name}</h3>
                                             <div className="flex flex-col gap-1.5 mt-1.5">
@@ -1925,7 +1928,7 @@ export default function FeedPage() {
 
                                       <div className="flex items-start gap-4 mb-5 relative z-10">
                                           <Link href={`/athlete/${athlete.id}`} className="shrink-0 hover:scale-105 transition-transform block shadow-xl rounded-full bg-slate-900 border-2 border-white/20">
-                                              <AvatarWithBorder avatarUrl={athlete.avatar_url} sizeClasses="w-16 h-16 shadow-md" borderId={athlete.equipped_border || 'none'} />
+                                              <AvatarWithBorder avatarUrl={athlete.avatar_url || ''} sizeClasses="w-16 h-16 shadow-md" borderId={athlete.equipped_border || 'none'} />
                                           </Link>
                                           
                                           <div className="min-w-0 pt-1 w-full flex justify-between gap-2">
