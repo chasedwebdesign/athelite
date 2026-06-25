@@ -632,13 +632,14 @@ export default function DivisionChecker() {
                 <div className="animate-in fade-in duration-300">
                    {SPORT_CONFIGS_META[selectedSport] ? (
                       <EditorErrorBoundary onReset={() => setLocalSportStats({ metrics: [], metaContext: {}, level: '', position: '' })}>
+                        {/* THE FIX IS HERE ↓ adding async to satisfy the Promise type return */}
                         <SportEditorRegistry 
                           sport={selectedSport}
                           sportStats={localSportStats}
                           genderKey={gender}
                           athleteProfile={null}
                           config={SPORT_CONFIGS_META[selectedSport]}
-                          onSync={(data) => {
+                          onSync={async (data) => {
                             setLocalSportStats(data);
                             setResult(null);
                             setError(null);
