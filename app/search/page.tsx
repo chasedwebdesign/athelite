@@ -69,7 +69,8 @@ function getUmbrellaMajor(searchTerm: string): string {
 // --- TRACK & FIELD DASHBOARD CALCULATOR ---
 const FIELD_EVENTS = ['Shot Put', 'Discus', 'Javelin', 'Hammer', 'High Jump', 'Pole Vault', 'Long Jump', 'Triple Jump'];
 
-const RECRUITING_STANDARDS: Record<string, Record<string, { t1: number, t2: number, t3: number, t4: number, t5: number, t6: number, t7: number, isField?: boolean }>> = {
+// FIX: Added 'text?: string' to the Type definition to resolve the compiler error in the Girls section
+const RECRUITING_STANDARDS: Record<string, Record<string, { t1: number, t2: number, t3: number, t4: number, t5: number, t6: number, t7: number, isField?: boolean, text?: string }>> = {
   'Boys': {
     '60 Meters': { t1: 6.75, t2: 6.90, t3: 7.05, t4: 7.20, t5: 7.40, t6: 7.60, t7: 8.00 },
     '100 Meters': { t1: 10.5, t2: 10.8, t3: 11.0, t4: 11.3, t5: 11.6, t6: 11.9, t7: 12.6 },
@@ -386,7 +387,7 @@ export default function Home() {
   useEffect(() => {
     async function fetchUserAndSaves() {
       const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
+      if (session?.user?.id) {
         setCurrentUserId(session.user.id);
         
         const { data: athleteData } = await supabase
