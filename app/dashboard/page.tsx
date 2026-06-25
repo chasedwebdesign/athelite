@@ -92,7 +92,7 @@ const RECRUITING_STANDARDS_DASHBOARD: Record<string, Record<string, { t1: number
     '300m Hurdles': { t1: 37.0, t2: 38.5, t3: 39.5, t4: 41.0, t5: 42.5, t6: 44.5, t7: 48.0 },
     'Long Jump': { t1: 288, t2: 270, t3: 260, t4: 252, t5: 240, t6: 228, t7: 204, isField: true }, 
     'High Jump': { t1: 82, t2: 78, t3: 76, t4: 74, t5: 70, t6: 66, t7: 60, isField: true }, 
-    'Pole Vault': { t1: 198, t2: 186, t3: 174, t4: 162, t5: 150, h6: 132, t7: 108, isField: true },
+    'Pole Vault': { t1: 198, t2: 186, t3: 174, t4: 162, t5: 150, t6: 132, t7: 108, isField: true },
     'Shot Put': { t1: 720, t2: 660, t3: 600, t4: 540, t5: 480, t6: 444, t7: 360, isField: true }, 
     'Discus': { t1: 2220, t2: 2040, t3: 1860, t4: 1740, t5: 1620, t6: 1440, t7: 1080, isField: true },
   },
@@ -391,7 +391,7 @@ export default function DashboardHomebase() {
         high_school_name: normalizedNewName,
         city: formattedCity,
         state: newTeamState,
-        mascol: formattedMascot,
+        mascot: formattedMascot,
         division: newTeamDivision
       }).select().single();
 
@@ -655,13 +655,16 @@ export default function DashboardHomebase() {
       showToast("All fields are required to secure your identity.", "error");
       return;
     }
+    
+    const parsedYear = parseInt(profileForm.grad_year, 10);
+
     try {
       await supabase.from('athletes').update({
         first_name: profileForm.first_name,
         last_name: profileForm.last_name,
         email: profileForm.email,
         gender: profileForm.gender,
-        grad_year: parseInt(profileForm.grad_year, 10)
+        grad_year: isNaN(parsedYear) ? null : parsedYear
       }).eq('id', athleteProfile.id);
 
       setAthleteProfile({ 
@@ -670,7 +673,7 @@ export default function DashboardHomebase() {
         last_name: profileForm.last_name,
         email: profileForm.email,
         gender: profileForm.gender,
-        grad_year: parseInt(profileForm.grad_year, 10)
+        grad_year: isNaN(parsedYear) ? null : parsedYear
       });
       setIsBasicProfileModalOpen(false);
       showToast("Basic identity secured.", "success");
@@ -919,7 +922,7 @@ export default function DashboardHomebase() {
     Object.keys(sportStats).forEach(sport => {
       const stats = sportStats[sport];
       if (stats?.metrics && stats.metrics.length > 0) {
-        stats.metrics.forEach((m: any) => {
+        stats.metrics.forEach((m: any, metricIdx: number) => {
           
           if (sport === 'Track & Field') {
             const evalResult = evaluateMetric(genderKey, 'Track & Field', m.name, m.value, 'Varsity');
@@ -954,7 +957,7 @@ export default function DashboardHomebase() {
               }
             }
             if (score >= 95) levelUpMessage = "👑 MAX TIER REACHED. You possess elite standard metrics for this event.";
-            list.push({ id: `track-${m.name}`, label: m.name, value: m.value, source: 'Track', score, ...styles, levelUpMessage });
+            list.push({ id: `track-${m.name}-${metricIdx}`, label: m.name, value: m.value, source: 'Track', score, ...styles, levelUpMessage });
             
           } else {
             const evalResult = evaluateMetric(genderKey, sport, m.name, m.value, stats.level || 'Varsity');
@@ -966,7 +969,7 @@ export default function DashboardHomebase() {
               ? "👑 MAX TIER UNLOCKED. Your metrics sit at the pinnacle of this position category."
               : `Earn +${ptsNeeded} Recruit Rating points to reach the ${styles.nextTier} bracket. Update your metrics or Level of Play to recalculate.`;
 
-            list.push({ id: `${sport}-${m.name}`, label: m.name, value: m.value, source: sport, score, ...styles, levelUpMessage });
+            list.push({ id: `${sport}-${m.name}-${metricIdx}`, label: m.name, value: m.value, source: sport, score, ...styles, levelUpMessage });
           }
         });
       }
@@ -1241,7 +1244,7 @@ export default function DashboardHomebase() {
                       <div className="space-y-2">
                         {recentViewers.length > 0 ? (
                           recentViewers.map((coach, idx) => (
-                            <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
+                            <div key={`recent-coach-${idx}`} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
                               <div className="flex items-center gap-3 min-w-0">
                                  <AvatarWithBorder avatarUrl={coach.avatar_url} borderId="none" sizeClasses="w-8 h-8 shrink-0" userRole="coach" />
                                  <div className="min-w-0">
@@ -1383,7 +1386,7 @@ export default function DashboardHomebase() {
                               <tr key={saved.id} className="bg-white hover:bg-blue-50/50 transition-colors group">
                                 <td className="p-4 flex items-center gap-3">
                                   <div className="w-10 h-10 rounded-full border border-slate-200 flex items-center justify-center bg-slate-50 shrink-0 overflow-hidden">
-                                    {college.logo_url ? <img src={college.logo_url} className="w-6 h-6 object-contain" /> : <School className="w-5 h-5 text-slate-400" />}
+                                    {college.logo_url ? <img src={college.logo_url} className="w-6 h-6 object-contain" alt={college.name} /> : <School className="w-5 h-5 text-slate-400" />}
                                   </div>
                                   <div className="truncate max-w-[200px]">
                                     <Link href={`/college/${college.id}?sport=${primarySportQuery}`} className="font-black text-slate-900 hover:text-blue-600 transition-colors block truncate">{college.name}</Link>
@@ -1427,7 +1430,7 @@ export default function DashboardHomebase() {
         </div>
       </div>
     )
-  }, [userSports, sportStats, savedColleges, isCollegesOpen, athleteProfile, genderKey, allAvailableMetrics, dailyViews, monthlyViews, recentViewers, collapsedSports, router, gatingMode]);
+  }, [userSports, sportStats, savedColleges, isCollegesOpen, athleteProfile, genderKey, allAvailableMetrics, dailyViews, monthlyViews, recentViewers, collapsedSports, router, gatingMode, handleContactCoach, handleRemoveCollegeDashboard, primarySportQuery]);
 
   const RenderSocialTab = useMemo(() => {
     return (
@@ -1535,7 +1538,7 @@ export default function DashboardHomebase() {
                               <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-2xl z-50 max-h-40 overflow-y-auto custom-scrollbar p-1">
                                 {SUGGESTED_MAJORS.filter(m => m.toLowerCase().includes(intendedMajor.toLowerCase())).map((m: string, idx: number) => (
                                   <button 
-                                    key={idx} type="button" 
+                                    key={`major-sugg-${idx}`} type="button" 
                                     onClick={() => { 
                                       setIntendedMajor(m); 
                                       setShowMajorDropdown(false);
@@ -1564,7 +1567,7 @@ export default function DashboardHomebase() {
                          {accolades.length > 0 ? (
                            <div className="space-y-2 mb-3">
                               {accolades.map((acc, i) => (
-                                <div key={i} className="flex items-center justify-between bg-white border border-slate-200 text-slate-900 px-4 py-2.5 rounded-xl text-sm font-bold shadow-sm">
+                                <div key={`acc-${i}`} className="flex items-center justify-between bg-white border border-slate-200 text-slate-900 px-4 py-2.5 rounded-xl text-sm font-bold shadow-sm">
                                   <div className="flex items-center gap-3 truncate pr-4">
                                      <span className="text-[9px] font-black uppercase tracking-widest text-white bg-slate-800 px-2 py-1 rounded shrink-0 shadow-sm">
                                        {acc.category === 'General' ? 'Academic' : acc.category}
@@ -1668,7 +1671,7 @@ export default function DashboardHomebase() {
                          <div className="flex flex-col gap-1.5 max-h-64 overflow-y-auto custom-scrollbar pr-2">
                            {allAvailableMetrics.length > 0 ? (
                              allAvailableMetrics.map((metric, i) => (
-                               <button key={i} onClick={() => handleToggleMetric(metric.label)} className={`flex items-center justify-between p-3 rounded-xl border text-left transition-all ${selectedMetrics.includes(metric.label) ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-100 hover:border-slate-300'}`}>
+                               <button key={`metric-${metric.id}-${i}`} onClick={() => handleToggleMetric(metric.label)} className={`flex items-center justify-between p-3 rounded-xl border text-left transition-all ${selectedMetrics.includes(metric.label) ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-100 hover:border-slate-300'}`}>
                                   <div>
                                      <span className="text-xs font-bold text-slate-800 block mb-0.5">{metric.label} <span className="text-slate-400 font-medium ml-1">({metric.value})</span></span>
                                      <span className={`text-[10px] font-black uppercase tracking-widest ${metric.colorClass}`}>{metric.tier} • {metric.score}/99</span>
@@ -1691,7 +1694,7 @@ export default function DashboardHomebase() {
                          {accolades.length > 0 ? (
                            <div className="flex flex-col gap-1.5 mb-3">
                              {accolades.map((acc, i) => (
-                               <div key={i} className={`flex items-center justify-between pr-2 rounded-xl border transition-all ${selectedAccolades.includes(acc.text) ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-100 hover:border-slate-300'}`}>
+                               <div key={`sel-acc-${i}`} className={`flex items-center justify-between pr-2 rounded-xl border transition-all ${selectedAccolades.includes(acc.text) ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-100 hover:border-slate-300'}`}>
                                   <button onClick={() => handleToggleAccolade(acc.text)} className="flex-1 flex items-center justify-between p-3 text-left">
                                      <div className="flex items-center gap-2 truncate pr-2">
                                        <span className={`text-[9px] font-black uppercase tracking-widest text-white px-2 py-0.5 rounded shadow-sm shrink-0 ${acc.category === 'General' ? 'bg-slate-800' : 'bg-blue-600'}`}>{acc.category === 'General' ? 'Academic' : acc.category}</span>
@@ -1736,7 +1739,7 @@ export default function DashboardHomebase() {
 
                    <div className="z-10 mt-6 space-y-2.5 shrink-0">
                       {allAvailableMetrics.filter(m => selectedMetrics.includes(m.label)).map((metric, idx) => (
-                        <div key={idx} className="flex justify-between items-end border-b border-slate-800/60 pb-1.5 relative">
+                        <div key={`metric-disp-${idx}`} className="flex justify-between items-end border-b border-slate-800/60 pb-1.5 relative">
                            <div className="flex flex-col">
                               <span className="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-0.5">{metric.tier} Tier</span>
                               <span className={`text-sm font-black truncate pr-2 ${metric.colorClass}`}>{metric.label}</span>
@@ -1753,7 +1756,7 @@ export default function DashboardHomebase() {
 
                    <div className="z-10 mt-auto flex justify-between items-end pt-6 border-t border-slate-800 shrink-0">
                       <div className="flex-1 border-l-2 border-emerald-500 pl-3 overflow-hidden pr-2">
-                         {selectedAccolades.map((accText: string, idx: number) => <p key={idx} className="text-xs font-bold italic text-slate-400 mb-0.5 truncate">"{accText}"</p>)}
+                         {selectedAccolades.map((accText: string, idx: number) => <p key={`acc-text-${idx}`} className="text-xs font-bold italic text-slate-400 mb-0.5 truncate">"{accText}"</p>)}
                          {includeGPA && gpa && <p className="text-xs font-black text-emerald-400 mt-1 truncate">GPA: {gpa}</p>}
                          {includeMajor && intendedMajor && <p className="text-xs font-black text-blue-400 truncate">Major: {intendedMajor}</p>}
                       </div>
@@ -1869,7 +1872,7 @@ export default function DashboardHomebase() {
                           {recentViewers.length > 0 ? (
                             <div className="space-y-3">
                               {recentViewers.map((coach, idx) => (
-                                <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-white border border-slate-100 shadow-sm">
+                                <div key={`view-${idx}`} className="flex items-center justify-between p-3 rounded-xl bg-white border border-slate-100 shadow-sm">
                                   <div className="flex items-center gap-4">
                                     <AvatarWithBorder avatarUrl={coach.avatar_url} borderId="none" sizeClasses="w-10 h-10" userRole="coach" />
                                     <div>
@@ -1901,7 +1904,7 @@ export default function DashboardHomebase() {
 
       </div>
     )
-  }, [athleteProfile, gpa, intendedMajor, accolades, schoolPrefs, newAccolade, newAccoladeCategory, selectedMetrics, selectedAccolades, isExportingCard, showMajorDropdown, socialSubTab, allAvailableMetrics, userSports, dailyViews, monthlyViews, recentViewers, allRecentViewers, showImpressionTooltip, router, iframeKey, collapsedSports, gatingMode]);
+  }, [athleteProfile, gpa, intendedMajor, accolades, schoolPrefs, newAccolade, newAccoladeCategory, selectedMetrics, selectedAccolades, isExportingCard, showMajorDropdown, socialSubTab, allAvailableMetrics, userSports, dailyViews, monthlyViews, recentViewers, allRecentViewers, showImpressionTooltip, router, iframeKey, collapsedSports, gatingMode, handleContactCoach, handleDownloadSocialCard]);
 
   if (loading) {
     return (
@@ -1963,7 +1966,7 @@ export default function DashboardHomebase() {
             </div>
             <div className="p-2 overflow-y-auto flex-1 custom-scrollbar">
               {allRecentViewers.map((coach, idx) => (
-                <div key={idx} className="flex items-center justify-between p-4 border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors group">
+                <div key={`all-views-${idx}`} className="flex items-center justify-between p-4 border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors group">
                   <div className="flex items-center gap-4">
                     <AvatarWithBorder avatarUrl={coach.avatar_url} borderId="none" sizeClasses="w-12 h-12" userRole="coach" />
                     <div>
@@ -2194,7 +2197,7 @@ export default function DashboardHomebase() {
                           const totalRewardForDay = isBonusDay ? rewardVal + 1000 : rewardVal;
 
                           return (
-                             <div key={i} className={`relative p-3 rounded-2xl border-2 flex flex-col items-center justify-center gap-2 text-center transition-all ${isPast ? 'bg-slate-900 border-slate-800 opacity-60' : isToday ? 'bg-emerald-900/40 border-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.2)] scale-[1.02] z-10' : 'bg-slate-900 border-slate-700'}`}>
+                             <div key={`reward-${i}`} className={`relative p-3 rounded-2xl border-2 flex flex-col items-center justify-center gap-2 text-center transition-all ${isPast ? 'bg-slate-900 border-slate-800 opacity-60' : isToday ? 'bg-emerald-900/40 border-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.2)] scale-[1.02] z-10' : 'bg-slate-900 border-slate-700'}`}>
                                 {isPast && <div className="absolute top-1.5 right-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-500"/></div>}
                                 <span className={`text-[9px] font-black uppercase tracking-widest ${isToday ? 'text-emerald-400' : 'text-slate-500'}`}>Day {targetStreak}</span>
                                 <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center shrink-0 shadow-sm border border-slate-700">
@@ -2263,7 +2266,7 @@ export default function DashboardHomebase() {
                     const isAchieved = currentRefs >= ms.count;
                     const Icon = ms.icon;
                     return (
-                      <div key={idx} className="relative z-10 flex flex-row sm:flex-col items-center gap-4 sm:gap-0">
+                      <div key={`milestone-${idx}`} className="relative z-10 flex flex-row sm:flex-col items-center gap-4 sm:gap-0">
                         <div className={`w-12 h-12 sm:w-16 sm:h-16 shrink-0 rounded-full flex items-center justify-center border-4 border-slate-900 transition-all duration-500 ${isAchieved ? `${ms.bg} text-white shadow-[0_0_30px_rgba(217,70,239,0.4)] scale-110` : 'bg-slate-800 text-slate-600'}`}>
                           <Icon className="w-5 h-5 sm:w-6 sm:h-6" />
                         </div>
