@@ -331,13 +331,15 @@ export default function FeedPage() {
     if (isAthlete && currentTrustLevel >= 1 && uId) {
        const welcomeMsg = `A new athlete has verified! Welcome ${currentFirstName} to the trusted network.`;
        
-       const { data: existingWelcome } = await supabase.from('posts')
+       // FIX: Using .limit(1) instead of .maybeSingle() prevents cascading duplication
+       // if a race condition ever creates more than 1 welcome message.
+       const { data: existingWelcomeRows } = await supabase.from('posts')
           .select('id')
           .eq('athlete_id', uId)
           .eq('content', welcomeMsg)
-          .maybeSingle();
+          .limit(1);
 
-       if (!existingWelcome) {
+       if (!existingWelcomeRows || existingWelcomeRows.length === 0) {
            await supabase.from('posts').insert({
                athlete_id: uId,
                content: welcomeMsg
