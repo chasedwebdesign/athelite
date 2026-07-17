@@ -1440,7 +1440,19 @@ export default function Home() {
           <div className={`transition-all duration-500 ease-in-out overflow-hidden ${showAdvanced ? 'max-h-[800px] opacity-100' : 'max-h-0 opacity-0'}`}>
             <div className="pt-4 pr-6 pb-2"> 
               <ProGate athleteProfile={athleteProfile} featureName="Advanced Matchmaker Filters">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 pt-6 mt-2 border-t border-slate-100/50">
+                
+                {/* 🚨 EXPLICIT UI DISCLAIMER FOR FILTER SCOPE 🚨 */}
+                <div className="bg-amber-50/80 backdrop-blur-sm border border-amber-200/60 rounded-xl p-4 mt-2 mb-4 flex items-start gap-3 shadow-sm animate-in fade-in duration-300">
+                   <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                   <div>
+                      <h4 className="text-[10px] font-black text-amber-700 uppercase tracking-widest">Filter Scope Notice</h4>
+                      <p className="text-xs text-amber-600 font-semibold mt-1 leading-relaxed">
+                         Advanced thresholds and custom sorting rules apply exclusively to the <span className="font-black text-amber-800">All Programs Directory</span> tab. The Gamified Matchmaker Dashboard utilizes a strict algorithmic override to rank your results.
+                      </p>
+                   </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 pt-4 border-t border-slate-100/50">
                   
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Specific School</label>

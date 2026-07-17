@@ -1,217 +1,233 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { Resend } from 'resend';
 
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
 
-// 🚨 ADMIN SUPABASE CLIENT (Bypasses RLS) 🚨
+// 🚨 ADMIN SUPABASE CLIENT (Bypasses RLS strictly for the kill-switch counter) 🚨
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!, 
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// Initialize Resend (Safe check in case env var isn't loaded yet)
-const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+// Set your global limit (e.g., 500 scrapes per day)
+const DAILY_GLOBAL_LIMIT = 500; 
 
-// Set your global limit for ZenRows (e.g., 300 scrapes per day)
-const DAILY_GLOBAL_LIMIT = 300; 
+// ==========================================
+// 💡 THE "DON'T REWRITE LOGIC" TRICK
+// We wrap your exact DOM extraction logic in a standard function.
+// Next.js will convert this to a string and ScrapingAnt will inject it directly!
+// ==========================================
+const searchPageLogicFn = function(fName: string, lName: string, filterState: string, filterCity: string) {
+  const athletes: any[] = [];
+  
+  // 1. ONLY look for anchor tags that are actual links
+  const allLinks = Array.from(document.querySelectorAll('a')).filter(a => {
+      const href = a.href.toLowerCase();
+      return href.includes('/athlete/') || href.includes('athlete.aspx');
+  });
 
-export async function POST(req: Request) {
-  try {
-    const body = await req.json().catch(() => ({}));
-    const { url, code, action, email, userId } = body;
+  // 2. Filter for name match
+  const nameLinks = allLinks.filter(a => {
+      const t = a.textContent || '';
+      const tLower = t.toLowerCase();
+      return tLower.includes(fName.toLowerCase()) && tLower.includes(lName.toLowerCase());
+  });
 
-    // ====================================================================
-    // 📧 PIPELINE 1: RESEND EMAIL OTP VERIFICATION
-    // Triggered if the frontend sends an 'action' (send or verify)
-    // ====================================================================
-    if (action === 'send' || action === 'verify') {
+  nameLinks.forEach(link => {
+      let rawUrl = link.href;
+      const cleanName = (link.textContent || '').replace(/(TF|XC|Indoor|Outdoor)/gi, '').replace(/\s+/g, ' ').trim();
       
-      if (!resend) {
-        return NextResponse.json({ error: 'Email service is not configured.' }, { status: 500 });
-      }
-
-      if (!userId) {
-        return NextResponse.json({ error: 'Unauthorized profile request.' }, { status: 401 });
-      }
-
-      // --- ACTION: GENERATE & SEND OTP ---
-      if (action === 'send') {
-        if (!email || !email.includes('@')) {
-          return NextResponse.json({ error: 'Valid email address required.' }, { status: 400 });
-        }
-
-        const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-        const expiresAt = Date.now() + 15 * 60 * 1000; // 15-minute expiration window
-
-        const { error: metadataError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
-          user_metadata: {
-            verification_email: email,
-            verification_otp: otpCode,
-            verification_expires: expiresAt,
-          },
-        });
-
-        if (metadataError) throw metadataError;
-
-        const { error: mailError } = await resend.emails.send({
-          from: 'ChasedSports <verify@chasedsports.com>', // Update to your verified domain
-          to: email,
-          subject: `🏆 Your ChasedSports Verification Code: ${otpCode}`,
-          html: `
-            <div style="background-color: #020617; color: #ffffff; font-family: sans-serif; padding: 40px; text-align: center; border-radius: 24px; max-width: 500px; margin: 0 auto; border: 1px solid rgba(255,255,255,0.1);">
-              <h1 style="background: linear-gradient(to right, #3b82f6, #8b5cf6); -webkit-background-clip: text; color: transparent; font-size: 28px; font-weight: 900; margin-bottom: 8px;">CHASEDSPORTS</h1>
-              <p style="color: #94a3b8; font-size: 14px; margin-bottom: 32px;">Level up your recruitment profile identity.</p>
-              <div style="background-color: #0f172a; border: 1px solid #1e293b; border-radius: 16px; padding: 24px; margin-bottom: 32px;">
-                <p style="color: #94a3b8; font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; margin: 0 0 12px 0;">One-Time Verification Pin</p>
-                <h2 style="font-size: 36px; font-family: monospace; letter-spacing: 6px; color: #3b82f6; margin: 0;">${otpCode}</h2>
-                <p style="color: #64748b; font-size: 11px; margin: 12px 0 0 0;">Expires in 15 minutes. If you didn't request this code, safely ignore this email.</p>
-              </div>
-              <p style="color: #475569; font-size: 12px;">Coaches look for verified badges. Get ready to stand out.</p>
-            </div>
-          `,
-        });
-
-        if (mailError) throw mailError;
-        return NextResponse.json({ success: true });
-      }
-
-      // --- ACTION: VALIDATE OTP & UPGRADE TRUST LEVEL ---
-      if (action === 'verify') {
-        if (!code) {
-          return NextResponse.json({ error: 'Verification pin required.' }, { status: 400 });
-        }
-
-        // FIX: Correctly destructure data from the Supabase admin call
-        const { data, error: getUserError } = await supabaseAdmin.auth.admin.getUserById(userId);
-        
-        // FIX: Ensure data.user exists before attempting to read metadata
-        if (getUserError || !data?.user) throw new Error('User account profile context missing.');
-
-        const meta = data.user.user_metadata || {};
-
-        if (!meta.verification_otp || meta.verification_otp !== code) {
-          return NextResponse.json({ error: 'Invalid verification pin.' }, { status: 400 });
-        }
-
-        if (Date.now() > meta.verification_expires) {
-          return NextResponse.json({ error: 'Verification pin expired. Request a new one.' }, { status: 400 });
-        }
-
-        const { error: dbError } = await supabaseAdmin
-          .from('athletes')
-          .update({ trust_level: 1 }) // 🚨 FIX: Using Integer 1 instead of string 'Verified'
-          .eq('id', userId);
-
-        if (dbError) throw dbError;
-
-        await supabaseAdmin.auth.admin.updateUserById(userId, {
-          user_metadata: {
-            ...meta,
-            verification_otp: null,
-            verification_expires: null,
-          },
-        });
-
-        return NextResponse.json({ success: true });
-      }
-    }
-
-    // ====================================================================
-    // 🏃‍♂️ PIPELINE 2: ATHLETIC.NET ZENROWS SCRAPING
-    // Triggered if the frontend sends a 'url' payload
-    // ====================================================================
-    if (url && url.includes('athletic.net')) {
-      const ZENROWS_API_KEY = process.env.ZENROWS_API_KEY;
-
-      if (!code) {
-        return NextResponse.json({ error: 'Missing verification code.' }, { status: 400 });
-      }
-
-      if (!ZENROWS_API_KEY) {
-        return NextResponse.json({ error: 'ZenRows API key is missing from environment variables.' }, { status: 500 });
-      }
-
-      // 🚨 1. CHECK THE KILL SWITCH (THE TRAP DOOR)
-      try {
-        const { data: isAllowed, error } = await supabaseAdmin.rpc('check_and_increment_usage', {
-          limit_amount: DAILY_GLOBAL_LIMIT
-        });
-
-        if (error) {
-          console.error("Supabase RPC Error:", error);
-          return NextResponse.json({ error: "Internal Server Error verifying limits." }, { status: 500 });
-        }
-
-        if (!isAllowed) {
-          console.warn("🛑 TRAP DOOR ACTIVATED: Global daily scrape limit reached.");
-          return NextResponse.json({ 
-            error: "Global daily limit reached to protect platform stability. Please try again tomorrow." 
-          }, { status: 429 });
-        }
-      } catch (err) {
-        console.error("Kill switch error:", err);
-        return NextResponse.json({ error: "Failed to verify usage limits." }, { status: 500 });
-      }
-
-      // 🚀 2. PROCEED WITH ZENROWS SCRAPING
-      const MAX_RETRIES = 2;
-      let attempt = 0;
-      let isVerified = false;
-      let lastError = "";
-
-      while (attempt < MAX_RETRIES) {
-          attempt++;
-          try {
-              console.log(`🔍 Verifying Code [${code}] -> ${url} (Attempt ${attempt}/${MAX_RETRIES})`);
-
-              const targetUrl = encodeURIComponent(url);
-              const zenrowsUrl = `https://api.zenrows.com/v1/?apikey=${ZENROWS_API_KEY}&url=${targetUrl}&js_render=true&premium_proxy=true&wait=6000`;
-
-              const response = await fetch(zenrowsUrl);
-
-              if (!response.ok) {
-                  throw new Error(`ZenRows API failed with status: ${response.status}`);
-              }
-
-              const html = await response.text();
-              const htmlLower = html.toLowerCase();
-
-              // Safety check for Cloudflare
-              if (htmlLower.includes('just a moment') || htmlLower.includes('attention required') || htmlLower.includes('cf-browser-verification')) {
-                  throw new Error("Cloudflare Block Active");
-              }
-
-              // 🕵️ GLOBAL HTML SEARCH
-              isVerified = htmlLower.includes(code.toLowerCase());
-              break; 
-
-          } catch (err: any) {
-              lastError = err.message;
-              console.error(`❌ Verification attempt ${attempt} failed: ${lastError}`);
-              if (attempt >= MAX_RETRIES) break;
-              
-              await new Promise(res => setTimeout(res, 2000));
+      let container = link.closest('li, tr, .search-result, .list-group-item, .card');
+      
+      if (!container || !/(HS|High School|MS|Middle School)/i.test(container.textContent || '')) {
+          container = link as Element;
+          for (let i = 0; i < 5; i++) {
+              if (container.parentElement) container = container.parentElement;
+              if (/(HS|High School|MS|Middle School)/i.test(container.textContent || '')) break;
           }
       }
 
-      if (lastError && !isVerified && attempt >= MAX_RETRIES) {
-            return NextResponse.json({ error: 'Athletic.net security check is temporarily blocking us. Please try again.' }, { status: 503 });
+      if (!container) return;
+
+      const fullText = container.textContent || '';
+      let schoolName = 'Unknown High School';
+      const lines = fullText.split('\n').map(s => s.trim()).filter(s => s.length > 0);
+      const schoolLine = lines.find(l => /(HS|High School|MS|Middle School)/i.test(l) && !l.toLowerCase().includes(fName.toLowerCase()));
+      
+      if (schoolLine) {
+          schoolName = schoolLine.replace(/^((?:TF|XC)\s+)?/i, '').replace(/\([0-9-]+\)/g, '').replace(/Show PRs\.\.\./gi, '').trim();
+      } else {
+          const rawMatch = fullText.match(/(?:TF|XC)?\s*([A-Z][A-Za-z0-9\s.'-]+\s(?:HS|High School|MS|Middle School))/i);
+          if (rawMatch && !rawMatch[1].toLowerCase().includes(fName.toLowerCase())) {
+              schoolName = rawMatch[1].trim();
+          }
       }
 
-      if (isVerified) {
-        return NextResponse.json({ success: true, message: 'Profile verified successfully!' });
-      } else {
-        return NextResponse.json({ success: false, error: 'Verification code not found. Make sure you saved it to your Athletic.net profile handle or bio!' }, { status: 403 });
+      // 🚨 THE FIX: Remove jammed state abbreviations (e.g., "ORSouth" -> "South")
+      schoolName = schoolName.replace(/^([A-Z]{2})(?=[A-Z][a-z])/g, '').trim();
+
+      // Force URL format
+      let finalUrl = rawUrl;
+      if (finalUrl.includes('/athlete/') && !finalUrl.includes('/track-and-field') && !finalUrl.includes('/cross-country')) {
+          if (!finalUrl.endsWith('/')) finalUrl += '/';
+          finalUrl += 'track-and-field';
+      } else if (finalUrl.toLowerCase().includes('athlete.aspx')) {
+          const urlObj = new URL(finalUrl);
+          const aid = urlObj.searchParams.get('AID');
+          if (aid) finalUrl = `https://www.athletic.net/athlete/${aid}/track-and-field`;
       }
+
+      if (cleanName.length > 2 && finalUrl) {
+          const textLower = fullText.toLowerCase();
+          const stateMap: Record<string, string> = { 'oregon': ' or', 'washington': ' wa', 'california': ' ca', 'texas': ' tx', 'florida': ' fl', 'new york': ' ny', 'ohio': ' oh' };
+          const mappedState = stateMap[filterState.toLowerCase()] || filterState.toLowerCase();
+          
+          const stateMatch = !filterState || textLower.includes(filterState.toLowerCase()) || textLower.includes(mappedState);
+          const cityMatch = !filterCity || textLower.includes(filterCity.toLowerCase());
+
+          if (stateMatch && cityMatch && !athletes.some(a => a.url === finalUrl)) {
+              athletes.push({ name: cleanName, school: schoolName, url: finalUrl });
+          }
+      }
+  });
+  
+  return athletes.slice(0, 5);
+};
+
+// Converts logic functions into a format ScrapingAnt will execute cleanly.
+const buildScrapingAntSnippet = (fn: Function, args: any[]) => {
+  let script = `
+    try {
+      const execLogic = ${fn.toString()};
+      const result = execLogic(${args.map(a => JSON.stringify(a)).join(', ')});
+      const ta = document.createElement('textarea');
+      ta.id = '__chased_data__';
+      ta.textContent = JSON.stringify(result);
+      document.body.appendChild(ta);
+    } catch (e) {
+      const ta = document.createElement('textarea');
+      ta.id = '__chased_error__';
+      ta.textContent = e.message || String(e);
+      document.body.appendChild(ta);
+    }
+  `;
+  
+  // Minify the script string to ensure we stay well under URL length limits
+  script = script.replace(/\n/g, ' ').replace(/\s{2,}/g, ' ');
+  return Buffer.from(script).toString('base64');
+};
+
+const extractDataFromHtml = (html: string) => {
+  const dataMatch = html.match(/<textarea id="__chased_data__">([\s\S]*?)<\/textarea>/);
+  if (dataMatch && dataMatch[1]) return JSON.parse(dataMatch[1]);
+  
+  const errMatch = html.match(/<textarea id="__chased_error__">([\s\S]*?)<\/textarea>/);
+  if (errMatch && errMatch[1]) throw new Error("Injected JS Error: " + errMatch[1]);
+  
+  throw new Error("ScrapingAnt loaded the page, but no scraped data was returned. Potential bot block.");
+};
+
+export async function POST(req: Request) {
+  const { firstName, lastName, state, city } = await req.json();
+  const SCRAPINGANT_API_KEY = process.env.SCRAPINGANT_API_KEY;
+
+  if (!firstName || !lastName) {
+    return NextResponse.json({ error: 'First and last name are required.' }, { status: 400 });
+  }
+
+  if (!SCRAPINGANT_API_KEY) {
+    return NextResponse.json({ error: 'ScrapingAnt API key is missing from environment variables.' }, { status: 500 });
+  }
+
+  // ==========================================
+  // 🚨 1. CHECK THE KILL SWITCH (THE TRAP DOOR)
+  // ==========================================
+  try {
+    const { data: isAllowed, error } = await supabaseAdmin.rpc('check_and_increment_usage', {
+      limit_amount: DAILY_GLOBAL_LIMIT
+    });
+
+    if (error) {
+      console.error("Supabase RPC Error:", error);
+      return NextResponse.json({ error: "Internal Server Error verifying limits." }, { status: 500 });
     }
 
-    // Fallback if neither payload signature matches
-    return NextResponse.json({ error: 'Invalid payload structure. Route unable to determine verification method.' }, { status: 400 });
+    if (!isAllowed) {
+      console.warn("🛑 TRAP DOOR ACTIVATED: Global daily search limit reached.");
+      return NextResponse.json({ 
+        error: "Global daily limit reached to protect platform stability. Please try again tomorrow." 
+      }, { status: 429 });
+    }
+  } catch (err) {
+    console.error("Kill switch error:", err);
+    return NextResponse.json({ error: "Failed to verify usage limits." }, { status: 500 });
+  }
 
-  } catch (globalError: any) {
-    console.error("Global Verification Error:", globalError);
-    return NextResponse.json({ error: `Verification Error: ${globalError.message}` }, { status: 500 });
+  // ==========================================
+  // 🚀 2. EXECUTE SCRAPINGANT REQUEST
+  // ==========================================
+  const searchTerms = `${firstName} ${lastName}`;
+  const searchUrl = `https://www.athletic.net/Search.aspx?q=${encodeURIComponent(searchTerms)}`;
+  
+  const MAX_RETRIES = 2;
+  let attempt = 0;
+
+  while (attempt < MAX_RETRIES) {
+    attempt++;
+
+    try {
+      console.log(`\n☁️ Booting Scraper for: "${searchTerms}" (Attempt ${attempt}/${MAX_RETRIES})`);
+      
+      const snippet = buildScrapingAntSnippet(searchPageLogicFn, [firstName, lastName, state || '', city || '']);
+      
+      // 🚨 ScrapingAnt v2 requires parameters in the URL query string for GET requests.
+      const queryParams = new URLSearchParams({
+        url: searchUrl,
+        browser: 'true',
+        proxy_type: 'residential', // 🚨 THE FIX: Use real home ISP IPs to bypass Cloudflare instantly
+        proxy_country: 'US',       // 🚨 Keep it stateside so Athletic.net doesn't flag a foreign request
+        js_snippet: snippet
+      });
+
+      const res = await fetch(`https://api.scrapingant.com/v2/general?${queryParams.toString()}`, {
+        method: 'GET',
+        headers: {
+          'x-api-key': SCRAPINGANT_API_KEY
+        }
+      });
+
+      if (!res.ok) {
+        if (res.status === 422) {
+            const errText = await res.text();
+            throw new Error(`422 Validation Error from ScrapingAnt: ${errText}`);
+        }
+        if (res.status === 429 || res.status >= 500) throw new Error("Retryable ScrapingAnt Error");
+        throw new Error(`ScrapingAnt Failed: HTTP ${res.status}`);
+      }
+
+      const html = await res.text();
+      const domResults = extractDataFromHtml(html);
+
+      console.log(`✅ Extracted ${domResults.length} athletes.`);
+      console.log("🔗 URLs Returned to Frontend:", JSON.stringify(domResults, null, 2));
+
+      return NextResponse.json({ success: true, data: domResults });
+
+    } catch (error: any) {
+      console.error(`❌ Search Error Captured (Attempt ${attempt}):`, error.message);
+      
+      const msg = error.message || "";
+      
+      // Auto-retry transient network errors, timeouts, or 429 blocks
+      if (msg.includes('Retryable') || msg.includes('Cloudflare') || msg.includes('bot block') || msg.includes('429')) {
+        if (attempt >= MAX_RETRIES) {
+          return NextResponse.json({ error: 'Athletic.net security check is temporarily blocking us. Please wait a minute and try again.' }, { status: 503 });
+        }
+        await new Promise(res => setTimeout(res, 1500));
+        continue; 
+      }
+      return NextResponse.json({ error: `Search temporarily unavailable: ${msg}` }, { status: 500 });
+    }
   }
 }

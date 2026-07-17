@@ -7,7 +7,7 @@ import {
   CheckCircle2, MapPin, Mail, X, Send, Lock, Trophy, Calendar, 
   Share2, ArrowLeft, Activity, Globe, School, UserCircle2, 
   Clock, Star, ShieldCheck, AlertTriangle, Search, BookOpen, 
-  Eye, Link as LinkIcon, FileText, GraduationCap, Medal, Target
+  Eye, Link as LinkIcon, FileText, GraduationCap, Medal, Target, Save
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -42,6 +42,7 @@ interface AthleteProfile {
   profile_views?: number; 
   search_appearances?: number;
   saved_resume?: string | null;
+  custom_slug?: string | null;
 }
 
 interface AthletePost {
@@ -68,10 +69,16 @@ const getOrdinal = (n: number) => {
   return n + (s[(v - 20) % 10] || s[v] || s[0]);
 };
 
+// Profanity & Reserved Words Filter
+const INAPPROPRIATE_WORDS = [
+  'admin', 'chasedsports', 'support', 'fuck', 'shit', 'bitch', 'ass', 
+  'dick', 'cock', 'pussy', 'cunt', 'whore', 'slut', 'fag', 'nigger', 'nigga', 'retard'
+];
+
 export default function PublicAthletePortfolio() {
   const params = useParams();
   const router = useRouter();
-  const athleteId = params.id as string;
+  const rawIdParam = decodeURIComponent(params.id as string);
   const supabase = createClient();
   
   const [athlete, setAthlete] = useState<AthleteProfile | null>(null);
@@ -91,6 +98,7 @@ export default function PublicAthletePortfolio() {
   const [isSaved, setIsSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Message Modal State
   const [isMessageModalOpen, setIsMessageModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'pitch' | 'chat'>('pitch');
   const [senderName, setSenderName] = useState('');
@@ -99,6 +107,14 @@ export default function PublicAthletePortfolio() {
   const [messageContent, setMessageContent] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [sendSuccess, setSendSuccess] = useState(false);
+  
+  // Custom URL Modal State
+  const [isUrlModalOpen, setIsUrlModalOpen] = useState(false);
+  const [customUrl, setCustomUrl] = useState('');
+  const [urlError, setUrlError] = useState('');
+  const [isCheckingUrl, setIsCheckingUrl] = useState(false);
+  const [isSavingUrl, setIsSavingUrl] = useState(false);
+
   const [copySuccess, setCopySuccess] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
@@ -111,98 +127,153 @@ export default function PublicAthletePortfolio() {
 
   useEffect(() => {
     async function fetchProfileAndUser() {
-      // 1. Fetch Core Athlete Profile
-      const { data: athleteData } = await supabase.from('athletes').select('*').eq('id', athleteId).single();
-      if (athleteData) setAthlete(athleteData as AthleteProfile);
-
-      // 2. Fetch Athlete Sports (Replaces old PR array logic)
-      const { data: sportsData } = await supabase
-        .from('athlete_sports')
-        .select('*')
-        .eq('athlete_id', athleteId)
-        .eq('is_active', true)
-        .order('created_at', { ascending: false });
-      if (sportsData) setAthleteSports(sportsData as AthleteSport[]);
-
-      // 3. Fetch Posts
-      const { data: postData } = await supabase.from('posts').select('*').eq('athlete_id', athleteId).order('created_at', { ascending: false });
-      if (postData) setPosts(postData as AthletePost[]);
-
-      // 4. Resolve Auth & View State
-      const { data: { session } } = await supabase.auth.getSession();
+      // 1. Dynamic Routing Check (Is UUID or Custom Slug?)
+      const isUUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(rawIdParam);
       
-      if (session) {
-        setCurrentUserId(session.user.id);
-        setCurrentUserEmail(session.user.email || '');
+      let query = supabase.from('athletes').select('*');
+      if (isUUID) {
+        query = query.eq('id', rawIdParam);
+      } else {
+        query = query.eq('custom_slug', rawIdParam);
+      }
+      
+      const { data: athleteData, error: athleteError } = await query.maybeSingle();
 
-        if (session.user.id === athleteId) setIsSelf(true);
+      if (athleteData) {
+        setAthlete(athleteData as AthleteProfile);
+        const resolvedAthleteId = athleteData.id;
 
-        const { data: cData } = await supabase.from('coaches').select('id, first_name, last_name, school_name, coach_type').eq('id', session.user.id).maybeSingle();
+        // 2. Fetch Athlete Sports
+        const { data: sportsData } = await supabase
+          .from('athlete_sports')
+          .select('*')
+          .eq('athlete_id', resolvedAthleteId)
+          .eq('is_active', true)
+          .order('created_at', { ascending: false });
+        if (sportsData) setAthleteSports(sportsData as AthleteSport[]);
 
-        if (cData) {
-          setViewerRole('coach');
-          const hasCompleteProfile = !!(cData.first_name && cData.last_name && cData.school_name);
-          setIsVerifiedCoach(hasCompleteProfile);
-          setCoachType(cData.coach_type);
-          setSenderName(`${cData.first_name || 'Coach'} ${cData.last_name || ''}`.trim());
-          setSenderSchool(cData.school_name || 'Unknown University');
-          setSenderEmail(session.user.email || '');
+        // 3. Fetch Posts
+        const { data: postData } = await supabase
+          .from('posts')
+          .select('*')
+          .eq('athlete_id', resolvedAthleteId)
+          .order('created_at', { ascending: false });
+        if (postData) setPosts(postData as AthletePost[]);
 
-          const { data: savedData } = await supabase.from('saved_recruits').select('id').eq('coach_id', session.user.id).eq('athlete_id', athleteId).maybeSingle();
-          if (savedData) setIsSaved(true);
+        // 4. Resolve Auth & View State
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (session) {
+          setCurrentUserId(session.user.id);
+          setCurrentUserEmail(session.user.email || '');
 
-          if (athleteData && !hasLoggedView.current) {
-             hasLoggedView.current = true;
-             const { error: rpcError } = await supabase.rpc('log_profile_view', {
-                target_athlete_id: athleteId,
-                viewing_coach_id: session.user.id
-             });
-             if (rpcError) console.error("❌ RPC ERROR:", rpcError);
-          }
+          if (session.user.id === resolvedAthleteId) setIsSelf(true);
 
-        } else {
-          const { data: aData } = await supabase.from('athletes').select('id, trust_level, first_name, last_name, high_school').eq('id', session.user.id).maybeSingle();
-          if (aData) {
-            setViewerRole('athlete');
-            setIsVerifiedAthlete(aData.trust_level > 0);
-            setSenderName(`${aData.first_name} ${aData.last_name}`);
-            setSenderSchool(aData.high_school || '');
+          const { data: cData } = await supabase.from('coaches').select('id, first_name, last_name, school_name, coach_type').eq('id', session.user.id).maybeSingle();
+
+          if (cData) {
+            setViewerRole('coach');
+            const hasCompleteProfile = !!(cData.first_name && cData.last_name && cData.school_name);
+            setIsVerifiedCoach(hasCompleteProfile);
+            setCoachType(cData.coach_type);
+            setSenderName(`${cData.first_name || 'Coach'} ${cData.last_name || ''}`.trim());
+            setSenderSchool(cData.school_name || 'Unknown University');
             setSenderEmail(session.user.email || '');
+
+            const { data: savedData } = await supabase.from('saved_recruits').select('id').eq('coach_id', session.user.id).eq('athlete_id', resolvedAthleteId).maybeSingle();
+            if (savedData) setIsSaved(true);
+
+            if (!hasLoggedView.current && session.user.id !== resolvedAthleteId) {
+               hasLoggedView.current = true;
+               const { error: rpcError } = await supabase.rpc('log_profile_view', {
+                  target_athlete_id: resolvedAthleteId,
+                  viewing_coach_id: session.user.id
+               });
+               if (rpcError) console.error("❌ RPC ERROR:", rpcError);
+            }
+
+          } else {
+            const { data: aData } = await supabase.from('athletes').select('id, trust_level, first_name, last_name, high_school').eq('id', session.user.id).maybeSingle();
+            if (aData) {
+              setViewerRole('athlete');
+              setIsVerifiedAthlete(aData.trust_level > 0);
+              setSenderName(`${aData.first_name} ${aData.last_name}`);
+              setSenderSchool(aData.high_school || '');
+              setSenderEmail(session.user.email || '');
+            }
           }
         }
       }
       setLoading(false);
     }
 
-    if (athleteId) fetchProfileAndUser();
-  }, [athleteId, supabase]);
+    if (rawIdParam) fetchProfileAndUser();
+  }, [rawIdParam, supabase]);
+
+  // Handle URL Auto-Generation and Pre-population
+  useEffect(() => {
+    if (isUrlModalOpen && athlete) {
+        if (athlete.custom_slug) {
+            setCustomUrl(athlete.custom_slug);
+            setUrlError('');
+        } else if (!customUrl) {
+            const base = `${athlete.first_name}-${athlete.last_name}`;
+            const generateUniqueSlug = async (baseSlug: string) => {
+                setIsCheckingUrl(true);
+                let slug = baseSlug.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+                if (!slug) slug = 'athlete';
+                
+                let isAvailable = false;
+                let counter = 1;
+                let currentSlug = slug;
+
+                while (!isAvailable) {
+                    const { data } = await supabase.from('athletes').select('id').eq('custom_slug', currentSlug).maybeSingle();
+                    if (!data || data.id === athlete.id) {
+                        isAvailable = true;
+                    } else {
+                        counter++;
+                        currentSlug = `${slug}-${counter}`;
+                    }
+                }
+                setCustomUrl(currentSlug);
+                setIsCheckingUrl(false);
+            };
+            generateUniqueSlug(base);
+        }
+    }
+  }, [isUrlModalOpen, athlete]);
 
   const handleToggleSave = async () => {
-    if (!currentUserId || viewerRole !== 'coach') return;
+    if (!currentUserId || viewerRole !== 'coach' || !athlete) return;
     setIsSaving(true);
     try {
       if (isSaved) {
-        await supabase.from('saved_recruits').delete().eq('coach_id', currentUserId).eq('athlete_id', athleteId);
+        await supabase.from('saved_recruits').delete().eq('coach_id', currentUserId).eq('athlete_id', athlete.id);
         setIsSaved(false);
       } else {
-        await supabase.from('saved_recruits').insert({ coach_id: currentUserId, athlete_id: athleteId });
+        await supabase.from('saved_recruits').insert({ coach_id: currentUserId, athlete_id: athlete.id });
         setIsSaved(true);
       }
-    } catch (err: any) { alert(`Failed to update watchlist: ${err.message}`); } finally { setIsSaving(false); }
+    } catch (err: any) { 
+      showToast(`Failed to update watchlist: ${err.message}`, 'error'); 
+    } finally { 
+      setIsSaving(false); 
+    }
   };
 
   const handleContactClick = () => {
     if (viewerRole === 'guest' || !currentUserId) {
-      alert("Please create an account or log in to contact athletes.");
+      showToast("Please log in to contact athletes.", 'error');
       router.push('/login');
       return;
     }
     if (viewerRole === 'coach' && !isVerifiedCoach) {
-      alert("Please complete your coach profile (Name & School) on your dashboard to send direct pitches.");
+      showToast("Please complete your coach profile to send direct pitches.", 'error');
       return;
     }
     if (viewerRole === 'athlete' && !isVerifiedAthlete) {
-      alert("Please sync your Athletic.net profile to message other athletes.");
+      showToast("Please sync your Athletic.net profile to message other athletes.", 'error');
       return;
     }
 
@@ -227,7 +298,7 @@ export default function PublicAthletePortfolio() {
         .gte('created_at', twentyFourHoursAgo);
 
       if (count !== null && count >= 10) {
-        alert("Daily Limit Reached: To protect athletes from spam, you can only send 10 new connection requests or pitches per day. Please try again tomorrow!");
+        showToast("Daily Limit Reached: Only 10 connection requests per day allowed.", 'error');
         setIsSending(false);
         return;
       }
@@ -250,9 +321,46 @@ export default function PublicAthletePortfolio() {
         setMessageContent('');
       }, 2000);
     } catch (error: any) { 
-      alert(`Failed to send message: ${error.message}`); 
+      showToast(`Failed to send message: ${error.message}`, 'error'); 
     } finally { 
       setIsSending(false); 
+    }
+  };
+
+  const handleSaveUrl = async () => {
+    setUrlError('');
+    const slug = customUrl.trim().toLowerCase();
+    
+    if (!slug) { setUrlError('URL cannot be empty.'); return; }
+    if (slug.length < 3) { setUrlError('URL must be at least 3 characters.'); return; }
+    if (!/^[a-z0-9-]+$/.test(slug)) { setUrlError('Only letters, numbers, and hyphens are allowed.'); return; }
+    
+    if (INAPPROPRIATE_WORDS.some(word => slug.includes(word))) {
+        setUrlError('This URL contains inappropriate or reserved words.');
+        return;
+    }
+
+    setIsSavingUrl(true);
+    try {
+        const { data: existing } = await supabase.from('athletes').select('id').eq('custom_slug', slug).maybeSingle();
+        if (existing && existing.id !== athlete?.id) {
+            setUrlError('This URL is already taken by another athlete.');
+            setIsSavingUrl(false);
+            return;
+        }
+
+        const { error } = await supabase.from('athletes').update({ custom_slug: slug }).eq('id', athlete?.id);
+        if (error) throw error;
+        
+        showToast('Custom URL updated successfully!', 'success');
+        setIsUrlModalOpen(false);
+        setAthlete(prev => prev ? { ...prev, custom_slug: slug } : null);
+        
+        router.replace(`/athlete/${slug}`);
+    } catch (err: any) {
+        setUrlError(err.message || 'Failed to save URL.');
+    } finally {
+        setIsSavingUrl(false);
     }
   };
 
@@ -271,6 +379,7 @@ export default function PublicAthletePortfolio() {
     navigator.clipboard.writeText(url);
     setCopySuccess(true);
     showToast("Portfolio link copied to clipboard!", "success");
+    setTimeout(() => setCopySuccess(false), 2000);
   };
 
   const formatDate = (dateString: string) => {
@@ -292,7 +401,7 @@ export default function PublicAthletePortfolio() {
       <div className="min-h-screen bg-[#F8FAFC] flex flex-col items-center justify-center text-center p-6">
         <Activity className="w-16 h-16 text-slate-300 mb-4" />
         <h1 className="text-3xl font-black text-slate-900 mb-2">Portfolio Not Found</h1>
-        <p className="text-slate-500 mb-6">This athlete's portfolio may have been removed or does not exist.</p>
+        <p className="text-slate-500 mb-6">This athlete's portfolio may have been removed, or the link is incorrect.</p>
         <button onClick={() => router.push('/')} className="bg-blue-600 text-white font-bold px-6 py-3 rounded-xl">Return Home</button>
       </div>
     );
@@ -497,7 +606,7 @@ export default function PublicAthletePortfolio() {
               </p>
 
               <div className="flex flex-col sm:flex-row items-center gap-3 w-full">
-                {!isSelf && (
+                {!isSelf ? (
                   <>
                     {viewerRole === 'guest' ? (
                       <Link href="/login" className={`w-full sm:w-auto font-bold py-3.5 px-6 rounded-xl transition-colors flex items-center justify-center gap-2 border ${loginBtnClass}`}>
@@ -528,6 +637,13 @@ export default function PublicAthletePortfolio() {
                       </button>
                     )}
                   </>
+                ) : (
+                  <button 
+                      onClick={() => isVerified ? setIsUrlModalOpen(true) : showToast('Only Verified Indexed athletes can claim a custom URL.', 'error')} 
+                      className={`w-full sm:w-auto font-black py-3.5 px-6 rounded-xl transition-colors flex items-center justify-center gap-2 border ${secondaryBtnClass} ${!isVerified ? 'opacity-60 cursor-not-allowed' : ''}`}>
+                    {!isVerified ? <Lock className="w-5 h-5" /> : <LinkIcon className="w-5 h-5" />}
+                    {isVerified ? (athlete.custom_slug ? 'Edit URL' : 'Claim Custom URL') : 'Custom URL Locked'}
+                  </button>
                 )}
                 
                 <button onClick={handleCopyLink} className={`w-full sm:w-auto font-black py-3.5 px-6 rounded-xl transition-colors flex items-center justify-center gap-2 border ${secondaryBtnClass}`}>
@@ -726,6 +842,54 @@ export default function PublicAthletePortfolio() {
 
       </div>
 
+      {/* URL Customization Modal */}
+      {isUrlModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
+              <div>
+                <h3 className="font-black text-lg text-slate-900">Claim Custom URL</h3>
+                <p className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider">Personalize Your Portfolio Link</p>
+              </div>
+              <button onClick={() => setIsUrlModalOpen(false)} className="p-2 hover:bg-slate-200 rounded-full transition-colors"><X className="w-5 h-5 text-slate-500" /></button>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-800 font-medium mb-4">
+                <p>Customize your profile link to make it easy for college coaches and teammates to find you.</p>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-600 uppercase tracking-wider block mb-2">Your Custom Link</label>
+                <div className="flex items-stretch shadow-sm rounded-xl overflow-hidden border border-slate-200 focus-within:ring-2 focus-within:ring-blue-500">
+                  <span className="bg-slate-50 px-2 sm:px-4 flex items-center text-slate-500 font-bold text-[10px] sm:text-sm border-r border-slate-200 truncate">
+                    chasedsports.com/athlete/
+                  </span>
+                  <input 
+                    type="text" 
+                    value={customUrl}
+                    onChange={(e) => setCustomUrl(e.target.value.replace(/[^a-zA-Z0-9-]/g, '-').toLowerCase())}
+                    className="flex-1 px-4 py-3 text-sm font-black text-slate-900 focus:outline-none"
+                    placeholder="john-doe"
+                  />
+                </div>
+                {urlError && <p className="text-xs font-bold text-red-500 mt-2 flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" /> {urlError}</p>}
+                {!urlError && customUrl && <p className="text-xs font-bold text-emerald-500 mt-2 flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> URL formatting looks good.</p>}
+              </div>
+
+              <button 
+                onClick={handleSaveUrl} 
+                disabled={isCheckingUrl || isSavingUrl || !customUrl} 
+                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-3 sm:py-4 rounded-xl shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 text-sm sm:text-base transition-colors mt-6"
+              >
+                {isSavingUrl || isCheckingUrl ? 'Saving...' : <><Save className="w-5 h-5" /> Save Custom URL</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Message Modal */}
       {isMessageModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">

@@ -296,7 +296,6 @@ export default function FeedPage() {
     const { data: { session } } = await supabase.auth.getSession();
     
     let currentTrustLevel = 0;
-    let currentFirstName = '';
     let isAthlete = false;
     let uId = '';
 
@@ -317,7 +316,6 @@ export default function FeedPage() {
           setViewerRole('athlete');
           setCurrentUserProfile(aData as AthleteData);
           currentTrustLevel = aData.trust_level || 0;
-          currentFirstName = aData.first_name || '';
           isAthlete = true;
           
           if (aData.grad_year) {
@@ -329,7 +327,7 @@ export default function FeedPage() {
     }
 
     if (isAthlete && currentTrustLevel >= 1 && uId) {
-       const welcomeMsg = `A new athlete has verified! Welcome ${currentFirstName} to the trusted network.`;
+       const welcomeMsg = `A New Athlete Has Verified!`;
        
        // FIX: Using .limit(1) instead of .maybeSingle() prevents cascading duplication
        // if a race condition ever creates more than 1 welcome message.
@@ -1146,7 +1144,7 @@ export default function FeedPage() {
                     <button type="button" onClick={() => setShowDuplicateWarning(false)} className="flex-1 bg-white/5 hover:bg-white/10 text-white font-bold py-3 rounded-xl transition-colors border border-white/10">
                       Cancel
                     </button>
-                    <button onClick={() => handleSendMessage()} disabled={isSending} className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-black py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2">
+                    <button onClick={() => handleSendMessage()} disabled={isSending} className="flex-1 bg-blue-600 hover:bg-blue-50 text-white font-black py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2">
                       {isSending ? 'Sending...' : 'Confirm & Send'}
                     </button>
                   </div>
@@ -1272,7 +1270,8 @@ export default function FeedPage() {
                             if (!post.athletes) return null;
 
                             const isPRAlert = !!(post.linked_pr_event || (post.linked_prs && post.linked_prs.length > 0));
-                            const isVerificationPost = post.content?.startsWith("A new athlete has verified!");
+                            // Ensure backward compatibility if there are old versions of the post
+                            const isVerificationPost = post.content?.toLowerCase().includes("a new athlete has verified!");
                             const likesCount = post.likes ? post.likes.length : 0;
                             const iLikedThis = post.likes ? post.likes.includes(currentUserId || '') : false;
                             
@@ -1554,14 +1553,14 @@ export default function FeedPage() {
                                                 </div>
                                               </div>
                                             ) : isVerificationPost ? (
-                                              <div className="relative z-20 bg-emerald-950/20 backdrop-blur-xl border border-emerald-500/30 p-6 sm:p-8 rounded-[2rem] shadow-[0_0_40px_rgba(16,185,129,0.1)] flex flex-col items-center gap-6 overflow-hidden mb-5">
-                                                  <div className="absolute top-0 right-0 w-48 h-48 bg-emerald-500/10 rounded-bl-full blur-2xl pointer-events-none"></div>
-                                                  <div className="absolute bottom-0 left-0 w-48 h-48 bg-blue-500/10 rounded-tr-full blur-2xl pointer-events-none"></div>
+                                              <div className="relative z-20 bg-blue-950/20 backdrop-blur-xl border border-blue-500/30 p-6 sm:p-8 rounded-[2rem] shadow-[0_0_40px_rgba(59,130,246,0.15)] flex flex-col items-center gap-6 overflow-hidden mb-5">
+                                                  <div className="absolute top-0 right-0 w-48 h-48 bg-blue-500/10 rounded-bl-full blur-2xl pointer-events-none"></div>
+                                                  <div className="absolute bottom-0 left-0 w-48 h-48 bg-cyan-500/10 rounded-tr-full blur-2xl pointer-events-none"></div>
                                         
                                                   <div className="flex flex-col items-center text-center gap-2 relative z-10">
-                                                      <ShieldCheck className="w-12 h-12 text-emerald-400 drop-shadow-[0_0_15px_rgba(16,185,129,0.5)] mb-2" />
-                                                      <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight">{post.content}</h3>
-                                                      <p className="text-xs font-bold text-emerald-400/80 uppercase tracking-widest flex items-center gap-1.5"><Sparkles className="w-3 h-3" /> Official Scouting Data Unlocked</p>
+                                                      <ShieldCheck className="w-12 h-12 text-blue-400 drop-shadow-[0_0_15px_rgba(59,130,246,0.5)] mb-2" />
+                                                      <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight">A New Athlete Has Verified!</h3>
+                                                      <p className="text-xs font-bold text-blue-400/80 uppercase tracking-widest flex items-center gap-1.5"><Sparkles className="w-3 h-3" /> Scouting unlocked</p>
                                                   </div>
                                         
                                                   <div className="w-full grid grid-cols-2 sm:grid-cols-4 gap-3 relative z-10">
@@ -1574,18 +1573,18 @@ export default function FeedPage() {
                                                           <span className="text-xs font-black text-white truncate w-full px-2">{verifTargetSportStr.split('•')[0]}</span>
                                                       </div>
                                                       {verifTargetScore > 0 ? (
-                                                          <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-4 flex flex-col items-center justify-center backdrop-blur-md shadow-inner col-span-2 sm:col-span-2 relative overflow-hidden group">
-                                                              <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/0 via-emerald-500/10 to-emerald-500/0 animate-[shimmerGlare_3s_infinite_linear] pointer-events-none"></div>
-                                                              <span className="text-[10px] font-black text-emerald-400/80 uppercase tracking-widest mb-1">Ovr Rating</span>
+                                                          <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4 flex flex-col items-center justify-center backdrop-blur-md shadow-inner col-span-2 sm:col-span-2 relative overflow-hidden group">
+                                                              <div className="absolute inset-0 bg-gradient-to-r from-blue-500/0 via-blue-500/10 to-blue-500/0 animate-[shimmerGlare_3s_infinite_linear] pointer-events-none"></div>
+                                                              <span className="text-[10px] font-black text-blue-400/80 uppercase tracking-widest mb-1">Ovr Rating</span>
                                                               <div className="flex items-end gap-2">
-                                                                  <span className="text-3xl font-black text-emerald-400 leading-none drop-shadow-[0_0_10px_rgba(16,185,129,0.4)]">{verifTargetScore}</span>
-                                                                  <span className="text-[10px] font-bold text-emerald-300/70 mb-0.5">{verifTierLabel}</span>
+                                                                  <span className="text-3xl font-black text-blue-400 leading-none drop-shadow-[0_0_10px_rgba(59,130,246,0.4)]">{verifTargetScore}</span>
+                                                                  <span className="text-[10px] font-bold text-blue-300/70 mb-0.5">{verifTierLabel}</span>
                                                               </div>
                                                           </div>
                                                       ) : (
                                                           <div className="bg-black/40 border border-white/5 rounded-2xl p-4 flex flex-col items-center justify-center backdrop-blur-md shadow-inner col-span-2 sm:col-span-2">
-                                                               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Status</span>
-                                                               <span className="text-sm font-black text-slate-300">Evaluating Profile...</span>
+                                                              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Status</span>
+                                                              <span className="text-sm font-black text-slate-300">Evaluating Profile...</span>
                                                           </div>
                                                       )}
                                                   </div>
@@ -1617,8 +1616,8 @@ export default function FeedPage() {
                                                 <div className="flex items-center gap-3 w-full sm:w-auto">
                                                     <div className="relative flex-1 sm:flex-none">
                                                         {coinPopId === post.id && <span className="coin-float">+5 💸</span>}
-                                                        <button onClick={() => handleToggleFire(post.id, post.athlete_id)} className={`w-full flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-black transition-all duration-300 shadow-sm ${iLikedThis ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shadow-[0_0_15px_rgba(99,102,241,0.2)]' : (isVerificationPost ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 border border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.2)]' : 'bg-black/20 hover:bg-black/40 text-slate-300 border border-white/5 hover:border-white/10')} ${animatingHype === post.id ? 'hype-pop' : ''}`}>
-                                                            <Flame className={`w-3.5 h-3.5 ${iLikedThis ? 'fill-current text-indigo-400 animate-pulse' : (isVerificationPost ? 'text-emerald-400' : 'text-slate-400')}`} /> {likesCount > 0 ? likesCount : (isVerificationPost ? 'Hype (+5 Cash)' : 'Hype')}
+                                                        <button onClick={() => handleToggleFire(post.id, post.athlete_id)} className={`w-full flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-black transition-all duration-300 shadow-sm ${iLikedThis ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shadow-[0_0_15px_rgba(99,102,241,0.2)]' : (isVerificationPost ? 'bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 border border-blue-500/50 shadow-[0_0_15px_rgba(59,130,246,0.2)]' : 'bg-black/20 hover:bg-black/40 text-slate-300 border border-white/5 hover:border-white/10')} ${animatingHype === post.id ? 'hype-pop' : ''}`}>
+                                                            <Flame className={`w-3.5 h-3.5 ${iLikedThis ? 'fill-current text-indigo-400 animate-pulse' : (isVerificationPost ? 'text-blue-400' : 'text-slate-400')}`} /> {likesCount > 0 ? likesCount : (isVerificationPost ? 'Hype (+5 Cash)' : 'Hype')}
                                                         </button>
                                                     </div>
                                                     <button onClick={() => toggleComments(post.id)} className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-black transition-all shadow-sm ${isCommentsOpen ? 'bg-white/10 text-white' : 'bg-black/20 hover:bg-black/40 text-slate-300 border border-white/5 hover:border-white/10'}`}>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -10,6 +10,9 @@ import {
   Lock, Crown, Activity, Edit3, Wand2, Video, VideoOff, Type, X, RefreshCcw
 } from 'lucide-react';
 import { getTemplatesForSport, EmailTemplate } from '@/utils/email-templates';
+
+// Centralized Launch Date for Founder Status Threshold
+const PRO_LAUNCH_DATE = new Date('2026-08-08T00:00:00Z');
 
 interface SavedCollege {
   id: string;
@@ -72,6 +75,24 @@ export default function EmailBuilder() {
   const [isCopiedBody, setIsCopiedBody] = useState(false);
   const [isCopiedSubject, setIsCopiedSubject] = useState(false);
 
+  // 🚨 NEW: DYNAMIC TIME-GATE ACCESS EVALUATION 🚨
+  const gatingMode = useMemo(() => {
+    const isPreLaunch = new Date() < PRO_LAUNCH_DATE;
+    
+    let hasAccess = false;
+    if (isPreLaunch) {
+      hasAccess = athlete?.is_founder === true;
+    } else {
+      hasAccess = athlete?.is_premium === true;
+    }
+
+    return {
+      isPreLaunch,
+      hasAccess,
+      label: isPreLaunch ? "Early Access" : "Premium Feature"
+    };
+  }, [athlete]);
+
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
@@ -105,6 +126,12 @@ export default function EmailBuilder() {
         .single();
 
       if (athleteData && !athleteError) {
+        // Auto-assign founder status if pre-launch (matches Dashboard behavior)
+        if (!athleteData.is_founder && new Date() < PRO_LAUNCH_DATE) {
+           await supabase.from('athletes').update({ is_founder: true }).eq('id', athleteData.id);
+           athleteData.is_founder = true; 
+        }
+
         setAthlete(athleteData);
         
         let parsedResume: any = {};
@@ -214,8 +241,9 @@ export default function EmailBuilder() {
   };
 
   const handleTemplateSelect = (t: EmailTemplate) => {
-    if (t.isPremium && !athlete?.is_premium) {
-      showToast("This template requires ChasedSports Premium.", "error");
+    // 🚨 GATING LOGIC APPLIED HERE 🚨
+    if (t.isPremium && !gatingMode.hasAccess) {
+      showToast(`This template requires ${gatingMode.label}.`, "error");
       return;
     }
     setSelectedTemplateId(t.id);
@@ -454,9 +482,9 @@ export default function EmailBuilder() {
               <Mail className="w-5 h-5 text-blue-400" />
             </div>
             <h1 className="text-3xl md:text-4xl font-black text-white tracking-tight">Recruiting Email Studio</h1>
-            {athlete?.is_premium && (
+            {gatingMode.hasAccess && (
                <div className="bg-amber-500/20 border border-amber-500/50 text-amber-400 px-3 py-1 rounded-full text-xs font-black tracking-widest uppercase flex items-center gap-1 shadow-[0_0_15px_rgba(245,158,11,0.2)]">
-                  <Crown className="w-3 h-3" /> Pro
+                  <Crown className="w-3 h-3" /> {gatingMode.isPreLaunch ? 'Founder' : 'Pro'}
                </div>
             )}
           </div>
@@ -563,7 +591,8 @@ export default function EmailBuilder() {
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2 pl-1">Email Strategy</label>
                   <div className="grid grid-cols-2 gap-2">
                     {availableTemplates.map(t => {
-                      const isLocked = t.isPremium && !athlete?.is_premium;
+                      // 🚨 GATING UI LOGIC 🚨
+                      const isLocked = t.isPremium && !gatingMode.hasAccess;
                       const isSelected = currentTemplate?.id === t.id;
 
                       return (
@@ -584,7 +613,7 @@ export default function EmailBuilder() {
                           <span className={isLocked ? 'text-slate-400 blur-[0.5px]' : ''}>{t.name}</span>
                           {t.isPremium && (
                              <span className={`text-[9px] uppercase tracking-widest ${isSelected ? 'text-amber-500' : 'text-amber-400'} flex items-center gap-1`}>
-                               <Crown className="w-3 h-3" /> Premium
+                               <Crown className="w-3 h-3" /> {gatingMode.isPreLaunch ? 'Early Access' : 'Premium'}
                              </span>
                           )}
                         </button>

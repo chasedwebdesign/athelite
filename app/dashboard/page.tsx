@@ -17,6 +17,7 @@ import { AvatarWithBorder } from '@/components/AnimatedBorders';
 
 // Import our centralized Registry & Constants
 import SportEditorRegistry from '@/components/dashboard/sports/SportEditorRegistry';
+import GlobalPercentileTracker from '@/components/dashboard/sports/GlobalPercentileTracker';
 import { 
   SPORT_CONFIGS_META, ALL_SPORTS, SUGGESTED_MAJORS, US_STATES, 
   evaluateMetric, getOverallTier, getRealStats 
@@ -26,57 +27,8 @@ import {
 import ProGate from '@/components/ProGate';
 import EmailVerification from '@/components/EmailVerification';
 
-// Centralized Launch Date for Founder Status Threshold
+// Centralized Launch Date for Early Access Threshold
 const PRO_LAUNCH_DATE = new Date('2026-08-08T00:00:00Z');
-
-// 🚨 3D TILT CARD PHYSICS ENGINE 🚨
-const TiltCard = ({ children, className = '' }: { children: React.ReactNode, className?: string }) => {
-  const cardRef = useRef<HTMLDivElement>(null);
-  const [style, setStyle] = useState<React.CSSProperties>({ transition: 'transform 0.5s ease-out' });
-  const [glareStyle, setGlareStyle] = useState<React.CSSProperties>({ opacity: 0 });
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!cardRef.current) return;
-    const rect = cardRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    const centerX = rect.width / 2;
-    const centerY = rect.height / 2;
-    const rotateX = ((y - centerY) / centerY) * -12; 
-    const rotateY = ((x - centerX) / centerX) * 12;
-
-    setStyle({
-      transform: `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale3d(1.02, 1.02, 1.02)`,
-      transition: 'transform 0.1s ease-out',
-    });
-
-    setGlareStyle({
-      opacity: 0.15,
-      background: `radial-gradient(circle at ${x}px ${y}px, rgba(255,255,255,1) 0%, rgba(255,255,255,0) 80%)`,
-    });
-  };
-
-  const handleMouseLeave = () => {
-    setStyle({
-      transform: `perspective(1000px) rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)`,
-      transition: 'transform 0.5s ease-out',
-    });
-    setGlareStyle({ opacity: 0 });
-  };
-
-  return (
-    <div 
-      ref={cardRef} 
-      onMouseMove={handleMouseMove} 
-      onMouseLeave={handleMouseLeave} 
-      style={style} 
-      className={`relative overflow-hidden group cursor-pointer ${className}`}
-    >
-      <div className="absolute inset-0 z-50 pointer-events-none transition-opacity duration-300" style={glareStyle}></div>
-      {children}
-    </div>
-  );
-};
 
 // --- CORE RECRUITING DATA STRUCTURES FOR LOCAL CALCULATIONS ---
 const RECRUITING_STANDARDS_DASHBOARD: Record<string, Record<string, { t1: number, t2: number, t3: number, t4: number, t5: number, t6: number, t7: number, isField?: boolean }>> = {
@@ -254,7 +206,7 @@ export default function DashboardHomebase() {
     return {
       isPreLaunch,
       hasAccess,
-      label: isPreLaunch ? "Early access" : "Premium feature"
+      label: isPreLaunch ? "Early Access" : "Premium feature"
     };
   }, [athleteProfile]);
 
@@ -391,7 +343,7 @@ export default function DashboardHomebase() {
         high_school_name: normalizedNewName,
         city: formattedCity,
         state: newTeamState,
-        mascot: formattedMascot,
+        mascol: formattedMascot,
         division: newTeamDivision
       }).select().single();
 
@@ -1074,6 +1026,43 @@ export default function DashboardHomebase() {
     
     if (!config) return null;
 
+    // 🚨 INCORPORATED LOCK OVERRIDE HERE for Track 🚨
+    if (sport === 'Track & Field') {
+      return (
+        <div key={sport} className="bg-slate-950 rounded-[2rem] border border-slate-800 shadow-xl overflow-hidden flex-1 relative group">
+           <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-[0.02] pointer-events-none"></div>
+           <div className="w-full flex items-center justify-between p-6">
+             <div className="flex items-center gap-4 relative z-10">
+               <div className="p-3 bg-indigo-500/10 rounded-2xl border border-indigo-500/20 shadow-[0_0_15px_rgba(79,70,229,0.1)]">
+                 <Lock className="w-6 h-6 text-indigo-400" />
+               </div>
+               <div className="text-left">
+                 <h3 className="text-xl font-black text-white flex items-center gap-2">
+                    Track & Field <span className="bg-indigo-600 text-white text-[9px] px-2 py-0.5 rounded uppercase tracking-widest shadow-sm">Forging</span>
+                 </h3>
+                 <p className="text-indigo-400/80 text-xs font-bold uppercase tracking-widest mt-0.5">
+                  Deterministic Engine Loading...
+                 </p>
+               </div>
+             </div>
+           </div>
+
+           <div className="p-6 md:p-8 border-t border-slate-800/60 bg-gradient-to-br from-slate-900 to-indigo-950/20 relative z-10 flex flex-col items-center justify-center text-center">
+              <div className="w-16 h-16 bg-slate-900 border border-indigo-500/30 rounded-full flex items-center justify-center mb-4 shadow-[0_0_30px_rgba(79,70,229,0.2)]">
+                 <Sparkles className="w-8 h-8 text-indigo-400" />
+               </div>
+               <h4 className="text-lg font-black text-white mb-2">The Algorithm is Compiling</h4>
+               <p className="text-sm font-medium text-slate-400 max-w-md mx-auto mb-6 leading-relaxed">
+                 We are hooking up directly to the Athletic.net mainframes to pull your verified PRs, analyze them against our D1-D3 college recruiting standards, and assign your deterministic Matchmaker Rating. 
+               </p>
+               <button onClick={() => showToast("We're working hard on the Track Portal! Stay tuned.", "success")} className="bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 font-bold text-xs uppercase tracking-widest px-6 py-2.5 rounded-xl transition-all">
+                 Brace for Impact
+               </button>
+           </div>
+        </div>
+      );
+    }
+
     return (
       <div key={sport} className="bg-slate-950 rounded-[2rem] border border-slate-800 shadow-xl overflow-hidden flex-1">
         <button 
@@ -1105,6 +1094,18 @@ export default function DashboardHomebase() {
         
         {!isCollapsed && (
           <div className="p-4 sm:p-6 border-t border-slate-800 bg-slate-900/30 animate-in fade-in slide-in-from-top-2 duration-300">
+             
+             {/* 🚨 INJECTED GLOBAL PERCENTILE TRACKER 🚨 */}
+             {stats.calculatedRating > 0 && athleteProfile?.id && (
+                <div className="mb-6 px-4 sm:px-6">
+                   <GlobalPercentileTracker 
+                      athleteId={athleteProfile.id} 
+                      sportName={sport} 
+                      currentScore={stats.calculatedRating} 
+                   />
+                </div>
+             )}
+
              <SportEditorRegistry 
                sport={sport}
                sportStats={sportStats[sport] || { metrics: [], metaContext: {} }}
@@ -1133,22 +1134,20 @@ export default function DashboardHomebase() {
               {/* 🚨 TIMED ADAPTIVE ACCESS WRAPPER: EMAIL STUDIO 🚨 */}
               {gatingMode.hasAccess ? (
                 <ProGate athleteProfile={athleteProfile} featureName="Email Studio">
-                  <TiltCard className="bg-gradient-to-br from-blue-900 to-indigo-950 rounded-[2rem] p-6 sm:p-8 shadow-md border border-blue-800 h-full relative">
-                    <div className="absolute top-4 right-4 bg-amber-500/20 text-amber-300 font-bold tracking-widest text-[9px] uppercase border border-amber-500/30 px-2 py-0.5 rounded-md">
+                  <Link href="/dashboard/email-builder" className="block w-full h-full bg-gradient-to-br from-blue-900 to-indigo-950 rounded-[2rem] p-6 sm:p-8 shadow-md border border-blue-800 relative overflow-hidden group hover:scale-[1.02] active:scale-[0.98] transition-all duration-300">
+                    <div className="absolute top-4 right-4 bg-amber-500/20 text-amber-300 font-bold tracking-widest text-[9px] uppercase border border-amber-500/30 px-2 py-0.5 rounded-md z-10">
                       {gatingMode.label}
                     </div>
-                    <Link href="/dashboard/email-builder" className="block w-full h-full">
-                      <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/20 blur-[40px] rounded-full pointer-events-none"></div>
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="w-12 h-12 bg-blue-500/20 rounded-xl flex items-center justify-center border border-blue-500/30">
-                          <Mail className="w-6 h-6 text-blue-400" />
-                        </div>
-                        <ArrowRight className="w-5 h-5 text-white/50 group-hover:translate-x-1 transition-transform" />
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/20 blur-[40px] rounded-full pointer-events-none"></div>
+                    <div className="flex items-center justify-between mb-4 relative z-10">
+                      <div className="w-12 h-12 bg-blue-500/20 rounded-xl flex items-center justify-center border border-blue-500/30">
+                        <Mail className="w-6 h-6 text-blue-400" />
                       </div>
-                      <h3 className="text-xl font-black text-white mb-1">Email Studio</h3>
-                      <p className="text-blue-100/70 text-sm font-medium">Auto-generate customized templates using sport-specific metrics.</p>
-                    </Link>
-                  </TiltCard>
+                      <ArrowRight className="w-5 h-5 text-white/50 group-hover:translate-x-1 transition-transform" />
+                    </div>
+                    <h3 className="text-xl font-black text-white mb-1 relative z-10">Email Studio</h3>
+                    <p className="text-blue-100/70 text-sm font-medium relative z-10">Auto-generate customized templates using sport-specific metrics.</p>
+                  </Link>
                 </ProGate>
               ) : (
                 <div className="bg-slate-900/40 backdrop-blur-md rounded-[2rem] p-6 sm:p-8 border border-slate-800/80 h-full flex flex-col justify-center items-center text-center relative group overflow-hidden shadow-inner">
@@ -1172,34 +1171,76 @@ export default function DashboardHomebase() {
                 </div>
               )}
 
-              <TiltCard className="bg-gradient-to-br from-emerald-900 to-teal-950 rounded-[2rem] p-6 sm:p-8 shadow-md border border-emerald-800 h-full">
-                <div onClick={() => { goToTab('social'); setSocialSubTab('portfolio'); }} className="block w-full h-full">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/20 blur-[40px] rounded-full pointer-events-none"></div>
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="w-12 h-12 bg-emerald-500/20 rounded-xl flex items-center justify-center border border-emerald-500/30">
-                      <ImageIcon className="w-6 h-6 text-emerald-400" />
-                    </div>
-                    <ArrowRight className="w-5 h-5 text-white/50 group-hover:translate-x-1 transition-transform" />
+              <Link 
+                href={`/athlete/${athleteProfile?.custom_slug || athleteProfile?.id}`}
+                target="_blank"
+                onClick={(e) => {
+                  if (!athleteProfile?.custom_slug) {
+                    showToast("💡 Tip: You can claim a custom URL slug for your profile in the social settings!", "success");
+                  }
+                }}
+                className="block w-full h-full bg-gradient-to-br from-emerald-900 to-teal-950 rounded-[2rem] p-6 sm:p-8 shadow-md border border-emerald-800 relative overflow-hidden group hover:scale-[1.02] active:scale-[0.98] transition-all duration-300"
+              >
+                <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/20 blur-[40px] rounded-full pointer-events-none"></div>
+                <div className="flex items-center justify-between mb-4 relative z-10">
+                  <div className="w-12 h-12 bg-emerald-500/20 rounded-xl flex items-center justify-center border border-emerald-500/30">
+                    <UserCircle2 className="w-6 h-6 text-emerald-400" />
                   </div>
-                  <h3 className="text-xl font-black text-white mb-1">Portfolio & Fine-Tuning</h3>
-                  <p className="text-emerald-100/70 text-sm font-medium">Manage your public website and build custom social graphics.</p>
+                  <ArrowRight className="w-5 h-5 text-white/50 group-hover:translate-x-1 transition-transform" />
                 </div>
-              </TiltCard>
+                <h3 className="text-xl font-black text-white mb-1 relative z-10">View Public Profile</h3>
+                <p className="text-emerald-100/70 text-sm font-medium relative z-10">See how coaches view your athletic resume.</p>
+                
+                {!athleteProfile?.custom_slug && (
+                  <div className="mt-4 bg-emerald-950/50 border border-emerald-500/30 rounded-lg p-2.5 flex items-start gap-2 relative z-10">
+                    <Sparkles className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    <p className="text-[10px] font-bold text-emerald-200/80 leading-snug">
+                      Tip: You haven't claimed your custom URL yet! You can edit this in your portfolio settings.
+                    </p>
+                  </div>
+                )}
+              </Link>
             </div>
 
             {userSports.includes('Track & Field') && (
-              <div className="bg-gradient-to-br from-indigo-900 to-blue-950 rounded-[2rem] p-6 md:p-8 shadow-xl border border-indigo-800 text-white relative overflow-hidden">
-                 <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/20 blur-[80px] rounded-full pointer-events-none"></div>
-                 <h2 className="text-2xl font-black mb-2 flex items-center gap-3 relative z-10">
-                    <Sparkles className="w-6 h-6 text-blue-400"/> Track & Field Extensions Unlocked
+              <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 rounded-[2rem] p-6 md:p-8 shadow-2xl border border-indigo-500/30 text-white relative overflow-hidden group">
+                 {/* Animated Background Elements */}
+                 <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/20 blur-[80px] rounded-full pointer-events-none group-hover:bg-indigo-500/30 transition-all duration-700"></div>
+                 <div className="absolute -bottom-10 -left-10 w-48 h-48 bg-blue-500/20 blur-[60px] rounded-full pointer-events-none"></div>
+        
+                 <div className="flex items-center justify-between mb-4 relative z-10">
+                    <span className="text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 bg-indigo-500/20 text-indigo-200 px-3 py-1.5 rounded-lg border border-indigo-500/30">
+                      <Lock className="w-3.5 h-3.5 text-indigo-400" /> In Development
+                    </span>
+                    <div className="flex gap-1.5">
+                       <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
+                       <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse delay-75"></span>
+                       <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse delay-150"></span>
+                    </div>
+                 </div>
+        
+                 <h2 className="text-2xl font-black mb-2 flex items-center gap-3 relative z-10 group-hover:text-indigo-200 transition-colors">
+                    <Rocket className="w-6 h-6 text-blue-400"/> The Ultimate Track Portal
                  </h2>
-                 <p className="text-indigo-200 mb-6 font-medium text-sm relative z-10">Deterministic tracking tools active for your verified race marks.</p>
-                 
-                 <div className="grid grid-cols-1 gap-4 relative z-10 max-w-md">
-                    <Link href="/dashboard/track" className="bg-white/10 hover:bg-white/20 border border-white/10 p-6 rounded-2xl transition-all shadow-sm flex flex-col">
-                       <h3 className="text-lg font-bold text-white mb-1">Track Portal</h3>
-                       <p className="text-sm text-indigo-200">Synchronize official Athletic.net entries to claim profile verification status.</p>
-                    </Link>
+                 <p className="text-indigo-200/80 mb-6 font-medium text-sm relative z-10 max-w-lg leading-relaxed">
+                    We are fine-tuning the algorithm. Soon, you'll be able to directly synchronize your official Athletic.net entries, unlock deterministic tier ratings, and trigger automated recruiting matches. The revolution is imminent.
+                 </p>
+        
+                 <div className="grid grid-cols-1 relative z-10 max-w-md">
+                    <div className="bg-slate-950/50 backdrop-blur-sm border border-indigo-500/20 p-5 rounded-2xl shadow-inner flex items-center justify-between">
+                       <div className="flex items-center gap-3">
+                         <div className="w-10 h-10 rounded-full bg-indigo-900/50 border border-indigo-500/30 flex items-center justify-center">
+                           <Zap className="w-5 h-5 text-indigo-400" />
+                         </div>
+                         <div>
+                           <h3 className="text-sm font-bold text-white">ETA: Dropping Soon</h3>
+                           <p className="text-[10px] font-black uppercase tracking-widest text-indigo-300/70">Prepare for Launch</p>
+                         </div>
+                       </div>
+                       <button onClick={() => showToast("The Track Portal is currently being forged by our developers. Check back soon!", "success")} className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black px-4 py-2 rounded-xl transition-all shadow-[0_0_15px_rgba(79,70,229,0.3)]">
+                         Notify Me
+                       </button>
+                    </div>
                  </div>
               </div>
             )}
@@ -1221,7 +1262,7 @@ export default function DashboardHomebase() {
 
                 <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-6">
                   <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex flex-col items-center justify-center text-center">
-                    <span className="text-lg font-black text-slate-900">{athleteProfile?.is_premium ? athleteProfile.search_appearances || 0 : '241'}</span>
+                    <span className="text-lg font-black text-slate-900">{athleteProfile?.search_appearances || 0}</span>
                     <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mt-1">Impressions</span>
                   </div>
                   <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex flex-col items-center justify-center text-center">
@@ -1229,7 +1270,7 @@ export default function DashboardHomebase() {
                     <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mt-1">Total Views</span>
                   </div>
                   <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex flex-col items-center justify-center text-center">
-                    <span className="text-lg font-black text-slate-900">{athleteProfile?.is_premium ? monthlyViews : '89'}</span>
+                    <span className="text-lg font-black text-slate-900">{monthlyViews || 0}</span>
                     <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mt-1">This Month</span>
                   </div>
                 </div>
@@ -1273,7 +1314,7 @@ export default function DashboardHomebase() {
 
                 {/* --- SQUAD COMMAND CENTER (Updated) --- */}
                 <div 
-                  className="mt-6 bg-gradient-to-br from-fuchsia-900 to-purple-950 rounded-[2rem] p-6 text-white shadow-xl relative overflow-hidden group cursor-pointer border border-fuchsia-500/50 hover:border-fuchsia-400 transition-colors" 
+                  className="mt-6 bg-gradient-to-br from-fuchsia-900 to-purple-950 rounded-[2rem] p-6 text-white shadow-xl relative overflow-hidden group cursor-pointer border border-fuchsia-500/50 hover:border-fuchsia-400 transition-colors hover:scale-[1.02] active:scale-[0.98]" 
                   onClick={handleTeamHQClick}
                 >
                    {/* Slick Background Ambient Glows */}
@@ -1460,7 +1501,7 @@ export default function DashboardHomebase() {
             {athleteProfile?.trust_level === 1 && (
               <button 
                  onClick={() => {
-                   navigator.clipboard.writeText(`${window.location.origin}/athlete/${athleteProfile?.id}`);
+                   navigator.clipboard.writeText(`${window.location.origin}/athlete/${athleteProfile?.custom_slug || athleteProfile?.id}`);
                    showToast("Portfolio link copied to clipboard!", "success");
                  }}
                  className="bg-white/10 hover:bg-white/20 border border-white/10 text-white font-bold py-2.5 px-5 rounded-xl transition-colors flex items-center justify-center gap-2 text-sm"
@@ -1782,7 +1823,7 @@ export default function DashboardHomebase() {
                 </div>
               </div>
 
-              <div className={`relative ${!athleteProfile?.is_premium ? 'min-h-[280px]' : ''}`}>
+              <div className={`relative ${!gatingMode.hasAccess ? 'min-h-[280px]' : ''}`}>
                 
                 <div className="mb-6">
                   <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl p-6 md:p-8 flex flex-col sm:flex-row items-center justify-between gap-6 shadow-sm">
@@ -1801,20 +1842,29 @@ export default function DashboardHomebase() {
                 </div>
 
                 <div className="relative rounded-2xl border border-slate-200 bg-slate-50 p-6 overflow-hidden">
-                  {!athleteProfile?.is_premium && (
+                  {!gatingMode.hasAccess && (
                     <div className="absolute inset-0 z-20 bg-slate-50/80 backdrop-blur-md flex flex-col items-center justify-center text-center p-6">
+                      <div className="absolute top-4 right-4 bg-slate-800 text-slate-500 font-bold tracking-widest text-[9px] uppercase px-2 py-0.5 rounded-md">
+                        Locked
+                      </div>
                       <div className="w-14 h-14 bg-white rounded-full flex items-center justify-center mb-3 border border-slate-200 shadow-sm">
                         <Lock className="w-6 h-6 text-slate-400" />
                       </div>
                       <h3 className="text-lg font-black text-slate-900 mb-1">Advanced Analytics Locked</h3>
-                      <p className="text-slate-500 text-sm font-medium mb-4 max-w-xs">Upgrade to Pro to track your feed impressions and see exactly who is viewing your profile.</p>
-                      <Link href="/pro" className="bg-gradient-to-r from-amber-400 to-amber-500 text-amber-950 font-black px-6 py-2.5 rounded-xl shadow-md hover:scale-105 transition-transform flex items-center gap-2 text-sm">
-                        <Crown className="w-4 h-4" /> Unlock Pro
-                      </Link>
+                      <p className="text-slate-500 text-sm font-medium mb-4 max-w-xs">
+                        {gatingMode.isPreLaunch 
+                          ? "Exclusive early access feature locked. Complete verification or wait for the global public release."
+                          : "Upgrade to Pro to track your feed impressions and see exactly who is viewing your profile."}
+                      </p>
+                      {!gatingMode.isPreLaunch && (
+                        <Link href="/pro" className="bg-gradient-to-r from-amber-400 to-amber-500 text-amber-950 font-black px-6 py-2.5 rounded-xl shadow-md hover:scale-105 transition-transform flex items-center gap-2 text-sm">
+                          <Crown className="w-4 h-4" /> Unlock Pro
+                        </Link>
+                      )}
                     </div>
                   )}
 
-                  <div className={`${!athleteProfile?.is_premium ? 'opacity-20 select-none blur-[2px]' : ''}`}>
+                  <div className={`${!gatingMode.hasAccess ? 'opacity-20 select-none blur-[2px]' : ''}`}>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
                       <div className="bg-white rounded-xl p-5 border border-slate-100 shadow-sm relative">
                         <div className="flex items-center justify-between mb-2">
@@ -1829,9 +1879,9 @@ export default function DashboardHomebase() {
                           </p>
                           <Search className="w-4 h-4 text-emerald-400" />
                         </div>
-                        <h3 className="text-3xl font-black text-slate-900">{athleteProfile?.is_premium ? athleteProfile.search_appearances || 0 : '241'}</h3>
+                        <h3 className="text-3xl font-black text-slate-900">{athleteProfile?.search_appearances || 0}</h3>
                         
-                        {showImpressionTooltip && athleteProfile?.is_premium && (
+                        {showImpressionTooltip && gatingMode.hasAccess && (
                           <div className="absolute top-12 left-0 w-[200px] bg-slate-900 text-white text-xs p-4 rounded-xl shadow-xl z-50 animate-in fade-in zoom-in-95 border border-slate-700">
                             <p className="mb-3 leading-relaxed">This is the number of times your posts or profile appeared on a coach's screen while they were scrolling the feed or searching the database.</p>
                             <button onClick={() => setShowImpressionTooltip(false)} className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-2 rounded-lg transition-colors">Got it</button>
@@ -1844,7 +1894,7 @@ export default function DashboardHomebase() {
                           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Views Today</p>
                           <Activity className="w-4 h-4 text-blue-400" />
                         </div>
-                        <h3 className="text-3xl font-black text-slate-900">{athleteProfile?.is_premium ? dailyViews : '14'}</h3>
+                        <h3 className="text-3xl font-black text-slate-900">{dailyViews || 0}</h3>
                       </div>
                       
                       <div className="bg-white rounded-xl p-5 border border-slate-100 shadow-sm">
@@ -1852,7 +1902,7 @@ export default function DashboardHomebase() {
                           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Views This Month</p>
                           <Calendar className="w-4 h-4 text-indigo-400" />
                         </div>
-                        <h3 className="text-3xl font-black text-slate-900">{athleteProfile?.is_premium ? monthlyViews : '89'}</h3>
+                        <h3 className="text-3xl font-black text-slate-900">{monthlyViews || 0}</h3>
                       </div>
                     </div>
 
@@ -2063,10 +2113,10 @@ export default function DashboardHomebase() {
                   >
                     <Edit3 className="w-4 h-4 text-slate-600" />
                   </button>
-                  {/* Glowing, high-fidelity Founder Badge UI asset */}
+                  {/* Glowing, high-fidelity Early Access Badge UI asset */}
                   {athleteProfile?.is_founder && (
                     <span className="bg-gradient-to-br from-amber-400 via-orange-500 to-yellow-500 text-white text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full shadow-[0_0_20px_rgba(245,158,11,0.4)] flex items-center gap-1.5 border border-amber-300 animate-pulse">
-                      <Crown className="w-3 h-3" /> Founder Member
+                      <Crown className="w-3 h-3" /> Early Access
                     </span>
                   )}
                 </div>
@@ -2094,7 +2144,7 @@ export default function DashboardHomebase() {
                    onClick={() => setIsSportsMenuOpen(!isSportsMenuOpen)}
                    className="inline-flex items-center justify-center w-full sm:w-auto gap-2 font-black px-6 py-3 rounded-xl transition-all shadow-[0_0_20px_rgba(6,182,212,0.3)] bg-cyan-500 hover:bg-cyan-400 text-white border border-cyan-400"
                  >
-                    Add / Update Sports <ChevronDown className={`w-4 h-4 transition-transform ${isSportsMenuOpen ? 'rotate-180' : ''}`} />
+                   Add / Update Sports <ChevronDown className={`w-4 h-4 transition-transform ${isSportsMenuOpen ? 'rotate-180' : ''}`} />
                  </button>
                  
                  {isSportsMenuOpen && (
