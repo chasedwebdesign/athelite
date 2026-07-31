@@ -42,7 +42,9 @@ export default function EmailVerification() {
   // Auto-Fetch user email and check if they are already verified
   useEffect(() => {
     const fetchUserAndStatus = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      // 🚨 FIX: Swapped getUser() for getSession() to read local token state and avoid network spam
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user;
       
       if (user) {
         setUserId(user.id);
@@ -71,7 +73,7 @@ export default function EmailVerification() {
     };
     
     fetchUserAndStatus();
-  }, [supabase]);
+  }, []); // 🚨 FIX: Empty dependency array ensures this fires exactly once per mount
 
   const handleSendEmail = async (e: React.FormEvent) => {
     e.preventDefault();

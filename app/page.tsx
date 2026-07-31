@@ -7,6 +7,33 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { Search, ShieldCheck, Database, LineChart, ArrowRight, Activity, CheckCircle2, Trophy, Target, MapPin, DollarSign, GraduationCap, LockOpen } from 'lucide-react';
 
+// ============================================================================
+// 🚨 TYPES & INTERFACES
+// ============================================================================
+interface PR {
+  event: string;
+  mark: string;
+}
+
+interface AthleteRecord {
+  id: string | number;
+  first_name: string | null;
+  last_name: string | null;
+  high_school: string | null;
+  athlete_sports?: { metrics: PR[] }[] | null;
+  gender: string | null;
+}
+
+interface ProcessedAthlete extends AthleteRecord {
+  projScore: number;
+}
+
+interface Breakdown {
+  event: string;
+  mark: string;
+  score: number;
+}
+
 // 🚨 EXTENDED MOCK DATA FOR AUTO-SCROLLING CAROUSEL 🚨
 const FEATURED_COLLEGES = [
   {
@@ -63,9 +90,9 @@ const FEATURED_COLLEGES = [
 
 // 🚨 FALLBACK ATHLETES WITH CORRECT RANKS 🚨
 const FALLBACK_ATHLETES = [
-  { id: 1, rank: 1, firstName: "Chase", lastName: "Fulleton", highSchool: "South Albany HS", event: "3000 Meters", mark: "8:24.50", initials: "CF", tier: "Legend Rank", tierClass: "legend-badge", color: "from-blue-600 to-indigo-600" },
-  { id: 2, rank: 1, firstName: "Luke", lastName: "Skywalker", highSchool: "Tatooine Prep", event: "Long Jump", mark: "25' 4\"", initials: "LS", tier: "Legend Rank", tierClass: "legend-badge", color: "from-emerald-500 to-teal-600" },
-  { id: 3, rank: 1, firstName: "Mia", lastName: "Hamm", highSchool: "North Carolina HS", event: "400 Meters", mark: "52.88s", initials: "MH", tier: "Legend Rank", tierClass: "legend-badge", color: "from-rose-500 to-pink-600" }
+  { id: 1, rank: 1, firstName: "Chase", lastName: "Fulleton", highSchool: "South Albany HS", initials: "CF", tier: "Legend Rank", tierClass: "legend-badge", color: "from-blue-600 to-indigo-600" },
+  { id: 2, rank: 1, firstName: "Luke", lastName: "Skywalker", highSchool: "Tatooine Prep", initials: "LS", tier: "Legend Rank", tierClass: "legend-badge", color: "from-emerald-500 to-teal-600" },
+  { id: 3, rank: 1, firstName: "Mia", lastName: "Hamm", highSchool: "North Carolina HS", initials: "MH", tier: "Legend Rank", tierClass: "legend-badge", color: "from-rose-500 to-pink-600" }
 ];
 
 const ATHLETE_GRADIENTS = [
@@ -79,8 +106,6 @@ const ATHLETE_GRADIENTS = [
 // ============================================================================
 // 🚨 ALGORITHM & STANDARDS
 // ============================================================================
-const FIELD_EVENTS = ['Shot Put', 'Discus', 'Javelin', 'Hammer', 'High Jump', 'Pole Vault', 'Long Jump', 'Triple Jump'];
-
 const RECRUITING_STANDARDS: Record<string, Record<string, { t1: number, t2: number, t3: number, t4: number, t5: number, t6: number, t7: number, isField?: boolean }>> = {
   'Boys': {
     '60 Meters': { t1: 6.75, t2: 6.90, t3: 7.05, t4: 7.20, t5: 7.40, t6: 7.60, t7: 8.00 },
@@ -118,11 +143,11 @@ const convertMarkToNumber = (markStr: string, isField: boolean): number => {
   }
 };
 
-const getAthleteProjection = (prs: any[], gender: string) => {
+const getAthleteProjection = (prs: PR[], gender: string) => {
   if (!prs || !Array.isArray(prs) || prs.length === 0) return null;
 
   const standards = RECRUITING_STANDARDS[gender] || RECRUITING_STANDARDS['Boys'];
-  let allBreakdowns: any[] = [];
+  let allBreakdowns: Breakdown[] = [];
 
   prs.forEach((pr) => {
     if (!pr.event || !pr.mark) return;
@@ -168,7 +193,7 @@ const getAthleteProjection = (prs: any[], gender: string) => {
   else if (best.score >= 40) label = 'Contender Rank';
   else if (best.score >= 20) label = 'Challenger Rank';
 
-  return { overallScore: best.score, overallLabel: label, bestEvent: best.event, bestMark: best.mark };
+  return { overallScore: best.score, overallLabel: label };
 };
 
 // ============================================================================
@@ -179,13 +204,13 @@ function FlippingCard({ college }: { college: typeof FEATURED_COLLEGES[0] }) {
 
   return (
     <div 
-      className="perspective-1000 w-[180px] sm:w-[280px] shrink-0 cursor-pointer"
+      className="perspective-1000 w-[180px] sm:w-[280px] shrink-0 cursor-pointer group/card"
       onClick={() => setIsFlipped(!isFlipped)}
     >
-      <div className={`relative w-full h-[280px] sm:h-[400px] transition-transform duration-700 transform-style-3d ${isFlipped ? 'rotate-y-180' : ''}`}>
+      <div className={`relative w-full h-[280px] sm:h-[400px] transition-transform duration-700 transform-style-3d group-hover/card:scale-[1.02] ${isFlipped ? 'rotate-y-180' : ''}`}>
         
         {/* === CARD FRONT === */}
-        <div className="absolute inset-0 backface-hidden bg-slate-900/90 backdrop-blur-sm rounded-[1.5rem] sm:rounded-[2rem] border border-slate-700 shadow-[0_0_20px_rgba(0,0,0,0.5)] p-4 sm:p-6 flex flex-col overflow-hidden">
+        <div className="absolute inset-0 backface-hidden bg-slate-900/90 backdrop-blur-sm rounded-[1.5rem] sm:rounded-[2rem] border border-slate-700 shadow-[0_0_20px_rgba(0,0,0,0.5)] p-4 sm:p-6 flex flex-col overflow-hidden transition-all duration-300 group-hover/card:border-blue-500/50">
           <div className={`absolute top-0 left-0 right-0 h-24 sm:h-32 bg-gradient-to-br ${college.color} opacity-30 blur-2xl`}></div>
           <div className="relative z-10 flex-1 flex flex-col">
             <div className="bg-slate-800/80 border border-slate-700 w-fit px-2 py-0.5 sm:px-3 sm:py-1 rounded-md sm:rounded-lg mb-3 sm:mb-4 flex items-center gap-1 sm:gap-1.5 backdrop-blur-md">
@@ -211,14 +236,14 @@ function FlippingCard({ college }: { college: typeof FEATURED_COLLEGES[0] }) {
               <span className="text-lg sm:text-3xl font-black text-white tracking-tight">{college.budget}</span>
             </div>
             
-            <div className="mt-3 sm:mt-4 flex items-center justify-center gap-1.5 sm:gap-2 text-[8px] sm:text-[10px] font-bold text-blue-400 uppercase tracking-widest group-hover:text-blue-300 transition-colors">
+            <div className="mt-3 sm:mt-4 flex items-center justify-center gap-1.5 sm:gap-2 text-[8px] sm:text-[10px] font-bold text-blue-400 uppercase tracking-widest group-hover/card:text-blue-300 transition-colors">
               Tap for Match Stats <ArrowRight className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
             </div>
           </div>
         </div>
 
         {/* === CARD BACK === */}
-        <div className="absolute inset-0 backface-hidden rotate-y-180 bg-slate-800/90 backdrop-blur-sm rounded-[1.5rem] sm:rounded-[2rem] border border-blue-500/40 shadow-[0_0_30px_rgba(59,130,246,0.25)] p-4 sm:p-6 flex flex-col overflow-hidden">
+        <div className="absolute inset-0 backface-hidden rotate-y-180 bg-slate-800/90 backdrop-blur-sm rounded-[1.5rem] sm:rounded-[2rem] border border-blue-500/40 shadow-[0_0_30px_rgba(59,130,246,0.25)] p-4 sm:p-6 flex flex-col overflow-hidden transition-all duration-300">
           <div className="absolute inset-0 bg-[radial-gradient(#3b82f6_1px,transparent_1px)] [background-size:16px_16px] opacity-10"></div>
           <div className="relative z-10 h-full flex flex-col">
             <h4 className="text-[11px] sm:text-lg font-black text-white border-b border-slate-700 pb-2 sm:pb-4 mb-3 sm:mb-4 flex items-center justify-between">
@@ -272,11 +297,21 @@ export default function LandingPage() {
   const [loading, setLoading] = useState(true);
 
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  const [scrollY, setScrollY] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   
   // Leaderboard State
   const [topAthletes, setTopAthletes] = useState<any[]>(FALLBACK_ATHLETES);
   const [activeAthleteIdx, setActiveAthleteIdx] = useState(0);
+
+  // Scroll listener for Parallax feature
+  useEffect(() => {
+    const handleScroll = () => {
+      setScrollY(window.scrollY);
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   // Check Auth & Fetch Real Top Athletes
   useEffect(() => {
@@ -288,24 +323,25 @@ export default function LandingPage() {
       }
 
       try {
-        const { data: athletesData } = await supabase
+        const { data } = await supabase
           .from('athletes')
-          .select('id, first_name, last_name, high_school, prs, gender')
+          .select('id, first_name, last_name, high_school, gender, athlete_sports(metrics)')
           .gt('trust_level', 0)
-          .not('prs', 'is', null)
-          .limit(50); 
+          .limit(100); 
+          
+        const athletesData = data as any[];
 
         if (athletesData && athletesData.length > 0) {
-          const processedAthletes = athletesData.map(a => {
-            const proj = getAthleteProjection(a.prs, a.gender || 'Boys');
+          const processedAthletes: ProcessedAthlete[] = athletesData.map((a) => {
+            const rawMetrics = a.athlete_sports?.[0]?.metrics || [];
+            const proj = getAthleteProjection(rawMetrics, a.gender || 'Boys');
+            
             return {
               ...a,
               projScore: proj?.overallScore || 0,
-              bestEvent: proj?.bestEvent || 'Unknown',
-              bestMark: proj?.bestMark || '-'
             };
           })
-          .filter(a => a.projScore > 0)
+          .filter((a) => a.projScore > 0)
           .sort((a, b) => b.projScore - a.projScore) 
           .slice(0, 5); 
 
@@ -313,12 +349,10 @@ export default function LandingPage() {
             const formattedTop = processedAthletes.map((a, idx) => {
               return {
                 id: a.id,
-                rank: 1, // 🚨 ALL TOP ATHLETES ARE #1 LEGENDS
+                rank: 1, // ALL TOP ATHLETES ARE #1 LEGENDS
                 firstName: a.first_name || 'Unknown',
                 lastName: a.last_name || 'Athlete',
                 highSchool: a.high_school || 'Unattached',
-                event: a.bestEvent,
-                mark: a.bestMark,
                 initials: `${(a.first_name || 'U')[0]}${(a.last_name || 'A')[0]}`,
                 tier: 'Legend Rank', 
                 tierClass: 'legend-badge', 
@@ -332,10 +366,11 @@ export default function LandingPage() {
         console.error("Failed to load live athletes, using fallback data.");
       }
 
-      setLoading(false);
+      // Smooth loading fade out
+      setTimeout(() => setLoading(false), 600);
     }
     initializePage();
-  }, [supabase, router]);
+  }, [router, supabase.auth]);
 
   const handleMouseMove = (e: React.MouseEvent<HTMLElement>) => {
     if (!containerRef.current) return;
@@ -345,6 +380,8 @@ export default function LandingPage() {
 
   // DYNAMIC LEADERBOARD CYCLER EFFECT
   useEffect(() => {
+    if (!topAthletes || topAthletes.length === 0) return;
+
     const intervalId = setInterval(() => {
       setActiveAthleteIdx((prev) => (prev + 1) % topAthletes.length);
     }, 4000);
@@ -353,8 +390,12 @@ export default function LandingPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center">
-        <div className="w-12 h-12 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div>
+      <div className="fixed inset-0 z-50 bg-[#020617] flex flex-col items-center justify-center transition-opacity duration-700 animate-in fade-in">
+        <div className="relative w-16 h-16 flex items-center justify-center animate-pulse">
+           <div className="absolute inset-0 border-4 border-blue-500/20 rounded-full"></div>
+           <div className="absolute inset-0 border-4 border-transparent border-t-blue-500 rounded-full animate-spin"></div>
+           <Activity className="w-6 h-6 text-blue-400" />
+        </div>
       </div>
     );
   }
@@ -363,12 +404,22 @@ export default function LandingPage() {
     <main 
       ref={containerRef}
       onMouseMove={handleMouseMove}
-      className="min-h-screen bg-[#020617] font-sans selection:bg-blue-500/30 overflow-x-hidden relative pb-24 sm:pb-32 text-slate-200"
+      className="min-h-screen bg-[#020617] font-sans selection:bg-blue-500/30 overflow-x-hidden relative pb-24 sm:pb-32 text-slate-200 animate-fade-in-up"
     >
+      {/* 🚨 PARALLAX SPORTS TRACK LINES BACKGROUND 🚨 */}
+      <div 
+        className="fixed inset-0 pointer-events-none opacity-10 z-0 flex justify-center overflow-hidden transition-transform ease-out duration-75"
+        style={{ transform: `translateY(${scrollY * -0.15}px)` }}
+      >
+        <div className="w-[2px] h-[300vh] bg-gradient-to-b from-blue-500/0 via-blue-500 to-blue-500/0 transform rotate-[15deg] -ml-[20vw]"></div>
+        <div className="w-[4px] h-[300vh] bg-gradient-to-b from-cyan-500/0 via-cyan-400 to-cyan-500/0 transform rotate-[15deg] ml-[5vw] blur-[1px]"></div>
+        <div className="w-[1px] h-[300vh] bg-gradient-to-b from-purple-500/0 via-purple-500 to-purple-500/0 transform rotate-[15deg] ml-[20vw]"></div>
+      </div>
+
       {/* 🚨 TOP NAVIGATION FOR LANDING PAGE 🚨 */}
-      <nav className="fixed top-0 left-0 right-0 z-50 px-4 sm:px-6 py-4 flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-2 group shrink-0">
-          <div className="relative w-8 h-8 sm:w-10 sm:h-10 overflow-hidden group-hover:scale-105 transition-transform">
+      <nav className="fixed top-0 left-0 right-0 z-50 px-4 sm:px-6 py-4 flex items-center justify-between backdrop-blur-sm bg-[#020617]/50 border-b border-white/5">
+        <Link href="/" className="flex items-center gap-2 group shrink-0 transition-transform hover:scale-105 duration-300">
+          <div className="relative w-8 h-8 sm:w-10 sm:h-10 overflow-hidden group-hover:scale-110 transition-transform duration-500">
             <Image 
               src="/icon.png" 
               alt="ChasedSports Icon" 
@@ -382,7 +433,7 @@ export default function LandingPage() {
             Chased<span className="text-blue-400">Sports</span>
           </span>
         </Link>
-        <Link href="/login" className="text-sm font-bold bg-white/10 hover:bg-white/20 text-white backdrop-blur-md border border-white/20 px-5 py-2 rounded-full transition-all shadow-sm">
+        <Link href="/login" className="text-sm font-bold bg-white/10 hover:bg-white/20 hover:scale-105 text-white backdrop-blur-md border border-white/20 px-5 py-2 rounded-full transition-all duration-300 shadow-sm hover:shadow-[0_0_15px_rgba(255,255,255,0.2)]">
           Log In
         </Link>
       </nav>
@@ -393,8 +444,16 @@ export default function LandingPage() {
       />
 
       <style dangerouslySetInnerHTML={{__html: `
+        @keyframes fade-in-up { 0% { opacity: 0; transform: translateY(15px); } 100% { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in-up { animation: fade-in-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        
+        @keyframes text-pulse { 
+          0%, 100% { filter: drop-shadow(0 0 15px rgba(56,189,248,0.3)); transform: scale(1); } 
+          50% { filter: drop-shadow(0 0 35px rgba(56,189,248,0.7)); transform: scale(1.02); } 
+        }
+        .animate-text-pulse { animation: text-pulse 3s ease-in-out infinite; display: inline-block; }
+
         @keyframes float { 0% { transform: translateY(0px); } 50% { transform: translateY(-15px); } 100% { transform: translateY(0px); } }
-        @keyframes float-delayed { 0% { transform: translateY(0px); } 50% { transform: translateY(-15px); } 100% { transform: translateY(0px); } }
         @keyframes grid-pan { 0% { transform: translateY(0); } 100% { transform: translateY(32px); } }
         @keyframes shimmerSlow { 0% { background-position: -200% center; } 100% { background-position: 200% center; } }
         
@@ -412,16 +471,12 @@ export default function LandingPage() {
           100% { transform: rotate(360deg) scale(1); }
         }
         .animate-blob-spin { animation: blob-spin 20s infinite linear; }
-        .animate-float { animation: float 6s ease-in-out infinite; }
-        .animate-float-delayed { animation: float-delayed 8s ease-in-out infinite; animation-delay: 3s; }
         .bg-grid-pattern { background-image: linear-gradient(to right, rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.03) 1px, transparent 1px); background-size: 32px 32px; }
         
         .perspective-1000 { perspective: 1000px; }
         .transform-style-3d { transform-style: preserve-3d; }
         .backface-hidden { backface-visibility: hidden; }
         .rotate-y-180 { transform: rotateY(180deg); }
-        .hide-scrollbar::-webkit-scrollbar { display: none; }
-        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
         .legend-badge { background: linear-gradient(90deg, #6b21a8 0%, #d946ef 20%, #6b21a8 40%, #d946ef 60%, #6b21a8 80%); background-size: 200% auto; animation: shimmerSlow 4s linear infinite; color: white; border: 1px solid #e879f9; }
       `}} />
@@ -439,24 +494,24 @@ export default function LandingPage() {
         <div className="absolute top-0 right-1/4 w-[300px] sm:w-[600px] h-[300px] sm:h-[600px] bg-blue-700 rounded-full mix-blend-screen filter blur-[100px] sm:blur-[140px] opacity-20 animate-blob-spin pointer-events-none -z-10" style={{ animationDirection: 'reverse', animationDuration: '25s' }}></div>
         <div className="absolute top-1/3 left-1/2 w-[400px] sm:w-[700px] h-[400px] sm:h-[700px] bg-purple-700 rounded-full mix-blend-screen filter blur-[120px] sm:blur-[150px] opacity-15 animate-blob-spin pointer-events-none -z-10" style={{ animationDelay: '2s' }}></div>
 
-        <div className="max-w-5xl mx-auto relative z-10 text-center space-y-6 sm:space-y-8 animate-in fade-in zoom-in-95 duration-1000 mt-12">
-          <div className="inline-flex items-center px-4 py-2 sm:px-5 sm:py-2.5 rounded-full bg-slate-900/80 backdrop-blur-xl border border-slate-700/50 text-blue-400 text-[10px] sm:text-xs font-black tracking-widest uppercase shadow-[0_0_20px_rgba(59,130,246,0.2)] transition-all">
+        <div className="max-w-5xl mx-auto relative z-10 text-center space-y-6 sm:space-y-8 mt-12">
+          <div className="inline-flex items-center px-4 py-2 sm:px-5 sm:py-2.5 rounded-full bg-slate-900/80 backdrop-blur-xl border border-slate-700/50 text-blue-400 text-[10px] sm:text-xs font-black tracking-widest uppercase shadow-[0_0_20px_rgba(59,130,246,0.2)] hover:shadow-[0_0_30px_rgba(59,130,246,0.4)] hover:scale-105 transition-all duration-300 cursor-default">
             <ShieldCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" /> The New Standard in Recruiting
           </div>
           
           <h1 className="text-[4rem] leading-[1.05] sm:text-6xl md:text-8xl lg:text-[8rem] font-black tracking-tighter text-white drop-shadow-2xl">
-            Find <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-cyan-300 to-emerald-400 filter drop-shadow-[0_0_30px_rgba(56,189,248,0.4)]">YOUR</span> college.
+            Find <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-cyan-300 to-emerald-400 animate-text-pulse">YOUR</span> college.
           </h1>
           
-          <p className="text-lg sm:text-xl md:text-2xl text-slate-400 max-w-3xl mx-auto font-medium leading-relaxed px-2">
+          <p className="text-lg sm:text-xl md:text-2xl text-slate-400 max-w-3xl mx-auto font-medium leading-relaxed px-2 transition-opacity">
             The operating system for high school athletes. Track your true market value and dominate the recruiting process.
           </p>
           
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 pt-6 sm:pt-10 w-full sm:w-auto px-4 sm:px-0 relative z-20">
-            <Link href="/search" className="w-full sm:w-auto px-8 sm:px-10 py-4 sm:py-5 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl sm:rounded-full font-black text-base sm:text-lg transition-all shadow-[0_0_40px_rgba(37,99,235,0.5)] hover:shadow-[0_0_60px_rgba(37,99,235,0.7)] flex items-center justify-center group hover:-translate-y-1">
-              <Search className="w-5 h-5 mr-2 sm:mr-3" /> Explore Colleges
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-6 sm:pt-10 w-full sm:w-auto px-4 sm:px-0 relative z-20">
+            <Link href="/search" className="w-full sm:w-auto px-8 sm:px-10 py-4 sm:py-5 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl sm:rounded-full font-black text-base sm:text-lg transition-all duration-300 shadow-[0_0_40px_rgba(37,99,235,0.5)] hover:shadow-[0_0_60px_rgba(37,99,235,0.8)] flex items-center justify-center group hover:-translate-y-1 hover:scale-105">
+              <Search className="w-5 h-5 mr-2 sm:mr-3 group-hover:scale-110 transition-transform" /> Explore Colleges
             </Link>
-            <Link href="/login" className="w-full sm:w-auto px-8 sm:px-10 py-4 sm:py-5 bg-slate-900/50 hover:bg-slate-800 backdrop-blur-md text-white rounded-2xl sm:rounded-full font-bold text-base sm:text-lg transition-all border border-slate-700 shadow-sm flex items-center justify-center group hover:-translate-y-1">
+            <Link href="/login" className="w-full sm:w-auto px-8 sm:px-10 py-4 sm:py-5 bg-slate-900/50 hover:bg-slate-800 backdrop-blur-md text-white rounded-2xl sm:rounded-full font-bold text-base sm:text-lg transition-all duration-300 border border-slate-700 shadow-sm flex items-center justify-center group hover:-translate-y-1 hover:scale-105 hover:shadow-[0_0_20px_rgba(255,255,255,0.1)]">
               Join the Network <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 ml-2 sm:ml-3 group-hover:translate-x-1.5 transition-transform text-slate-500 group-hover:text-white" />
             </Link>
           </div>
@@ -467,7 +522,7 @@ export default function LandingPage() {
       {/* 🔍 TOOL 1: THE COLLEGE FINDER (INFINITE MARQUEE)        */}
       {/* ========================================================= */}
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-8 sm:py-12 relative z-10">
-        <div className="group relative bg-[#0a0f1e]/80 backdrop-blur-md rounded-[2rem] sm:rounded-[3rem] border border-slate-800/80 overflow-hidden shadow-2xl transition-all duration-700">
+        <div className="group relative bg-[#0a0f1e]/80 backdrop-blur-md rounded-[2rem] sm:rounded-[3rem] border border-slate-800/80 overflow-hidden shadow-2xl transition-all duration-700 hover:shadow-[0_0_50px_rgba(56,189,248,0.1)]">
           <div 
             className="pointer-events-none absolute -inset-px opacity-0 group-hover:opacity-100 transition-opacity duration-500 hidden md:block z-0"
             style={{ background: `radial-gradient(800px circle at ${mousePosition.x}px ${mousePosition.y}px, rgba(56, 189, 248, 0.08), transparent 40%)` }}
@@ -492,7 +547,7 @@ export default function LandingPage() {
                   </li>
                 ))}
               </ul>
-              <Link href="/search" className="w-full sm:w-auto inline-flex items-center justify-center px-6 sm:px-8 py-3.5 sm:py-4 bg-white hover:bg-blue-50 text-slate-900 rounded-xl sm:rounded-full font-bold text-sm sm:text-lg transition-all shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:shadow-[0_0_30px_rgba(255,255,255,0.3)] group/btn relative z-20">
+              <Link href="/search" className="w-full sm:w-auto inline-flex items-center justify-center px-6 sm:px-8 py-3.5 sm:py-4 bg-white hover:bg-blue-50 text-slate-900 rounded-xl sm:rounded-full font-bold text-sm sm:text-lg transition-all duration-300 shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:shadow-[0_0_40px_rgba(255,255,255,0.4)] hover:scale-105 group/btn relative z-20">
                 Launch Search Tool <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 ml-2 group-hover/btn:translate-x-2 transition-transform" />
               </Link>
             </div>
@@ -514,7 +569,7 @@ export default function LandingPage() {
       {/* 📈 TOOL 2: ATHLETE ID & DYNAMIC LEADERBOARD CYCLER        */}
       {/* ========================================================= */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-12 relative z-10">
-        <div className="group relative bg-[#0a0f1e]/80 backdrop-blur-md rounded-[2rem] sm:rounded-[3rem] p-6 sm:p-10 lg:p-24 border border-slate-800/80 overflow-hidden shadow-2xl transition-all duration-700">
+        <div className="group relative bg-[#0a0f1e]/80 backdrop-blur-md rounded-[2rem] sm:rounded-[3rem] p-6 sm:p-10 lg:p-24 border border-slate-800/80 overflow-hidden shadow-2xl transition-all duration-700 hover:shadow-[0_0_50px_rgba(168,85,247,0.1)]">
           
           <div 
             className="pointer-events-none absolute -inset-px opacity-0 group-hover:opacity-100 transition-opacity duration-500 hidden md:block"
@@ -529,11 +584,11 @@ export default function LandingPage() {
               </div>
               <h2 className="text-3xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight leading-tight">Athlete ID & Leaderboards</h2>
               <p className="text-slate-400 text-base sm:text-xl font-medium leading-relaxed max-w-lg">
-                Instantly sync your Athletic.net PRs. Get your proprietary Recruit Score, climb the uncommitted state leaderboards, and earn Trust Badges to prove your identity.
+                Instantly sync your Athletic.net profile. Get your proprietary Recruit Score, climb the uncommitted state leaderboards, and earn Trust Badges to prove your identity.
               </p>
               
               <ul className="space-y-3 sm:space-y-4 pt-2 sm:pt-4 pb-4 sm:pb-8">
-                {['One-click Athletic.net Sync', 'State & National PR Rankings', 'Coach Verification Badges'].map((item, i) => (
+                {['One-click Athletic.net Sync', 'State & National Profile Rankings', 'Coach Verification Badges'].map((item, i) => (
                   <li key={i} className="flex items-center text-slate-300 font-bold text-sm sm:text-lg">
                     <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-purple-500/20 flex items-center justify-center mr-3 sm:mr-4 shrink-0 border border-purple-500/30">
                       <CheckCircle2 className="w-3 h-3 sm:w-4 sm:h-4 text-purple-400" />
@@ -543,13 +598,13 @@ export default function LandingPage() {
                 ))}
               </ul>
               
-              <Link href="/login" className="w-full sm:w-auto inline-flex items-center justify-center px-6 sm:px-8 py-3.5 sm:py-4 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white rounded-xl sm:rounded-full font-bold text-sm sm:text-lg transition-all shadow-[0_0_20px_rgba(168,85,247,0.1)] hover:shadow-[0_0_30px_rgba(168,85,247,0.3)] group/btn relative z-20">
+              <Link href="/login" className="w-full sm:w-auto inline-flex items-center justify-center px-6 sm:px-8 py-3.5 sm:py-4 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white rounded-xl sm:rounded-full font-bold text-sm sm:text-lg transition-all duration-300 shadow-[0_0_20px_rgba(168,85,247,0.1)] hover:shadow-[0_0_40px_rgba(168,85,247,0.4)] hover:scale-105 group/btn relative z-20">
                 Create Your Profile <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 ml-2 group-hover/btn:translate-x-2 transition-transform" />
               </Link>
             </div>
 
-            {/* 🚨 DYNAMIC AUTO-CYCLING LEADERBOARD CARDS (CENTER-LOCKED) 🚨 */}
-            <div className="flex-1 w-full relative min-h-[480px] sm:min-h-[500px] flex items-center justify-center mt-12 lg:mt-0 z-20">
+            {/* 🚨 DYNAMIC AUTO-CYCLING LEADERBOARD CARDS (CLEANED) 🚨 */}
+            <div className="flex-1 w-full relative min-h-[440px] sm:min-h-[480px] flex items-center justify-center mt-12 lg:mt-0 z-20">
               
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[320px] sm:w-[400px] h-[320px] sm:h-[400px] rounded-full border border-slate-700/50 z-0 animate-[spin_10s_linear_infinite]"></div>
 
@@ -558,29 +613,25 @@ export default function LandingPage() {
                   idx === activeAthleteIdx && (
                     <div 
                       key={athlete.id} 
-                      className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full bg-[#0a1128] border border-slate-700 shadow-2xl rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-8 text-center animate-in fade-in zoom-in-95 duration-500"
+                      className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full bg-[#0a1128] border border-slate-700 shadow-2xl rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-8 text-center animate-in fade-in zoom-in-95 duration-500 hover:scale-[1.02] transition-transform"
                     >
                       <div className="absolute -top-4 sm:-top-5 -right-4 sm:-right-5 w-10 h-10 sm:w-12 sm:h-12 bg-yellow-400 text-yellow-900 rounded-full border-4 border-[#0a1128] flex items-center justify-center font-black text-lg sm:text-xl shadow-lg z-40 transform rotate-12">
                         #{athlete.rank}
                       </div>
 
-                      <div className={`w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-br ${athlete.color} rounded-full mx-auto mb-4 sm:mb-6 shadow-[0_0_30px_rgba(168,85,247,0.4)] flex items-center justify-center border-[3px] sm:border-4 border-slate-800 text-white font-black text-2xl sm:text-3xl`}>
+                      <div className={`w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-br ${athlete.color} rounded-full mx-auto mb-6 sm:mb-8 shadow-[0_0_30px_rgba(168,85,247,0.4)] flex items-center justify-center border-[3px] sm:border-4 border-slate-800 text-white font-black text-2xl sm:text-3xl`}>
                         {athlete.initials}
                       </div>
                       
-                      <h3 className="text-xl sm:text-2xl font-black text-white leading-tight truncate mb-1">
+                      <h3 className="text-xl sm:text-2xl font-black text-white leading-tight truncate mb-2">
                         {athlete.firstName} {athlete.lastName}
                       </h3>
-                      <p className="text-xs sm:text-sm font-bold text-slate-400 mb-5 sm:mb-6">
-                        <MapPin className="w-3 h-3 inline mr-1 -mt-0.5" />{athlete.highSchool}
+                      
+                      <p className="text-sm sm:text-base font-bold text-slate-400 mb-6 sm:mb-8 flex items-center justify-center">
+                        <MapPin className="w-3.5 h-3.5 inline mr-1.5 opacity-80" />{athlete.highSchool}
                       </p>
 
-                      <div className="bg-slate-900 border border-slate-800 p-4 sm:p-5 rounded-xl sm:rounded-2xl mb-4 sm:mb-6">
-                        <span className="block text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">{athlete.event}</span>
-                        <span className="text-2xl sm:text-3xl font-black text-white">{athlete.mark}</span>
-                      </div>
-
-                      <div className={`inline-block px-3 py-1.5 sm:py-2 rounded-lg text-[10px] sm:text-xs font-black tracking-widest uppercase shadow-sm ${athlete.tierClass}`}>
+                      <div className={`inline-block px-4 py-2 sm:py-2.5 rounded-lg text-[10px] sm:text-xs font-black tracking-widest uppercase shadow-sm ${athlete.tierClass}`}>
                         {athlete.tier}
                       </div>
                     </div>

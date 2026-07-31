@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { 
   Users, MessageSquare, Trophy, Shield, Crown, Activity, 
@@ -10,7 +10,7 @@ import {
 import Link from 'next/link';
 
 // 🚨 REUSABLE COMPONENTS
-import { ChasedCash } from '@/components/ChasedCash';
+import { Points } from '@/components/Points';
 import { AvatarWithBorder } from '@/components/AnimatedBorders';
 
 // --- GAMIFIED TIER SYSTEM ---
@@ -141,7 +141,8 @@ interface ChatMessage {
 }
 
 export default function TeamHeadquarters() {
-  const supabase = createClient();
+  // 1. STABILITY FIX: Use useState to preserve the client
+  const [supabase] = useState(() => createClient());
   const [loading, setLoading] = useState(true);
   
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
@@ -178,8 +179,14 @@ export default function TeamHeadquarters() {
     setTimeout(() => setToast(null), 5000); 
   };
 
+  // 2. STABILITY FIX: Mounting ref to prevent StrictMode execution overlap
+  const hasFetchedData = useRef(false);
+
   useEffect(() => {
     async function loadTeamData() {
+      if (hasFetchedData.current) return;
+      hasFetchedData.current = true;
+
       try {
         const { data: { session }, error: sessionErr } = await supabase.auth.getSession();
         if (sessionErr) throw sessionErr;
@@ -224,17 +231,16 @@ export default function TeamHeadquarters() {
             showToast(`DB Search Error: ${tmErr.message}`, 'error');
           }
 
-          let safeTeammates = teammates || [];
+          let safeTeammates: any[] = teammates || [];
           
-          if (!safeTeammates.some(t => t.id === userData.id)) {
+          if (!safeTeammates.some((t: any) => t.id === userData.id)) {
             safeTeammates.push(userData);
           }
 
-          const teammateIds = safeTeammates.map(t => t.id);
+          const teammateIds = safeTeammates.map((t: any) => t.id);
 
           let sportsData: any[] = [];
           if (teammateIds.length > 0) {
-            // 🚨 ADDED "metrics" TO THE SELECT SO WE CAN DO ON-THE-FLY SCORE CALCS
             const { data: spData, error: spErr } = await supabase
               .from('athlete_sports')
               .select('athlete_id, sport_name, custom_fit_score, meta_context, metrics, is_active')
@@ -251,11 +257,11 @@ export default function TeamHeadquarters() {
           const scoresMap: Record<string, Record<string, number>> = {};
           const activeSportsMap: Record<string, string[]> = {};
           const globalSportsSet = new Set<string>();
-          const trackMetricsMap: Record<string, any[]> = {}; // Store raw metrics for fast lookup
+          const trackMetricsMap: Record<string, any[]> = {}; 
 
           globalSportsSet.add('Track & Field');
 
-          sportsData.forEach(row => {
+          sportsData.forEach((row: any) => {
             if (!scoresMap[row.athlete_id]) scoresMap[row.athlete_id] = {};
             if (!activeSportsMap[row.athlete_id]) activeSportsMap[row.athlete_id] = [];
             
@@ -274,7 +280,6 @@ export default function TeamHeadquarters() {
             }
             globalSportsSet.add(row.sport_name);
 
-            // Harvest the row metrics specifically for Track & Field
             if (row.sport_name === 'Track & Field' && row.metrics) {
               let parsedMetrics: any[] = [];
               if (Array.isArray(row.metrics)) {
@@ -286,11 +291,10 @@ export default function TeamHeadquarters() {
             }
           });
 
-          const processed = safeTeammates.map(t => {
+          const processed = safeTeammates.map((t: any) => {
             let trackPrScore = 0;
             const tGender = t.gender || 'Boys';
             
-            // 1. Evaluate Legacy `prs` JSON
             let parsedPrs: any[] = [];
             if (Array.isArray(t.prs)) {
               parsedPrs = t.prs;
@@ -307,8 +311,6 @@ export default function TeamHeadquarters() {
               });
             }
 
-            // 2. Evaluate Dynamic `athlete_sports.metrics` 
-            // Handles migrating athletes who have stats but no assigned `custom_fit_score`
             const newTrackMetrics = trackMetricsMap[t.id] || [];
             if (newTrackMetrics.length > 0) {
               newTrackMetrics.forEach((m: any) => {
@@ -327,7 +329,6 @@ export default function TeamHeadquarters() {
             }
 
             const integratedScores = { ...(scoresMap[t.id] || {}) };
-            // Save whichever score is highest (Legacy vs New Table vs DB Score)
             const savedDbScore = integratedScores['Track & Field'] || 0;
             integratedScores['Track & Field'] = Math.max(savedDbScore, trackPrScore);
 
@@ -349,7 +350,8 @@ export default function TeamHeadquarters() {
           const sortedSportsArray = Array.from(globalSportsSet);
           setAvailableSports(sortedSportsArray);
           
-          if (sortedSportsArray.length > 0 && !sortedSportsArray.includes(activeSport)) {
+          // Set initial default sport natively without triggering loops
+          if (sortedSportsArray.length > 0) {
             setActiveSport(sortedSportsArray[0]);
           }
 
@@ -369,7 +371,7 @@ export default function TeamHeadquarters() {
     }
     
     loadTeamData();
-  }, [supabase, activeSport]);
+  }, [supabase]); // 3. STABILITY FIX: activeSport removed from dependencies
 
   // --- TEAM ONBOARDING LOGIC ---
   useEffect(() => {
@@ -394,14 +396,14 @@ export default function TeamHeadquarters() {
         .not('high_school', 'is', null)
         .limit(20);
 
-      const uniqueSchools = new Map();
+      const uniqueSchools = new Map<string, any>();
 
       if (officialTeams) {
-        officialTeams.forEach(t => uniqueSchools.set(t.high_school_name, t));
+        officialTeams.forEach((t: any) => uniqueSchools.set(t.high_school_name, t));
       }
 
       if (athleteSchools) {
-        athleteSchools.forEach(a => {
+        athleteSchools.forEach((a: any) => {
           if (a.high_school && !uniqueSchools.has(a.high_school)) {
             uniqueSchools.set(a.high_school, {
               high_school_name: a.high_school,
@@ -548,7 +550,7 @@ export default function TeamHeadquarters() {
       setUserCoins(newBalance);
       setLastCashClaim(new Date(now));
 
-      showToast(`Payload Claimed! +${totalPendingCash.toLocaleString()} ChasedCash added.`, 'success');
+      showToast(`Payload Claimed! +${totalPendingCash.toLocaleString()} Points added.`, 'success');
     } catch (err: any) {
       showToast(err.message, 'error');
     } finally {
@@ -568,7 +570,7 @@ export default function TeamHeadquarters() {
         const { error } = await supabase.from('athletes').update({ coins: newBalance }).eq('id', currentUser.id);
         if (error) throw error;
         setUserCoins(newBalance);
-        rewardMessage = "Milestone Reached! +1,000 ChasedCash awarded.";
+        rewardMessage = "Milestone Reached! +1,000 Points awarded.";
       } else {
         const { error } = await supabase.from('athletes').update({ is_premium: true }).eq('id', currentUser.id);
         if (error) throw error;
@@ -760,7 +762,7 @@ export default function TeamHeadquarters() {
 
           <div className="flex items-center gap-3">
             <div className="bg-slate-950/50 px-5 py-3 rounded-2xl border border-slate-800 flex items-center gap-2 shadow-inner">
-              <ChasedCash className="w-5 h-5 text-emerald-400" />
+              <Points className="w-5 h-5 text-emerald-400" />
               <span className="font-black text-xl text-white">{userCoins.toLocaleString()}</span>
             </div>
           </div>
@@ -887,7 +889,7 @@ export default function TeamHeadquarters() {
                     <Target className="w-8 h-8 text-amber-500" /> Bounty Multiplier
                   </h2>
                   <p className="text-amber-200/80 font-medium max-w-lg">
-                    Earn ChasedCash for every athlete that joins your school after you. The more total athletes signed up from your school, the higher the payout multiplier grows for everyone!
+                    Earn Points for every athlete that joins your school after you. The more total athletes signed up from your school, the higher the payout multiplier grows for everyone!
                   </p>
                 </div>
                 <div className="text-center bg-slate-950/50 p-6 rounded-2xl border border-amber-500/30 backdrop-blur-md shrink-0 min-w-[200px]">
@@ -943,7 +945,7 @@ export default function TeamHeadquarters() {
                   disabled={claimableRecruits.length === 0 || isClaiming}
                   className="w-full mt-auto bg-gradient-to-r from-emerald-400 to-emerald-600 hover:from-emerald-300 hover:to-emerald-500 text-emerald-950 font-black py-4 rounded-xl transition-all shadow-[0_0_15px_rgba(16,185,129,0.2)] hover:scale-[1.02] disabled:opacity-50 disabled:hover:scale-100 flex items-center justify-center gap-2"
                 >
-                  {isClaiming ? 'Claiming...' : `Claim +${totalPendingCash.toLocaleString()} ChasedCash`} <ArrowRight className="w-5 h-5" />
+                  {isClaiming ? 'Claiming...' : `Claim +${totalPendingCash.toLocaleString()} Points`} <ArrowRight className="w-5 h-5" />
                 </button>
               </div>
 

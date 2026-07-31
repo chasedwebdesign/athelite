@@ -1,8 +1,14 @@
-import './globals.css';
+import type { Metadata } from 'next';
+import { Analytics } from '@vercel/analytics/react';
 import Navbar from '@/components/Navbar';
-import { Analytics } from '@vercel/analytics/react'; // 🚨 NEW IMPORT
 
-export const metadata = {
+// @ts-ignore: Silences VS Code's TS Server false-positive on sibling CSS files
+// eslint-disable-next-line
+import './globals.css';
+
+export const metadata: Metadata = {
+  metadataBase: new URL('https://www.chasedsports.com'),
+  
   title: 'ChasedSports | The Athletic Recruiting Network',
   description: 'The data-driven recruiting platform connecting high school athletes with college programs. Build your profile, verify your stats, and discover your true market value.',
   
@@ -14,7 +20,7 @@ export const metadata = {
     siteName: 'ChasedSports',
     images: [
       {
-        url: '/icon.png', // Pointing directly to your existing icon!
+        url: '/icon.png', // Because of metadataBase, Next.js now knows this is https://www.chasedsports.com/icon.png
         width: 512,       // Standard icon width
         height: 512,      // Standard icon height
         alt: 'ChasedSports Logo',
@@ -33,9 +39,9 @@ export const metadata = {
 
 export default function RootLayout({
   children,
-}: {
+}: Readonly<{
   children: React.ReactNode;
-}) {
+}>) {
   return (
     <html lang="en">
       <body className="bg-[#F8FAFC]">

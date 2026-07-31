@@ -143,7 +143,15 @@ export default function EmailBuilder() {
         
         const activeSports: AthleteSportContext[] = (athleteData.athlete_sports || [])
           .filter((sport: any) => sport.is_active === true)
-          .map((sport: any) => ({ ...sport, metrics: Array.isArray(sport.metrics) ? sport.metrics : [] }));
+          .map((sport: any) => {
+            // Safely map metrics whether they were saved as {name, value} or legacy {event, mark}
+            let parsedMetrics = Array.isArray(sport.metrics) ? sport.metrics : [];
+            parsedMetrics = parsedMetrics.map((m: any) => ({
+              name: m.name || m.event || 'Unknown',
+              value: m.value || m.mark || 'Unknown'
+            }));
+            return { ...sport, metrics: parsedMetrics };
+          });
           
         setAthleteSports(activeSports);
         
@@ -174,8 +182,6 @@ export default function EmailBuilder() {
           } else {
             if (initialContext && initialContext.metrics.length > 0) {
               setSelectedMetrics(initialContext.metrics.slice(0, 2));
-            } else if (athleteData.prs && Array.isArray(athleteData.prs) && athleteData.prs.length > 0) {
-              setSelectedMetrics(athleteData.prs.slice(0, 2).map((pr: any) => ({ name: pr.event, value: pr.mark })));
             }
           }
         }
@@ -216,11 +222,6 @@ export default function EmailBuilder() {
   const availableSportsList = athleteSports.map(s => s.sport_name);
   let availableMetricsToSelect: Metric[] = currentSportContext?.metrics || [];
   
-  const isTrack = selectedSport.toLowerCase().includes('track') || selectedSport.toLowerCase().includes('cross country') || selectedSport.toLowerCase().includes('xc');
-  if (isTrack && availableMetricsToSelect.length === 0 && athlete?.prs && Array.isArray(athlete.prs)) {
-    availableMetricsToSelect = athlete.prs.map((pr: any) => ({ name: pr.event, value: pr.mark }));
-  }
-
   const handleToggleMetric = (metric: Metric) => {
     const exists = selectedMetrics.some(m => m.name === metric.name);
     if (exists) setSelectedMetrics(selectedMetrics.filter(m => m.name !== metric.name));

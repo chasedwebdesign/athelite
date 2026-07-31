@@ -163,7 +163,7 @@ const getAthleteProjection = (prs: any[], gender: string) => {
   let bestScore = 0;
   let bestTier = 'Developmental';
 
-  prs.forEach((pr) => {
+  prs.forEach((pr: any) => {
     if (!pr.event || !pr.mark) return;
     const score = getEventScore(pr.mark, pr.event, gender);
     if (score > bestScore) bestScore = score;
@@ -275,27 +275,45 @@ export default function CollegeCoachDashboard() {
       const { data: messageData } = await supabase.from('messages').select('id').eq('sender_email', session.user.email).eq('is_read', false);
       if (messageData) setUnreadCount(messageData.length);
 
+      // UPDATED QUERY: We map to `athlete_sports(metrics)` since `prs` no longer exists on `athletes`.
       const { data: savedData } = await supabase
         .from('saved_recruits')
-        .select(`id, athlete_id, athletes (id, first_name, last_name, high_school, state, grad_year, gender, avatar_url, prs)`)
+        .select(`id, athlete_id, athletes (id, first_name, last_name, high_school, state, grad_year, gender, avatar_url, athlete_sports (metrics))`)
         .eq('coach_id', session.user.id)
         .order('created_at', { ascending: false });
 
       if (savedData) {
-        const formattedData = savedData.map((item: any) => ({
-          ...item,
-          athletes: Array.isArray(item.athletes) ? item.athletes[0] : item.athletes
-        }));
+        const formattedData = savedData.map((item: any) => {
+          const athleteObj = Array.isArray(item.athletes) ? item.athletes[0] : item.athletes;
+          let combinedMetrics: any[] = [];
+          
+          if (athleteObj?.athlete_sports) {
+            const sports = Array.isArray(athleteObj.athlete_sports) ? athleteObj.athlete_sports : [athleteObj.athlete_sports];
+            sports.forEach((sport: any) => {
+              if (sport.metrics && Array.isArray(sport.metrics)) {
+                combinedMetrics = [...combinedMetrics, ...sport.metrics];
+              }
+            });
+          }
+
+          return {
+            ...item,
+            athletes: {
+              ...athleteObj,
+              metrics: combinedMetrics
+            }
+          };
+        });
 
         setWatchlist(formattedData);
         
-        const hotLeads = formattedData.filter(item => {
-          return item.athletes?.prs?.some((pr: any) => isRecentPR(pr.date));
+        const hotLeads = formattedData.filter((item: any) => {
+          return item.athletes?.metrics?.some((metric: any) => isRecentPR(metric.date));
         });
         setHotLeadsCount(hotLeads.length);
       }
 
-      // LOAD SCOUTED ATHLETES
+      // LOAD SCOUTED ATHLETES (This table still maintains its own local JSONB schema)
       const { data: scoutedData } = await supabase
         .from('scouted_athletes')
         .select('*')
@@ -550,10 +568,10 @@ export default function CollegeCoachDashboard() {
     if (watchlist.length === 0) return;
 
     const headers = ['First Name', 'Last Name', 'High School', 'State', 'Grad Year', 'Top Event', 'Top Mark'];
-    const csvData = watchlist.map(item => {
+    const csvData = watchlist.map((item: any) => {
       const a = item.athletes;
       if (!a) return '';
-      const topPr = a.prs && a.prs.length > 0 ? a.prs[0] : { event: 'N/A', mark: 'N/A' };
+      const topPr = a.metrics && a.metrics.length > 0 ? a.metrics[0] : { event: 'N/A', mark: 'N/A' };
       return `"${a.first_name}","${a.last_name}","${a.high_school}","${a.state || 'N/A'}","${a.grad_year || 'N/A'}","${topPr.event}","${topPr.mark}"`;
     });
 
@@ -1059,13 +1077,13 @@ export default function CollegeCoachDashboard() {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  {watchlist.map((item) => {
+                  {watchlist.map((item: any) => {
                     const athlete = item.athletes;
                     if (!athlete) return null;
 
-                    const hasRecentPR = athlete.prs?.some((pr: any) => isRecentPR(pr.date));
-                    const displayPrs = athlete.prs?.slice(0, 4) || [];
-                    const extraPrsCount = (athlete.prs?.length || 0) - 4;
+                    const hasRecentPR = athlete.metrics?.some((metric: any) => isRecentPR(metric.date));
+                    const displayPrs = athlete.metrics?.slice(0, 4) || [];
+                    const extraPrsCount = (athlete.metrics?.length || 0) - 4;
 
                     return (
                       <div key={item.id} className="bg-white border border-slate-200 rounded-[1.5rem] p-6 hover:border-indigo-300 hover:shadow-lg transition-all group relative flex flex-col">
@@ -1113,12 +1131,12 @@ export default function CollegeCoachDashboard() {
                           </h5>
                           {displayPrs.length > 0 ? (
                             <div className="grid grid-cols-2 gap-2">
-                              {displayPrs.map((pr: any, i: number) => {
-                                const isRecent = isRecentPR(pr.date);
+                              {displayPrs.map((metric: any, i: number) => {
+                                const isRecent = isRecentPR(metric.date);
                                 return (
                                   <div key={i} className={`p-2.5 rounded-xl border ${isRecent ? 'bg-orange-50 border-orange-200 shadow-sm' : 'bg-white border-slate-100'}`}>
-                                    <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider truncate mb-0.5">{pr.event}</span>
-                                    <span className={`block font-black text-sm ${isRecent ? 'text-orange-600' : 'text-indigo-600'}`}>{pr.mark}</span>
+                                    <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider truncate mb-0.5">{metric.event}</span>
+                                    <span className={`block font-black text-sm ${isRecent ? 'text-orange-600' : 'text-indigo-600'}`}>{metric.mark}</span>
                                   </div>
                                 );
                               })}

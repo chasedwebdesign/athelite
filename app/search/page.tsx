@@ -1,16 +1,15 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, Suspense, useRef } from 'react';
 import { createClient } from '@/utils/supabase/client';
-import { MapPin, Trophy, Search, Activity, ChevronRight, BookOpen, Users, SearchIcon, TrendingUp, Landmark, SlidersHorizontal, ChevronDown, ChevronUp, DollarSign, Percent, Award, RotateCcw, Bookmark, RefreshCw, Target, Lock, Zap, School, AlertCircle, Map, X, Crown, Eye, EyeOff, Flame, Briefcase, Wallet } from 'lucide-react';
+import { 
+  MapPin, Trophy, Search, Activity, ChevronRight, BookOpen, 
+  TrendingUp, Landmark, SlidersHorizontal, ChevronDown, 
+  ChevronUp, DollarSign, Percent, Award, RotateCcw, Bookmark, 
+  RefreshCw, Target, Zap, School, AlertCircle, Map, X, Crown, 
+  Eye, EyeOff, Flame, Briefcase, Wallet, ShieldCheck, Medal
+} from 'lucide-react';
 import Link from 'next/link';
-
-// --- IMPORT THE REUSABLE PRO GATE ---
-import ProGate from '@/components/ProGate';
-
-// --- ALIGN WITH PRO GATE LAUNCH TIMELINE ---
-const PRO_LAUNCH_DATE = new Date('2026-08-08T00:00:00Z'); 
-const FOUNDER_FREE_MONTHS = 6;
 
 // --- UMBRELLA MAJOR MAPPING ---
 const UMBRELLA_MAP: Record<string, string> = {
@@ -67,9 +66,6 @@ function getUmbrellaMajor(searchTerm: string): string {
 }
 
 // --- TRACK & FIELD DASHBOARD CALCULATOR ---
-const FIELD_EVENTS = ['Shot Put', 'Discus', 'Javelin', 'Hammer', 'High Jump', 'Pole Vault', 'Long Jump', 'Triple Jump'];
-
-// FIX: Added 'text?: string' to the Type definition to resolve the compiler error in the Girls section
 const RECRUITING_STANDARDS: Record<string, Record<string, { t1: number, t2: number, t3: number, t4: number, t5: number, t6: number, t7: number, isField?: boolean, text?: string }>> = {
   'Boys': {
     '60 Meters': { t1: 6.75, t2: 6.90, t3: 7.05, t4: 7.20, t5: 7.40, t6: 7.60, t7: 8.00 },
@@ -199,7 +195,6 @@ const getAthleteProjection = (prs: any[], gender: string) => {
 const getCalculatedRating = (college: any, program: any) => {
     let rating = program?.team_performance_rating || 0;
     
-    // Critical Fallback for programs missing rating in DB
     if (rating === 0 && college) {
         const div = college.division || '';
         const acc = parseFloat(college.acceptance_rate || '100');
@@ -220,7 +215,7 @@ const getCalculatedRating = (college: any, program: any) => {
     return rating;
 };
 
-// --- DYNAMIC BADGE CALCULATOR ---
+// --- DYNAMIC MATCH BADGE GENERATOR ---
 const getBadgeDetails = (college: any, selectedSport: string, useScoreMatch: boolean, athleteScore: number) => {
     let badgeColor = "bg-slate-900 border-slate-800 text-slate-500";
     let badgeText = "UR";
@@ -237,19 +232,19 @@ const getBadgeDetails = (college: any, selectedSport: string, useScoreMatch: boo
         if (useScoreMatch && rating > 0) {
             const diff = rating - athleteScore;
             if (diff <= 0) {
-                badgeColor = "bg-emerald-950/60 border-emerald-500/40 text-emerald-400";
+                badgeColor = "bg-emerald-950/60 border-emerald-500/40 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.3)]";
                 badgeText = "Target";
                 badgeSub = "MATCH";
             } else if (diff <= 5) {
-                badgeColor = "bg-blue-950/60 border-blue-500/40 text-blue-400";
+                badgeColor = "bg-blue-950/60 border-blue-500/40 text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.3)]";
                 badgeText = "Walk-On";
                 badgeSub = "MATCH";
             } else if (diff <= 15) {
-                badgeColor = "bg-amber-950/60 border-amber-500/40 text-amber-400";
+                badgeColor = "bg-amber-950/60 border-amber-500/40 text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.3)]";
                 badgeText = "Poss Walk-On";
                 badgeSub = "MATCH";
             } else {
-                badgeColor = "bg-red-950/60 border-red-500/40 text-red-400";
+                badgeColor = "bg-red-950/60 border-red-500/40 text-red-400 shadow-[0_0_15px_rgba(239,68,68,0.3)]";
                 badgeText = "Stretch";
                 badgeSub = "MATCH";
             }
@@ -299,7 +294,6 @@ function formatCurrency(num: number | null | undefined) {
 
 type MatchmakerCategory = 'fit' | 'cost' | 'salary' | 'funding' | 'roi';
 
-// --- EXTRACTOR HELPER FOR THE NEW 'athlete_sports' TABLE ---
 const extractTrackPrs = (sports: any) => {
   if (!Array.isArray(sports)) return [];
   const track = sports?.find((s: any) => s.sport_name === 'Track & Field');
@@ -313,8 +307,9 @@ const extractTrackPrs = (sports: any) => {
   return parsed.map((m: any) => ({ event: m.name, mark: m.value }));
 };
 
-export default function Home() {
-  const supabase = createClient();
+function SearchContent() {
+  // 1. STABILITY FIX: Use useState to prevent the client from dropping during Suspense remounts
+  const [supabase] = useState(() => createClient());
   const [universities, setUniversities] = useState<University[]>([]);
   const [loading, setLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
@@ -322,11 +317,8 @@ export default function Home() {
   const [isInitialized, setIsInitialized] = useState(false); 
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // --- UI Tabs ---
-  const [activeTab, setActiveTab] = useState<'personalized' | 'all'>('personalized');
-  const [matchmakerView, setMatchmakerView] = useState<MatchmakerCategory>('fit');
-
-  // --- Filtration Toggle for Academic Matches ---
+  // --- Matchmaker Filters ---
+  const [activeBonusFilter, setActiveBonusFilter] = useState<MatchmakerCategory | null>(null);
   const [hideAcademicOnly, setHideAcademicOnly] = useState(false);
 
   // --- Auth & Target Schools States ---
@@ -335,9 +327,7 @@ export default function Home() {
   const [isAthlete, setIsAthlete] = useState<boolean>(false);
   const [athleteFirstName, setAthleteFirstName] = useState<string>('');
   
-  // Best score globally in Hero banner.
   const [athleteScore, setAthleteScore] = useState<number>(0); 
-  
   const [athleteGender, setAthleteGender] = useState<string>('');
   const [athleteState, setAthleteState] = useState<string>('');
   
@@ -359,33 +349,15 @@ export default function Home() {
   const [maxTuition, setMaxTuition] = useState('');
   const [sortBy, setSortBy] = useState('');
 
-  // --- SNEAKY PAYWALL EVALUATOR (SYNCED TO PRO GATE LAUNCH TIMELINE) ---
-  const isPreLaunch = useMemo(() => new Date() < PRO_LAUNCH_DATE, []);
-  
-  const isLockedProfile = useMemo(() => {
-      // If they have no profile, they do not have access
-      if (!athleteProfile) return true;
+  // 1. Load User, Score & Check Role
+  // 2. STABILITY FIX: Use a ref boundary to ensure StrictMode and Next navigation doesn't double-trigger session fetch
+  const hasFetchedProfile = useRef(false);
 
-      const isPremium = athleteProfile.is_premium === true;
-      const isFounder = athleteProfile.is_founder === true;
-
-      const now = new Date();
-      const founderExpirationDate = new Date(PRO_LAUNCH_DATE);
-      founderExpirationDate.setMonth(founderExpirationDate.getMonth() + FOUNDER_FREE_MONTHS);
-      const isFounderActive = isFounder && now < founderExpirationDate;
-
-      if (isPreLaunch) {
-          // PRE-LAUNCH: Feature locked to everyone except Founders (and Premium)
-          return !(isFounder || isPremium);
-      } else {
-          // POST-LAUNCH: Feature locked to everyone except Premium users and Active Founders
-          return !(isPremium || isFounderActive);
-      }
-  }, [athleteProfile, isPreLaunch]);
-
-  // --- 1. Load User, Score & Check Role ---
   useEffect(() => {
     async function fetchUserAndSaves() {
+      if (hasFetchedProfile.current) return;
+      hasFetchedProfile.current = true;
+
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user?.id) {
         setCurrentUserId(session.user.id);
@@ -423,13 +395,17 @@ export default function Home() {
           }
           setAthleteScore(bestScore);
 
-          const { data } = await supabase
+          const { data, error } = await supabase
             .from('saved_colleges')
             .select('college_id')
             .eq('athlete_id', session.user.id);
-          
+
+          if (error) {
+            console.error("Error fetching saved colleges:", error.message);
+          }
+
           if (data) {
-            setSavedCollegeIds(new Set(data.map(d => d.college_id)));
+            setSavedCollegeIds(new Set(data.map((d: { college_id: string }) => d.college_id)));
           }
         }
       }
@@ -461,7 +437,6 @@ export default function Home() {
     async function loadInitialState() {
       const savedFilters = sessionStorage.getItem('chasedSportsFilters');
       const savedResults = sessionStorage.getItem('chasedSportsResults');
-      const savedTab = sessionStorage.getItem('chasedSportsTab');
 
       if (savedFilters) {
         const f = JSON.parse(savedFilters);
@@ -478,27 +453,25 @@ export default function Home() {
         setHasSearched(f.hasSearched || false);
         setShowAdvanced(f.showAdvanced || false);
         setHideAcademicOnly(f.hideAcademicOnly || false);
+        setActiveBonusFilter(f.activeBonusFilter || null);
       }
 
       if (savedResults) setUniversities(JSON.parse(savedResults));
-      if (savedTab) setActiveTab(savedTab as 'personalized' | 'all');
-
       setIsInitialized(true);
     }
     
     loadInitialState();
-  }, [supabase]);
+  }, []);
 
   // --- Auto-Save States ---
   useEffect(() => {
     if (!isInitialized) return; 
     const filters = {
       schoolName, selectedSport, selectedGender, selectedDivision, selectedStates,
-      selectedMajor, maxAcceptance, tuitionType, maxTuition, sortBy, hasSearched, showAdvanced, hideAcademicOnly
+      selectedMajor, maxAcceptance, tuitionType, maxTuition, sortBy, hasSearched, showAdvanced, hideAcademicOnly, activeBonusFilter
     };
     sessionStorage.setItem('chasedSportsFilters', JSON.stringify(filters));
-    sessionStorage.setItem('chasedSportsTab', activeTab);
-  }, [isInitialized, schoolName, selectedSport, selectedGender, selectedDivision, selectedStates, selectedMajor, maxAcceptance, tuitionType, maxTuition, sortBy, hasSearched, showAdvanced, activeTab, hideAcademicOnly]);
+  }, [isInitialized, schoolName, selectedSport, selectedGender, selectedDivision, selectedStates, selectedMajor, maxAcceptance, tuitionType, maxTuition, sortBy, hasSearched, showAdvanced, activeBonusFilter, hideAcademicOnly]);
 
   useEffect(() => {
     if (!isInitialized) return;
@@ -511,6 +484,10 @@ export default function Home() {
     } else {
       setSelectedStates([...selectedStates, stateCode]);
     }
+  };
+
+  const toggleBonusFilter = (filter: MatchmakerCategory) => {
+    setActiveBonusFilter(activeBonusFilter === filter ? null : filter);
   };
 
   // --- ACTION: SAVE COLLEGE ---
@@ -576,13 +553,11 @@ export default function Home() {
     setSortBy('');
     setHasSearched(false);
     setHideAcademicOnly(false);
-    setActiveTab('personalized');
-    setMatchmakerView('fit');
+    setActiveBonusFilter(null);
     setUniversities([]);
     setErrorMsg(null);
     sessionStorage.removeItem('chasedSportsFilters');
     sessionStorage.removeItem('chasedSportsResults');
-    sessionStorage.removeItem('chasedSportsTab');
   };
 
   async function handleSearch() {
@@ -595,7 +570,6 @@ export default function Home() {
 
     setLoading(true);
     setHasSearched(true);
-    setActiveTab('personalized'); 
 
     let selectString = `*, programs(sport, gender, operating_expense, team_performance_rating, average_scholarship)`;
     let query = supabase.from('universities').select(selectString);
@@ -641,7 +615,7 @@ export default function Home() {
   };
 
   // --- FILTER & SORT LOGIC ---
-  const validUniversities = useMemo(() => {
+  const sortedAndFilteredUniversities = useMemo(() => {
     let processed = universities.map(uni => {
         let targetProgram = null;
         let hasSport = true;
@@ -717,7 +691,65 @@ export default function Home() {
       return true;
     });
 
-    if (sortBy) {
+    // APPLY SORTING: Bonus Filters completely override basic sortBy
+    if (activeBonusFilter) {
+      filtered.sort((a, b) => {
+        if (activeBonusFilter === 'fit') {
+          const ratingA = a.hasSport ? getCalculatedRating(a, a.targetProgram) : 0;
+          const ratingB = b.hasSport ? getCalculatedRating(b, b.targetProgram) : 0;
+          let scoreA = 0;
+          let scoreB = 0;
+  
+          if (a.hasSport && ratingA > 0 && a.athleteMatchScore && a.athleteMatchScore > 0) {
+              const diffA = Math.abs(ratingA - a.athleteMatchScore);
+              scoreA += 100 - (diffA * 5); 
+          } else if (a.hasSport) {
+              scoreA += ratingA;
+          }
+  
+          if (b.hasSport && ratingB > 0 && b.athleteMatchScore && b.athleteMatchScore > 0) {
+              const diffB = Math.abs(ratingB - b.athleteMatchScore);
+              scoreB += 100 - (diffB * 5);
+          } else if (b.hasSport) {
+              scoreB += ratingB;
+          }
+  
+          scoreA += Math.min((a.median_earnings || 0) / 2000, 50); 
+          scoreB += Math.min((b.median_earnings || 0) / 2000, 50);
+          const accA = parseFloat(a.acceptance_rate || '100');
+          const accB = parseFloat(b.acceptance_rate || '100');
+          scoreA += ((100 - accA) / 4); 
+          scoreB += ((100 - accB) / 4);
+          scoreA += Math.min((a.targetProgram?.operating_expense || 0) / 100000, 10);
+          scoreB += Math.min((b.targetProgram?.operating_expense || 0) / 100000, 10);
+          
+          return scoreB - scoreA;
+        }
+        else if (activeBonusFilter === 'cost') {
+          const costA = getCalculatedTuition(a).amount || Number.MAX_SAFE_INTEGER;
+          const scholA = a.hasSport ? (a.targetProgram?.average_scholarship || 0) : 0;
+          const costB = getCalculatedTuition(b).amount || Number.MAX_SAFE_INTEGER;
+          const scholB = b.hasSport ? (b.targetProgram?.average_scholarship || 0) : 0;
+          return Math.max(0, costA - scholA) - Math.max(0, costB - scholB);
+        }
+        else if (activeBonusFilter === 'salary') {
+          return (b.median_earnings || 0) - (a.median_earnings || 0);
+        }
+        else if (activeBonusFilter === 'funding') {
+          return (b.targetProgram?.operating_expense || 0) - (a.targetProgram?.operating_expense || 0);
+        }
+        else if (activeBonusFilter === 'roi') {
+          const costA = getCalculatedTuition(a).amount || 1;
+          const scholA = a.hasSport ? (a.targetProgram?.average_scholarship || 0) : 0;
+          const netA = Math.max(1, costA - scholA);
+          const costB = getCalculatedTuition(b).amount || 1;
+          const scholB = b.hasSport ? (b.targetProgram?.average_scholarship || 0) : 0;
+          const netB = Math.max(1, costB - scholB);
+          return ((b.median_earnings || 0) / netB) - ((a.median_earnings || 0) / netA);
+        }
+        return 0;
+      });
+    } else if (sortBy) {
       filtered.sort((a, b) => {
         if (sortBy.startsWith('budget')) {
           const valA = a.targetProgram?.operating_expense || 0;
@@ -729,7 +761,6 @@ export default function Home() {
           }
           return valB - valA;
         }
-        
         if (sortBy.startsWith('salary')) {
           const valA = a.median_earnings || 0;
           const valB = b.median_earnings || 0;
@@ -740,7 +771,6 @@ export default function Home() {
           }
           return valB - valA;
         }
-
         if (sortBy.startsWith('tuition')) {
           const valA = tuitionType === 'in_state' ? (a.tuition_in_state || a.tuition || 0) : (a.tuition_out_of_state || a.tuition || 0);
           const valB = tuitionType === 'in_state' ? (b.tuition_in_state || b.tuition || 0) : (b.tuition_out_of_state || b.tuition || 0);
@@ -751,7 +781,6 @@ export default function Home() {
           }
           return valB - valA;
         }
-
         if (sortBy.startsWith('acceptance')) {
           const valA = parseFloat(a.acceptance_rate?.replace('%', '') || '0');
           const valB = parseFloat(b.acceptance_rate?.replace('%', '') || '0');
@@ -776,89 +805,7 @@ export default function Home() {
         });
     }
     return filtered;
-  }, [universities, maxAcceptance, maxTuition, tuitionType, sortBy, selectedSport, selectedGender, isAthlete, athleteGender, athleteProfile, hideAcademicOnly]);
-
-  // --- COMPREHENSIVE MATCHMAKER LISTS ---
-  const matchmakerLists = useMemo(() => {
-    if (!validUniversities.length || !hasSearched) return null;
-
-    const listLimit = 55; // Pull a solid payload window for slicing
-    const isPersonalizedFit = isAthlete && validUniversities.some(u => u.athleteMatchScore && u.athleteMatchScore > 0);
-
-    let topAthleticFits = [...validUniversities].sort((a, b) => {
-        const ratingA = a.hasSport ? getCalculatedRating(a, a.targetProgram) : 0;
-        const ratingB = b.hasSport ? getCalculatedRating(b, b.targetProgram) : 0;
-        let scoreA = 0;
-        let scoreB = 0;
-
-        if (a.hasSport && ratingA > 0 && a.athleteMatchScore && a.athleteMatchScore > 0) {
-            const diffA = Math.abs(ratingA - a.athleteMatchScore);
-            scoreA += 100 - (diffA * 5); 
-        } else if (a.hasSport) {
-            scoreA += ratingA;
-        }
-
-        if (b.hasSport && ratingB > 0 && b.athleteMatchScore && b.athleteMatchScore > 0) {
-            const diffB = Math.abs(ratingB - b.athleteMatchScore);
-            scoreB += 100 - (diffB * 5);
-        } else if (b.hasSport) {
-            scoreB += ratingB;
-        }
-
-        scoreA += Math.min((a.median_earnings || 0) / 2000, 50); 
-        scoreB += Math.min((b.median_earnings || 0) / 2000, 50);
-        const accA = parseFloat(a.acceptance_rate || '100');
-        const accB = parseFloat(b.acceptance_rate || '100');
-        scoreA += ((100 - accA) / 4); 
-        scoreB += ((100 - accB) / 4);
-        scoreA += Math.min((a.targetProgram?.operating_expense || 0) / 100000, 10);
-        scoreB += Math.min((b.targetProgram?.operating_expense || 0) / 100000, 10);
-        
-        return scoreB - scoreA;
-    }).slice(0, listLimit);
-
-    const lowestCostMatches = [...validUniversities]
-      .filter(u => u.tuition_in_state || u.tuition_out_of_state || u.tuition)
-      .sort((a, b) => {
-        const costA = getCalculatedTuition(a).amount || 999999;
-        const scholA = a.hasSport ? (a.targetProgram?.average_scholarship || 0) : 0;
-        const costB = getCalculatedTuition(b).amount || 999999;
-        const scholB = b.hasSport ? (b.targetProgram?.average_scholarship || 0) : 0;
-        return Math.max(0, costA - scholA) - Math.max(0, costB - scholB);
-      }).slice(0, listLimit);
-
-    const highestSalaryMatches = [...validUniversities]
-      .filter(u => u.median_earnings && u.median_earnings > 0)
-      .sort((a, b) => (b.median_earnings || 0) - (a.median_earnings || 0))
-      .slice(0, listLimit);
-
-    const sportMatches = validUniversities.filter(u => u.hasSport);
-    const topFundedMatches = [...sportMatches]
-      .filter(u => u.targetProgram?.operating_expense && u.targetProgram.operating_expense > 0)
-      .sort((a, b) => (b.targetProgram?.operating_expense || 0) - (a.targetProgram?.operating_expense || 0))
-      .slice(0, listLimit);
-
-    const topRoiMatches = [...validUniversities]
-      .filter(u => u.median_earnings && (u.tuition_in_state || u.tuition_out_of_state || u.tuition))
-      .sort((a, b) => {
-        const costA = getCalculatedTuition(a).amount || 1;
-        const scholA = a.hasSport ? (a.targetProgram?.average_scholarship || 0) : 0;
-        const netA = Math.max(1, costA - scholA);
-        const costB = getCalculatedTuition(b).amount || 1;
-        const scholB = b.hasSport ? (b.targetProgram?.average_scholarship || 0) : 0;
-        const netB = Math.max(1, costB - scholB);
-        return ((b.median_earnings || 0) / netB) - ((a.median_earnings || 0) / netA);
-      }).slice(0, listLimit);
-
-    return { 
-        isPersonalizedFit, 
-        fit: topAthleticFits, 
-        cost: lowestCostMatches, 
-        salary: highestSalaryMatches, 
-        funding: topFundedMatches, 
-        roi: topRoiMatches 
-    };
-  }, [validUniversities, hasSearched, isAthlete]);
+  }, [universities, maxAcceptance, maxTuition, tuitionType, sortBy, activeBonusFilter, selectedSport, selectedGender, isAthlete, athleteGender, athleteProfile, hideAcademicOnly]);
 
   const renderReadinessMeter = (uni: University) => {
     if (!uni.hasSport) return null;
@@ -915,168 +862,30 @@ export default function Home() {
     );
   };
 
-  const renderMatchmakerList = () => {
-    if (!matchmakerLists) return null;
-    const currentList = matchmakerLists[matchmakerView];
+  // --- HELPER: GET GAMIFIED BADGE STRINGS ---
+  const getRankBadgeProps = (index: number, filter: MatchmakerCategory | null, states: string[]) => {
+      if (!filter || index >= 5) return null;
+      let region = "US";
+      if (states.length === 1) region = states[0];
+      else if (states.length > 1) region = "Search";
 
-    if (!currentList || currentList.length === 0) {
-        return (
-            <div className="block bg-white/60 backdrop-blur-md border border-slate-200 border-dashed p-10 rounded-[2rem] flex flex-col items-center justify-center text-center">
-                <AlertCircle className="w-8 h-8 text-slate-300 mb-3" />
-                <p className="text-sm font-medium text-slate-500">No data available for this category based on your current filters.</p>
-            </div>
-        );
-    }
+      let category = "";
+      if (filter === 'fit') category = "Athletic Fit";
+      if (filter === 'cost') category = "Lowest Cost";
+      if (filter === 'salary') category = "Salary Rank";
+      if (filter === 'funding') category = "Program Fund";
+      if (filter === 'roi') category = "Top ROI";
 
-    const currentSportConfigLabel = selectedSport || athleteProfile?.primary_sport || 'General Metrics';
+      let styling = "";
+      if (index === 0) styling = "bg-gradient-to-br from-yellow-400 to-amber-600 shadow-[0_0_30px_rgba(251,191,36,0.6)] border border-yellow-200 text-yellow-950";
+      else if (index === 1) styling = "bg-gradient-to-br from-slate-300 to-slate-500 shadow-[0_0_30px_rgba(203,213,225,0.6)] border border-slate-100 text-slate-900";
+      else if (index === 2) styling = "bg-gradient-to-br from-orange-400 to-orange-700 shadow-[0_0_30px_rgba(249,115,22,0.6)] border border-orange-300 text-orange-950";
+      else styling = "bg-gradient-to-br from-blue-400 to-indigo-600 shadow-[0_0_30px_rgba(99,102,241,0.6)] border border-blue-300 text-white";
 
-    return (
-        <div className="bg-slate-900 border border-slate-800 rounded-[2rem] overflow-hidden shadow-[0_10px_40px_-10px_rgba(0,0,0,0.5)] animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="p-6 border-b border-slate-800 bg-slate-900/80 flex flex-col sm:flex-row items-center justify-between gap-4 backdrop-blur-md">
-                <div className="flex items-center gap-3 self-start sm:self-auto">
-                    {matchmakerView === 'fit' && <Target className="w-6 h-6 text-purple-500" />}
-                    {matchmakerView === 'cost' && <Wallet className="w-6 h-6 text-emerald-500" />}
-                    {matchmakerView === 'salary' && <Briefcase className="w-6 h-6 text-blue-500" />}
-                    {matchmakerView === 'funding' && <Award className="w-6 h-6 text-yellow-500" />}
-                    {matchmakerView === 'roi' && <TrendingUp className="w-6 h-6 text-amber-500" />}
-                    
-                    <div>
-                        <h3 className="font-black text-lg text-white">
-                            {matchmakerView === 'fit' && (matchmakerLists.isPersonalizedFit ? "Colleges That Fit You" : "Highest Rated Programs")}
-                            {matchmakerView === 'cost' && "Cheapest Tuition (Net Cost)"}
-                            {matchmakerView === 'salary' && "Highest Median Salary"}
-                            {matchmakerView === 'funding' && "Best Funded Programs"}
-                            {matchmakerView === 'roi' && "Top ROI Ranking"}
-                        </h3>
-                        <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">
-                            {matchmakerView === 'fit' && (matchmakerLists.isPersonalizedFit ? "Ranked by Athletic Fit & Median Salary" : "Ranked by Athletic Caliber & Median Salary")}
-                            {matchmakerView === 'cost' && "Ranked by Tuition minus Avg Scholarship"}
-                            {matchmakerView === 'salary' && "Ranked by 10-Yr Median Earnings (Regardless of Sport)"}
-                            {matchmakerView === 'funding' && "Ranked by Program Operating Expense"}
-                            {matchmakerView === 'roi' && "Median Salary vs Net Cost"}
-                        </p>
-                    </div>
-                </div>
-
-                <div className="bg-slate-950/80 border border-slate-800/80 backdrop-blur-md p-2.5 rounded-xl text-left sm:text-right w-full sm:w-auto shrink-0 shadow-inner mt-4 sm:mt-0">
-                   <span className="block text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none mb-1">Target Sport Matrix</span>
-                   <span className="text-xs font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300 uppercase tracking-tight">{currentSportConfigLabel}</span>
-                </div>
-            </div>
-            
-            <div className="divide-y divide-slate-800/50 max-h-[800px] overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-slate-900 [&::-webkit-scrollbar-thumb]:bg-slate-700 [&::-webkit-scrollbar-thumb]:rounded-full relative">
-                {currentList.map((college, idx) => {
-                    const tuitionInfo = getCalculatedTuition(college);
-                    const netCost = Math.max(0, tuitionInfo.amount - (college.hasSport ? (college.targetProgram?.average_scholarship || 0) : 0));
-                    
-                    const useScoreMatch = isAthlete && college.athleteMatchScore && college.athleteMatchScore > 0;
-                    const { badgeColor, badgeText, badgeSub } = getBadgeDetails(college, selectedSport, !!useScoreMatch, college.athleteMatchScore || 0);
-
-                    const isSaved = savedCollegeIds.has(college.id);
-                    const isProcessing = savingIds.has(college.id);
-                    
-                    // 🚨 REQ CHECK: IF SNEAKY PAYWALL IS ENGAGED AND OVER INDEX 2, DEEP BLUR THE CARDS
-                    const isBlurredRow = isLockedProfile && idx > 2;
-
-                    return (
-                    <div key={`${matchmakerView}-${college.id}`} className="relative">
-                        
-                        {/* THE BLUR WRAPPER COMPONENT */}
-                        <div className={`flex flex-col xl:flex-row xl:items-center gap-4 p-5 hover:bg-slate-800/60 transition-all group ${isBlurredRow ? 'blur-md opacity-20 pointer-events-none select-none z-0' : ''}`}>
-                            
-                            <Link 
-                                href={`/college/${college.id}?${new URLSearchParams({ ...(selectedSport && { sport: selectedSport }), ...(selectedGender && { gender: selectedGender }) }).toString()}`} 
-                                className="flex items-center gap-4 flex-1 min-w-0 group/link"
-                            >
-                                <span className="w-6 text-slate-600 font-black text-sm italic group-hover/link:text-white transition-colors">#{idx+1}</span>
-                                <div className="w-10 h-10 bg-slate-950 border border-slate-800 rounded-lg flex items-center justify-center shrink-0">
-                                    <School className="w-5 h-5 text-slate-400 group-hover/link:text-white transition-colors" />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <h4 className="font-bold text-base truncate text-slate-200 group-hover/link:text-white transition-colors flex items-center">
-                                        {college.name}
-                                        {!college.hasSport && (selectedSport || athleteProfile?.primary_sport) && (
-                                            <span className="text-[9px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded font-black tracking-widest uppercase ml-2 shrink-0 border border-slate-700">Academic Match Only</span>
-                                        )}
-                                    </h4>
-                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1.5 mt-0.5">
-                                        {college.city}, {college.state} 
-                                        <span className="text-slate-700">•</span>
-                                        {college.division}
-                                    </p>
-                                </div>
-                            </Link>
-
-                            <div className="grid grid-cols-2 sm:flex sm:flex-row items-center gap-4 sm:gap-6 pl-14 xl:pl-0 w-full xl:w-auto mt-2 xl:mt-0">
-                                <div className="hidden sm:flex flex-col items-end text-right">
-                                    <span className="font-black text-slate-300">{college.acceptance_rate || 'N/A'}</span>
-                                    <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">Acceptance</span>
-                                </div>
-                                <div className="hidden sm:flex flex-col items-end text-right">
-                                    <span className="font-black text-blue-400">{college.median_earnings ? `$${college.median_earnings.toLocaleString()}` : 'N/A'}</span>
-                                    <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">10-Yr Salary</span>
-                                </div>
-                                <div className="flex flex-col items-end text-right">
-                                    <span className="font-black text-slate-300 flex items-center gap-1">
-                                        ${tuitionInfo.amount.toLocaleString()}
-                                        {tuitionInfo.isInState && <span className="text-[8px] bg-slate-800 text-slate-400 px-1 py-0.5 rounded uppercase font-black" title="In-State Applied">IN</span>}
-                                    </span>
-                                    <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">Tuition /yr</span>
-                                </div>
-                                <div className="flex flex-col items-end text-right">
-                                    <span className="font-black text-emerald-400">${netCost.toLocaleString()}</span>
-                                    <span className="text-[9px] font-bold text-emerald-500/70 uppercase tracking-widest mt-0.5">Net Cost /yr</span>
-                                </div>
-
-                                <div className={`flex flex-col items-center justify-center min-w-[90px] h-[42px] px-2 rounded-xl border shadow-sm shrink-0 ${badgeColor}`}>
-                                    <span className={`font-black tracking-widest leading-none text-center ${!college.hasSport ? 'text-[10px]' : (badgeText.length > 5 ? 'text-xs' : 'text-sm')}`}>{badgeText}</span>
-                                    <span className="text-[8px] font-bold opacity-70 mt-1 uppercase tracking-widest">{badgeSub}</span>
-                                </div>
-
-                                {!isCoach && (
-                                    <button
-                                        onClick={(e) => toggleSaveCollege(e, college.id)}
-                                        disabled={isProcessing}
-                                        className={`p-2.5 rounded-xl border transition-all shadow-sm shrink-0 ${
-                                            isSaved 
-                                                ? 'bg-blue-500/20 border-blue-500/30 text-blue-400 shadow-[0_0_10px_rgba(59,130,246,0.2)]' 
-                                                : 'bg-slate-800/50 border-slate-700/50 text-slate-500 hover:text-blue-400 hover:border-blue-500/30 hover:bg-slate-800'
-                                        }`}
-                                    >
-                                        {isProcessing ? (
-                                            <RefreshCw className="w-5 h-5 animate-spin" />
-                                        ) : (
-                                            <Bookmark className={`w-5 h-5 ${isSaved ? 'fill-current' : ''}`} />
-                                        )}
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* 🚨 REQ CHECK: INJECT GORGEOUS INTERACTIVE CONVERSION LOCK BOX DIRECTLY BENEATH ROW #3 */}
-                        {idx === 2 && isLockedProfile && (
-                           <div className="absolute inset-x-0 bottom-[-280px] h-[280px] bg-gradient-to-t from-slate-950 via-slate-900/95 to-transparent flex flex-col items-center justify-end pb-8 z-50 text-center px-4 border-b border-slate-800/60 pointer-events-auto">
-                              <Crown className="w-8 h-8 text-amber-400 mb-2 drop-shadow-[0_0_15px_rgba(251,191,36,0.6)] animate-bounce" />
-                              <h4 className="font-black text-white text-lg sm:text-xl tracking-tight">
-                                {isPreLaunch ? "Unlock Early Access Matchmaking" : "Unlock 50+ Top Targeted Programs"}
-                              </h4>
-                              <p className="text-slate-400 text-xs max-w-sm mt-1 mb-5 font-semibold">
-                                {isPreLaunch 
-                                    ? "You are viewing the preview tier. Become a Founder to unlock your complete targeted recruitment match matrix list before global launch."
-                                    : "You are viewing the preview tier. Upgrade to a ChasedSports Pro account to unlock your complete targeted recruitment match matrix list."
-                                }
-                              </p>
-                              <Link href="/pro" className="bg-gradient-to-r from-amber-500 via-orange-500 to-fuchsia-500 hover:from-amber-400 hover:to-fuchsia-400 text-slate-950 font-black text-xs uppercase tracking-widest px-8 py-3.5 rounded-xl shadow-xl shadow-amber-500/10 active:scale-[0.98] transition-all">
-                                 {isPreLaunch ? "Claim Founder Access" : "Upgrade to Pro Profile"}
-                              </Link>
-                           </div>
-                        )}
-                    </div>
-                    );
-                })}
-            </div>
-        </div>
-    );
+      return {
+          text: `#${index + 1} ${category} in ${region}`,
+          styling
+      };
   };
 
   const renderedCollegeCards = useMemo(() => {
@@ -1090,7 +899,7 @@ export default function Home() {
       );
     }
 
-    if (hasSearched && validUniversities.length === 0) {
+    if (hasSearched && sortedAndFilteredUniversities.length === 0) {
       return (
         <div className="text-center py-16 bg-white/60 backdrop-blur-3xl rounded-3xl border border-slate-200 border-dashed shadow-sm">
           <Activity className="w-12 h-12 text-slate-300 mx-auto mb-4" />
@@ -1102,7 +911,7 @@ export default function Home() {
 
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {validUniversities.map((uni) => {
+        {sortedAndFilteredUniversities.map((uni, index) => {
           const { amount: tuitionToUse, isInState } = getCalculatedTuition(uni);
           
           let roiMultiplier = null;
@@ -1112,10 +921,19 @@ export default function Home() {
 
           const isSaved = savedCollegeIds.has(uni.id);
           const isProcessing = savingIds.has(uni.id);
+          const rankBadge = getRankBadgeProps(index, activeBonusFilter, selectedStates);
 
           return (
-            <div key={uni.id} className="bg-white/80 backdrop-blur-2xl rounded-3xl p-6 shadow-xl shadow-slate-200/40 border border-slate-100/50 flex flex-col h-full hover:-translate-y-2 hover:shadow-2xl hover:shadow-blue-900/10 transition-all duration-300 group">
-              <div className="flex-grow">
+            <div key={uni.id} className={`relative bg-white/80 backdrop-blur-2xl rounded-3xl p-6 shadow-xl shadow-slate-200/40 border flex flex-col h-full transition-all duration-300 group ${rankBadge ? 'border-blue-300/50 hover:shadow-2xl hover:shadow-blue-500/20 hover:-translate-y-2' : 'border-slate-100/50 hover:shadow-2xl hover:shadow-blue-900/10 hover:-translate-y-2'}`}>
+              
+              {/* GAMIFIED BADGE */}
+              {rankBadge && (
+                  <div className={`absolute -top-4 -left-4 z-20 px-5 py-2 rounded-full font-black text-sm tracking-tight ${rankBadge.styling}`}>
+                      {rankBadge.text}
+                  </div>
+              )}
+
+              <div className="flex-grow pt-2">
                 <h3 className="text-xl font-black text-slate-900 leading-tight mb-3 group-hover:text-blue-600 transition-colors flex flex-col items-start gap-2">
                   {uni.name}
                   {!uni.hasSport && (selectedSport || athleteProfile?.primary_sport) && (
@@ -1202,9 +1020,9 @@ export default function Home() {
                       ...(selectedSport && { sport: selectedSport }),
                       ...(selectedGender && { gender: selectedGender })
                     }).toString()}`}
-                    className="text-sm font-black text-blue-600 flex items-center px-4 py-2 rounded-lg hover:bg-blue-50 transition-colors"
+                    className={`text-sm font-black flex items-center px-4 py-2 rounded-lg transition-colors ${rankBadge ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md hover:from-blue-500 hover:to-indigo-500' : 'text-blue-600 hover:bg-blue-50'}`}
                   >
-                    View Profile 
+                    View More 
                     <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
                   </Link>
                 </div>
@@ -1214,7 +1032,7 @@ export default function Home() {
         })}
       </div>
     );
-  }, [validUniversities, loading, isInitialized, hasSearched, selectedSport, selectedGender, savedCollegeIds, savingIds, isCoach, isAthlete, athleteScore, athleteState, athleteProfile]); 
+  }, [sortedAndFilteredUniversities, loading, isInitialized, hasSearched, selectedSport, selectedGender, savedCollegeIds, savingIds, isCoach, isAthlete, athleteScore, athleteState, athleteProfile, activeBonusFilter, selectedStates]); 
 
   return (
     <main className="min-h-screen bg-[#F8FAFC] font-sans selection:bg-blue-500/30">
@@ -1307,7 +1125,7 @@ export default function Home() {
 
       <div className="max-w-7xl mx-auto px-4 md:px-6 pb-24">
         {/* The Control Panel */}
-        <div className="relative -mt-10 md:-mt-16 bg-white/70 backdrop-blur-3xl p-5 md:p-8 rounded-3xl md:rounded-[2rem] shadow-xl shadow-blue-900/10 border border-white mb-16 transition-all duration-500 z-20">
+        <div className="relative -mt-10 md:-mt-16 bg-white/70 backdrop-blur-3xl p-5 md:p-8 rounded-3xl md:rounded-[2rem] shadow-xl shadow-blue-900/10 border border-white mb-8 transition-all duration-500 z-20">
           
           {/* --- BASIC SETTINGS (Always Visible) --- */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 md:gap-6">
@@ -1439,112 +1257,99 @@ export default function Home() {
           {/* --- BONUS SETTINGS (Advanced) --- */}
           <div className={`transition-all duration-500 ease-in-out overflow-hidden ${showAdvanced ? 'max-h-[800px] opacity-100' : 'max-h-0 opacity-0'}`}>
             <div className="pt-4 pr-6 pb-2"> 
-              <ProGate athleteProfile={athleteProfile} featureName="Advanced Matchmaker Filters">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 pt-4 border-t border-slate-100/50">
                 
-                {/* 🚨 EXPLICIT UI DISCLAIMER FOR FILTER SCOPE 🚨 */}
-                <div className="bg-amber-50/80 backdrop-blur-sm border border-amber-200/60 rounded-xl p-4 mt-2 mb-4 flex items-start gap-3 shadow-sm animate-in fade-in duration-300">
-                   <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-                   <div>
-                      <h4 className="text-[10px] font-black text-amber-700 uppercase tracking-widest">Filter Scope Notice</h4>
-                      <p className="text-xs text-amber-600 font-semibold mt-1 leading-relaxed">
-                         Advanced thresholds and custom sorting rules apply exclusively to the <span className="font-black text-amber-800">All Programs Directory</span> tab. The Gamified Matchmaker Dashboard utilizes a strict algorithmic override to rank your results.
-                      </p>
-                   </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Specific School</label>
+                  <div className="relative flex items-center">
+                    <div className="absolute left-3 pointer-events-none">
+                      <Search className="h-4 w-4 text-slate-400" />
+                    </div>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. Oregon State or Stanford"
+                      value={schoolName}
+                      onChange={(e) => setSchoolName(e.target.value)}
+                      className="w-full bg-slate-50/80 backdrop-blur-sm border border-slate-200/60 text-slate-800 rounded-xl pl-9 pr-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-semibold shadow-sm placeholder:font-normal placeholder:text-slate-400 transition-all"
+                    />
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 pt-4 border-t border-slate-100/50">
-                  
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Specific School</label>
-                    <div className="relative flex items-center">
-                      <div className="absolute left-3 pointer-events-none">
-                        <SearchIcon className="h-4 w-4 text-slate-400" />
-                      </div>
-                      <input 
-                        type="text" 
-                        placeholder="e.g. Oregon State or Stanford"
-                        value={schoolName}
-                        onChange={(e) => setSchoolName(e.target.value)}
-                        className="w-full bg-slate-50/80 backdrop-blur-sm border border-slate-200/60 text-slate-800 rounded-xl pl-9 pr-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-semibold shadow-sm placeholder:font-normal placeholder:text-slate-400 transition-all"
-                      />
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Max Acceptance %</label>
+                  <div className="relative flex items-center">
+                    <div className="absolute left-3 pointer-events-none">
+                      <Percent className="h-4 w-4 text-slate-400" />
                     </div>
+                    <input 
+                      type="number" 
+                      placeholder="e.g. 50"
+                      value={maxAcceptance}
+                      onChange={(e) => setMaxAcceptance(e.target.value)}
+                      className="w-full bg-slate-50/80 backdrop-blur-sm border border-slate-200/60 text-slate-800 rounded-xl pl-9 pr-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-semibold shadow-sm placeholder:font-normal placeholder:text-slate-400 transition-all"
+                    />
                   </div>
+                </div>
 
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Max Acceptance %</label>
-                    <div className="relative flex items-center">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Max Tuition Cost</label>
+                  <div className="flex gap-2">
+                    <select 
+                      value={tuitionType}
+                      onChange={(e) => setTuitionType(e.target.value)}
+                      className="w-1/3 bg-slate-50/80 backdrop-blur-sm border border-slate-200/60 text-slate-800 rounded-xl px-2 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white text-sm font-semibold shadow-sm appearance-none cursor-pointer"
+                    >
+                      <option value="in_state">In-State</option>
+                      <option value="out_of_state">Out-State</option>
+                    </select>
+                    <div className="relative flex items-center w-2/3">
                       <div className="absolute left-3 pointer-events-none">
-                        <Percent className="h-4 w-4 text-slate-400" />
+                        <DollarSign className="h-4 w-4 text-slate-400" />
                       </div>
                       <input 
                         type="number" 
-                        placeholder="e.g. 50"
-                        value={maxAcceptance}
-                        onChange={(e) => setMaxAcceptance(e.target.value)}
-                        className="w-full bg-slate-50/80 backdrop-blur-sm border border-slate-200/60 text-slate-800 rounded-xl pl-9 pr-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-semibold shadow-sm placeholder:font-normal placeholder:text-slate-400 transition-all"
+                        placeholder="e.g. 30000"
+                        value={maxTuition}
+                        onChange={(e) => setMaxTuition(e.target.value)}
+                        className="w-full bg-slate-50/80 backdrop-blur-sm border border-slate-200/60 text-slate-800 rounded-xl pl-8 pr-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-semibold shadow-sm placeholder:font-normal placeholder:text-slate-400 transition-all"
                       />
                     </div>
                   </div>
-
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Max Tuition Cost</label>
-                    <div className="flex gap-2">
-                      <select 
-                        value={tuitionType}
-                        onChange={(e) => setTuitionType(e.target.value)}
-                        className="w-1/3 bg-slate-50/80 backdrop-blur-sm border border-slate-200/60 text-slate-800 rounded-xl px-2 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white text-sm font-semibold shadow-sm appearance-none cursor-pointer"
-                      >
-                        <option value="in_state">In-State</option>
-                        <option value="out_of_state">Out-State</option>
-                      </select>
-                      <div className="relative flex items-center w-2/3">
-                        <div className="absolute left-3 pointer-events-none">
-                          <DollarSign className="h-4 w-4 text-slate-400" />
-                        </div>
-                        <input 
-                          type="number" 
-                          placeholder="e.g. 30000"
-                          value={maxTuition}
-                          onChange={(e) => setMaxTuition(e.target.value)}
-                          className="w-full bg-slate-50/80 backdrop-blur-sm border border-slate-200/60 text-slate-800 rounded-xl pl-8 pr-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-semibold shadow-sm placeholder:font-normal placeholder:text-slate-400 transition-all"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Sort Results By</label>
-                    <select 
-                      value={sortBy}
-                      onChange={(e) => setSortBy(e.target.value)}
-                      className="w-full bg-slate-50/80 backdrop-blur-sm border border-slate-200/60 text-slate-800 rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-semibold shadow-sm appearance-none cursor-pointer transition-all"
-                    >
-                      <option value="">Don't Sort</option>
-                      
-                      <optgroup label="Tuition Cost">
-                        <option value="tuition_low">Lowest to Highest</option>
-                        <option value="tuition_high">Highest to Lowest</option>
-                      </optgroup>
-
-                      <optgroup label="Acceptance Rate">
-                        <option value="acceptance_high">Highest to Lowest</option>
-                        <option value="acceptance_low">Lowest to Highest</option>
-                      </optgroup>
-
-                      <optgroup label="10-Year Salary">
-                        <option value="salary_high">Highest to Lowest</option>
-                        <option value="salary_low">Lowest to Highest</option>
-                      </optgroup>
-
-                      <optgroup label="Sport Budget">
-                        <option value="budget_high">Highest to Lowest</option>
-                        <option value="budget_low">Lowest to Highest</option>
-                      </optgroup>
-                    </select>
-                  </div>
-
                 </div>
-              </ProGate>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Sort Results By</label>
+                  <select 
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value)}
+                    disabled={activeBonusFilter !== null}
+                    className="w-full bg-slate-50/80 backdrop-blur-sm border border-slate-200/60 text-slate-800 rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-semibold shadow-sm appearance-none cursor-pointer transition-all disabled:opacity-50 disabled:bg-slate-100"
+                  >
+                    <option value="">Don't Sort</option>
+                    
+                    <optgroup label="Tuition Cost">
+                      <option value="tuition_low">Lowest to Highest</option>
+                      <option value="tuition_high">Highest to Lowest</option>
+                    </optgroup>
+
+                    <optgroup label="Acceptance Rate">
+                      <option value="acceptance_high">Highest to Lowest</option>
+                      <option value="acceptance_low">Lowest to Highest</option>
+                    </optgroup>
+
+                    <optgroup label="10-Year Salary">
+                      <option value="salary_high">Highest to Lowest</option>
+                      <option value="salary_low">Lowest to Highest</option>
+                    </optgroup>
+
+                    <optgroup label="Sport Budget">
+                      <option value="budget_high">Highest to Lowest</option>
+                      <option value="budget_low">Lowest to Highest</option>
+                    </optgroup>
+                  </select>
+                </div>
+
+              </div>
             </div>
           </div>
 
@@ -1575,6 +1380,60 @@ export default function Home() {
           </div>
         </div>
 
+        {/* --- MATCHMAKER BONUS FILTERS (Toggle Row) --- */}
+        {hasSearched && !errorMsg && (
+            <div className="mb-10 flex flex-col items-center animate-in fade-in duration-500">
+                <div className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-amber-500" /> Matchmaker Bonus Filters
+                </div>
+                <div className="bg-white/40 backdrop-blur-md p-2 rounded-2xl border border-slate-200 flex flex-wrap justify-center gap-2 shadow-sm">
+                    <button 
+                        onClick={() => toggleBonusFilter('fit')}
+                        className={`px-5 py-2.5 rounded-xl text-sm font-black transition-all flex items-center border ${activeBonusFilter === 'fit' ? 'bg-gradient-to-r from-purple-500 to-fuchsia-500 text-white border-purple-400 shadow-[0_0_20px_rgba(168,85,247,0.4)]' : 'bg-white text-slate-500 border-slate-200 hover:border-purple-200 hover:text-purple-600'}`}
+                    >
+                        <Target className="w-4 h-4 mr-2" /> Best Fit
+                    </button>
+                    <button 
+                        onClick={() => toggleBonusFilter('cost')}
+                        className={`px-5 py-2.5 rounded-xl text-sm font-black transition-all flex items-center border ${activeBonusFilter === 'cost' ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white border-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.4)]' : 'bg-white text-slate-500 border-slate-200 hover:border-emerald-200 hover:text-emerald-600'}`}
+                    >
+                        <Wallet className="w-4 h-4 mr-2" /> Lowest Cost
+                    </button>
+                    <button 
+                        onClick={() => toggleBonusFilter('salary')}
+                        className={`px-5 py-2.5 rounded-xl text-sm font-black transition-all flex items-center border ${activeBonusFilter === 'salary' ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white border-blue-400 shadow-[0_0_20px_rgba(59,130,246,0.4)]' : 'bg-white text-slate-500 border-slate-200 hover:border-blue-200 hover:text-blue-600'}`}
+                    >
+                        <Briefcase className="w-4 h-4 mr-2" /> Top Salary
+                    </button>
+                    <button 
+                        onClick={() => toggleBonusFilter('funding')}
+                        className={`px-5 py-2.5 rounded-xl text-sm font-black transition-all flex items-center border ${activeBonusFilter === 'funding' ? 'bg-gradient-to-r from-yellow-400 to-orange-500 text-white border-yellow-300 shadow-[0_0_20px_rgba(250,204,21,0.4)]' : 'bg-white text-slate-500 border-slate-200 hover:border-yellow-200 hover:text-yellow-600'}`}
+                    >
+                        <Award className="w-4 h-4 mr-2" /> Best Funded
+                    </button>
+                    <button 
+                        onClick={() => toggleBonusFilter('roi')}
+                        className={`px-5 py-2.5 rounded-xl text-sm font-black transition-all flex items-center border ${activeBonusFilter === 'roi' ? 'bg-gradient-to-r from-amber-500 to-rose-500 text-white border-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.4)]' : 'bg-white text-slate-500 border-slate-200 hover:border-amber-200 hover:text-amber-600'}`}
+                    >
+                        <TrendingUp className="w-4 h-4 mr-2" /> Best ROI
+                    </button>
+                    
+                    {/* ACADEMIC ONLY TOGGLE */}
+                    <button 
+                      onClick={() => setHideAcademicOnly(!hideAcademicOnly)}
+                      className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 border-2 ml-2 ${
+                        hideAcademicOnly 
+                          ? 'bg-red-500/10 border-red-500 text-red-500 shadow-[0_0_15px_rgba(239,68,68,0.25)]' 
+                          : 'bg-white border-slate-200 text-slate-500 hover:border-slate-400 hover:text-slate-700'
+                      }`}
+                    >
+                      {hideAcademicOnly ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      {hideAcademicOnly ? 'Hiding Academic Only' : 'Show All'}
+                    </button>
+                </div>
+            </div>
+        )}
+
         {/* --- DYNAMIC CONTENT BLOCKS --- */}
         {!hasSearched ? (
           
@@ -1588,119 +1447,27 @@ export default function Home() {
           </div>
 
         ) : (
-          <div>
-            
-            {/* 🚨 REQ: RE-ENGINEERED HIGH-CONTRAST MAIN NAVIGATION TAB OVERLAY BAR 🚨 */}
-            {hasSearched && !errorMsg && (
-                <div className="mb-10 flex justify-center animate-in fade-in duration-500">
-                    <div className="bg-slate-900 border-2 border-slate-800 rounded-2xl p-2 inline-flex shadow-2xl items-center gap-3">
-                        <button
-                            onClick={() => setActiveTab('personalized')}
-                            className={`px-6 py-3 rounded-xl text-sm font-black transition-all flex items-center ${activeTab === 'personalized' ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-xl shadow-blue-500/10' : 'text-slate-400 hover:text-white'}`}
-                        >
-                            <Zap className={`w-4 h-4 mr-2 ${activeTab === 'personalized' ? 'text-amber-300' : 'text-amber-500'}`} />
-                            Matchmaker Dashboard
-                        </button>
-                        
-                        {/* THE PROMINENT DIRECTORY INTERCEPT BUTTON WRAPPER */}
-                        <button
-                            onClick={() => setActiveTab('all')}
-                            className={`px-7 py-3 rounded-xl text-sm font-black transition-all flex items-center relative overflow-hidden border ${
-                              activeTab === 'all' 
-                                ? 'bg-gradient-to-r from-emerald-600 to-teal-600 border-emerald-500 text-white shadow-xl shadow-emerald-500/20 scale-[1.03]' 
-                                : 'bg-gradient-to-r from-blue-950 to-indigo-950/60 border-blue-500/40 hover:border-blue-400 text-blue-400 hover:text-blue-300 hover:scale-[1.02] shadow-lg'
-                            }`}
-                        >
-                            <School className="w-4 h-4 mr-2" />
-                            All 800+ Programs Directory
-                            
-                            {/* Pulsing Alert Indicator Ring to eliminate button overlook */}
-                            <span className="absolute top-2 right-2 flex h-2 w-2">
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
-                              <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
-                            </span>
-                        </button>
-                    </div>
-                </div>
-            )}
-
-            {/* TAB CONTENT: MATCHMAKER */}
-            {activeTab === 'personalized' && (
-                <div className="animate-in fade-in slide-in-from-bottom-8 duration-500 mb-16 space-y-6">
-                    
-                    {/* SUB-NAVIGATION CATEGORIES W/ TOGGLE INTERCEPTOR BAR */}
-                    <div className="bg-white/40 backdrop-blur-md p-3 rounded-2xl border border-slate-200/60 flex flex-col lg:flex-row justify-between items-center gap-4">
-                        <div className="flex flex-wrap gap-2">
-                            <button 
-                                onClick={() => setMatchmakerView('fit')}
-                                className={`px-5 py-2.5 rounded-xl text-sm font-black transition-all flex items-center border ${matchmakerView === 'fit' ? 'bg-purple-50 text-purple-700 border-purple-200 shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:border-purple-200 hover:text-purple-600'}`}
-                            >
-                                <Target className="w-4 h-4 mr-2" />
-                                Best Fit
-                            </button>
-                            <button 
-                                onClick={() => setMatchmakerView('cost')}
-                                className={`px-5 py-2.5 rounded-xl text-sm font-black transition-all flex items-center border ${matchmakerView === 'cost' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:border-emerald-200 hover:text-emerald-600'}`}
-                            >
-                                <Wallet className="w-4 h-4 mr-2" />
-                                Lowest Cost
-                            </button>
-                            <button 
-                                onClick={() => setMatchmakerView('salary')}
-                                className={`px-5 py-2.5 rounded-xl text-sm font-black transition-all flex items-center border ${matchmakerView === 'salary' ? 'bg-blue-50 text-blue-700 border-blue-200 shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:border-blue-200 hover:text-blue-600'}`}
-                            >
-                                <Briefcase className="w-4 h-4 mr-2" />
-                                Top Salary
-                            </button>
-                            <button 
-                                onClick={() => setMatchmakerView('funding')}
-                                className={`px-5 py-2.5 rounded-xl text-sm font-black transition-all flex items-center border ${matchmakerView === 'funding' ? 'bg-yellow-50 text-yellow-700 border-yellow-200 shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:border-yellow-200 hover:text-yellow-600'}`}
-                            >
-                                <Award className="w-4 h-4 mr-2" />
-                                Best Funded
-                            </button>
-                            <button 
-                                onClick={() => setMatchmakerView('roi')}
-                                className={`px-5 py-2.5 rounded-xl text-sm font-black transition-all flex items-center border ${matchmakerView === 'roi' ? 'bg-amber-50 text-amber-700 border-amber-200 shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:border-amber-200 hover:text-amber-600'}`}
-                            >
-                                <TrendingUp className="w-4 h-4 mr-2" />
-                                Best ROI
-                            </button>
-                        </div>
-
-                        {/* GLOWING TOGGLE SWITCH TO FILTER OUT ACADEMIC ONLY MATCHES */}
-                        <div className="shrink-0">
-                           <button 
-                             onClick={() => setHideAcademicOnly(!hideAcademicOnly)}
-                             className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 border-2 ${
-                               hideAcademicOnly 
-                                 ? 'bg-red-500/10 border-red-500 text-red-500 shadow-[0_0_15px_rgba(239,68,68,0.25)]' 
-                                 : 'bg-white border-slate-200 text-slate-500 hover:border-slate-400 hover:text-slate-700'
-                             }`}
-                           >
-                             {hideAcademicOnly ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                             {hideAcademicOnly ? 'Hiding Academic Only' : 'Show All Programs'}
-                           </button>
-                        </div>
-                    </div>
-
-                    {/* DYNAMIC LIST RENDERER */}
-                    {renderMatchmakerList()}
-
-                </div>
-            )}
-
-            {/* TAB CONTENT: ALL PROGRAMS (STANDARD RESULTS GRID) */}
-            {activeTab === 'all' && (
-                <div className="animate-in fade-in slide-in-from-bottom-8 duration-500">
-                    {renderedCollegeCards}
-                </div>
-            )}
-
+          <div className="animate-in fade-in slide-in-from-bottom-8 duration-500">
+              {renderedCollegeCards}
           </div>
         )}
 
       </div>
     </main>
+  );
+}
+
+// ----------------------------------------------------------------------
+// THE CRITICAL DEFAULT EXPORT TO FIX NEXT.JS "NOT A REACT COMPONENT" ERROR
+// ----------------------------------------------------------------------
+export default function SearchPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+        <RefreshCw className="w-8 h-8 text-blue-500 animate-spin" />
+      </div>
+    }>
+      <SearchContent />
+    </Suspense>
   );
 }

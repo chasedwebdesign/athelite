@@ -2011,7 +2011,7 @@ export default function DashboardPage() {
                   <div className="bg-amber-500 rounded-[1.5rem] p-6 shadow-lg border border-amber-400 text-amber-950 relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-24 h-24 bg-white/20 blur-[20px] rounded-full pointer-events-none"></div>
                     <div className="relative z-10">
-                      <p className="text-[10px] font-black uppercase tracking-widest mb-1 opacity-80">ChasedCash</p>
+                      <p className="text-[10px] font-black uppercase tracking-widest mb-1 opacity-80">Points</p>
                       <div className="flex items-center gap-2">
                         <h3 className="text-3xl font-black leading-none">{athleteProfile?.coins || 0}</h3>
                         <Award className="w-5 h-5 text-white/80" />

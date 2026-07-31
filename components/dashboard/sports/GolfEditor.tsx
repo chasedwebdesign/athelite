@@ -1,200 +1,118 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { Flag, Activity, HelpCircle, Info, RefreshCw, Save } from 'lucide-react';
-import { compileGolfFitScore, GolfPositionGroup } from '@/utils/GolfRecruitingEngine';
+import React, { useState } from 'react';
+import { Target, Medal, Trash2, Save, Plus } from 'lucide-react';
 
-export interface GolfEditorProps {
+interface GolfEditorProps {
   golfStats: any;
-  genderKey: string;
   onSync: (updatedData: any) => Promise<void>;
   showToast: (msg: string, type?: 'success' | 'error') => void;
 }
 
-export default function GolfEditor({ golfStats, genderKey, onSync, showToast }: GolfEditorProps) {
-  const [level, setLevel] = useState(golfStats.level || 'Varsity Starter');
-  const [tournaments, setTournaments] = useState<number>(golfStats.metaContext?.tournamentsPlayed || 10);
-  const [isSaving, setIsSaving] = useState(false);
+export default function GolfEditor({ golfStats, onSync, showToast }: GolfEditorProps) {
+  
+  const getMetric = (name: string) => golfStats.metrics?.find((m: any) => m.name === name)?.value || '';
+  
+  const [avgScore, setAvgScore] = useState(getMetric('18-Hole Avg Score'));
+  const [handicap, setHandicap] = useState(getMetric('Current Handicap Index'));
+  
+  const [localAccolades, setLocalAccolades] = useState<string[]>(golfStats?.metaContext?.accolades || []);
+  const [newAccolade, setNewAccolade] = useState('');
 
-  const savedPayload = golfStats.metaContext?.rawTotals || {};
-  const [avg18, setAvg18] = useState<string>(savedPayload.avg18?.toString() || '');
-  const [avg9, setAvg9] = useState<string>(savedPayload.avg9?.toString() || '');
-  const [wins, setWins] = useState<string>(savedPayload.wins?.toString() || '');
-  const [drive, setDrive] = useState<string>(savedPayload.drive?.toString() || '');
+  const handleSaveStats = () => {
+    const newMetrics = [];
+    if (avgScore) newMetrics.push({ name: '18-Hole Avg Score', value: avgScore });
+    if (handicap) newMetrics.push({ name: 'Current Handicap Index', value: handicap });
 
-  useEffect(() => {
-    if (!golfStats.metaContext?.rawTotals) {
-      setAvg18(''); setAvg9(''); setWins(''); setDrive('');
-    }
-  }, [golfStats.metaContext?.rawTotals]);
+    onSync({ ...golfStats, metrics: newMetrics });
+    showToast('Golf baseline metrics saved.', 'success');
+  };
 
-  const computedInputObject = useMemo(() => {
-    const result: Record<string, number | null> = {
-      avg18: avg18 === '' ? null : parseFloat(avg18),
-      avg9: avg9 === '' ? null : parseFloat(avg9),
-      wins: wins === '' ? null : parseFloat(wins),
-      drive: drive === '' ? null : parseFloat(drive),
-    };
-    return result;
-  }, [avg18, avg9, wins, drive]);
+  const addAccolade = () => {
+    if (!newAccolade.trim()) return;
+    const updated = [...localAccolades, newAccolade.trim()];
+    setLocalAccolades(updated);
+    setNewAccolade('');
+    onSync({ ...golfStats, metaContext: { ...golfStats.metaContext, accolades: updated }});
+  };
 
-  const { compositeScore, analyticalTrace } = compileGolfFitScore(
-    genderKey,
-    level,
-    tournaments,
-    computedInputObject
-  );
-
-  const handleManualSave = async () => {
-    setIsSaving(true);
-    
-    const mockMetricsArray = analyticalTrace.map(t => ({
-      name: t.metricLabel,
-      value: t.rawValue.toString()
-    }));
-
-    await onSync({
-      position: 'Golfer', // Fixed position since everyone is a golfer
-      level: level,
-      metrics: mockMetricsArray,
-      calculatedRating: compositeScore,
-      metaContext: {
-        tournamentsPlayed: tournaments,
-        rawTotals: { avg18, avg9, wins, drive }
-      }
-    });
-
-    showToast("Golf metrics verified and secured!", "success");
-    setIsSaving(false);
+  const removeAccolade = (idx: number) => {
+    const updated = localAccolades.filter((_, i) => i !== idx);
+    setLocalAccolades(updated);
+    onSync({ ...golfStats, metaContext: { ...golfStats.metaContext, accolades: updated }});
   };
 
   return (
-    <div className="bg-gradient-to-b from-slate-900 to-slate-950 border border-slate-800 rounded-[2rem] p-6 text-white shadow-2xl relative overflow-hidden w-full animate-in fade-in duration-300">
-      <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 blur-[100px] rounded-full pointer-events-none"></div>
-      
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-6 border-b border-slate-800/80 relative z-10">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="p-2 bg-emerald-500/10 rounded-xl border border-emerald-500/20 text-emerald-500">
-              <Flag className="w-5 h-5" />
-            </span>
-            <h3 className="text-xl font-black tracking-tight">Golf Course Normalizer</h3>
-          </div>
-          <p className="text-xs text-slate-400 font-medium mt-1">
-            Engine evaluates <strong className="text-emerald-500">Scoring Consistency</strong> across standardized distances.
-          </p>
-        </div>
+    <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 md:p-8 shadow-inner relative overflow-hidden animate-in fade-in duration-300">
+      <div className="absolute top-0 left-0 w-64 h-64 bg-emerald-600/10 blur-[80px] rounded-full pointer-events-none"></div>
 
-        {compositeScore > 0 && (
-          <div className="flex items-center gap-3 bg-slate-900/90 backdrop-blur-md px-4 py-2.5 rounded-2xl border border-slate-800 shadow-inner w-full sm:w-auto justify-between sm:justify-start">
-            <div className="text-left">
-              <span className="block text-[9px] font-black uppercase tracking-widest text-slate-500">Scout Power Target</span>
-              <span className="text-xs font-black bg-gradient-to-r from-emerald-400 to-green-400 bg-clip-text text-transparent">
-                Dynamic Matrix Verified
-              </span>
-            </div>
-            <div className="text-2xl font-black px-3 py-1 bg-gradient-to-br from-emerald-500 to-green-600 text-white rounded-xl shadow-lg shrink-0 shadow-emerald-500/10">
-              {compositeScore}
-            </div>
-          </div>
-        )}
+      <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 pb-4 border-b border-slate-800/60 gap-4 relative z-10">
+        <div>
+          <h3 className="text-2xl font-black text-white flex items-center gap-2">
+             Golf Baseline
+          </h3>
+          <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mt-1">Single-Stat Focus Matrix</p>
+        </div>
+        <button onClick={handleSaveStats} className="bg-emerald-600 hover:bg-emerald-500 text-white font-black py-2 px-5 rounded-xl text-xs uppercase tracking-widest flex items-center gap-2 transition-transform active:scale-[0.98]">
+           <Save className="w-4 h-4" /> Save Stats
+        </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 relative z-10">
-        <div>
-          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">Competition / Course Tier</label>
-          <select value={level} onChange={e => setLevel(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm font-bold outline-none text-slate-200 cursor-pointer">
-            <option value="JV / Dev Squad">JV / Dev Squad (Local Munis)</option>
-            <option value="Varsity Contributor">Varsity Contributor</option>
-            <option value="Varsity Starter">Varsity Core Starter</option>
-            <option value="All-Conference Tier">All-Conference / Regional</option>
-            <option value="All-State / National">All-State / National</option>
-            <option value="Elite Club (AJGA / Junior Am)">Elite Tour (AJGA / Junior Am)</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">Tournaments Played (Consistency Rating)</label>
-          <div className="relative">
-            <input type="text" inputMode="numeric" value={tournaments} onChange={e => setTournaments(Math.max(1, parseInt(e.target.value) || 0))} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm font-bold outline-none text-white shadow-inner [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"/>
-            <Activity className="w-4 h-4 text-slate-600 absolute right-4 top-3.5 pointer-events-none" />
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 pt-6 relative z-10">
-        <div>
-          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 flex items-center gap-1.5">
-            18-Hole Average
-            <div className="relative group inline-block">
-              <HelpCircle className="w-3.5 h-3.5 text-slate-500 hover:text-emerald-500 cursor-help transition-colors" />
-              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-slate-800 text-slate-200 text-xs p-2.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-xl border border-slate-700 normal-case tracking-normal">
-                Your average score across 18 holes in verified competition.
-                <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800"></div>
+      <div className="space-y-8 relative z-10">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+           <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800 shadow-sm relative overflow-hidden group">
+              <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity"><Target className="w-16 h-16 text-emerald-500" /></div>
+              <label className="text-[10px] font-black uppercase tracking-widest text-emerald-500 mb-2 block relative z-10">18-Hole Tournament Average</label>
+              <input 
+                type="number" step="0.1" placeholder="e.g. 74.5"
+                value={avgScore} onChange={(e) => setAvgScore(e.target.value)}
+                className="w-full bg-transparent text-3xl font-black text-white focus:outline-none relative z-10 placeholder-slate-700"
+              />
+           </div>
+           
+           <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800 shadow-sm relative overflow-hidden group">
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block relative z-10">USGA Handicap Index</label>
+              <div className="flex items-center text-3xl font-black text-white relative z-10">
+                 <span className="text-slate-600 mr-1">+</span>
+                 <input 
+                   type="number" step="0.1" placeholder="1.2"
+                   value={handicap} onChange={(e) => setHandicap(e.target.value)}
+                   className="w-full bg-transparent focus:outline-none placeholder-slate-700"
+                 />
               </div>
-            </div>
-          </label>
-          <input type="text" inputMode="decimal" placeholder="(e.g. 74.2)" value={avg18} onChange={e => setAvg18(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm font-bold outline-none text-white placeholder-slate-700 shadow-inner focus:border-emerald-500/50 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"/>
+           </div>
         </div>
 
-        <div>
-          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 flex items-center gap-1.5">
-            9-Hole Average
-          </label>
-          <input type="text" inputMode="decimal" placeholder="(e.g. 36.8)" value={avg9} onChange={e => setAvg9(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm font-bold outline-none text-white placeholder-slate-700 shadow-inner focus:border-emerald-500/50 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"/>
-        </div>
+        <div className="pt-6 border-t border-slate-800/60">
+           <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block flex items-center gap-1.5"><Medal className="w-3.5 h-3.5"/> Golf Accolades & Impact</label>
+           
+           <div className="space-y-2 mb-3">
+              {localAccolades.map((acc, idx) => (
+                <div key={`golf-acc-${idx}`} className="flex items-center justify-between bg-slate-950 border border-slate-800 p-3 rounded-xl">
+                   <div className="flex items-center gap-3">
+                     <span className="text-[9px] font-black uppercase tracking-widest text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">Honor</span>
+                     <span className="text-sm font-bold text-white">{acc}</span>
+                   </div>
+                   <button onClick={() => removeAccolade(idx)} className="text-slate-500 hover:text-red-500 transition-colors p-1 rounded-lg">
+                     <Trash2 className="w-4 h-4" />
+                   </button>
+                </div>
+              ))}
+           </div>
 
-        <div>
-          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 flex items-center gap-1.5">
-            Avg. Driving Distance (Yds)
-          </label>
-          <input type="text" inputMode="decimal" placeholder="(Optional)" value={drive} onChange={e => setDrive(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm font-bold outline-none text-white placeholder-slate-700 shadow-inner focus:border-emerald-500/50 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"/>
-        </div>
-
-        <div>
-          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 flex items-center gap-1.5">
-            Total Wins
-            <div className="relative group inline-block">
-              <HelpCircle className="w-3.5 h-3.5 text-slate-500 hover:text-emerald-500 cursor-help transition-colors" />
-              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-slate-800 text-slate-200 text-xs p-2.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-xl border border-slate-700 normal-case tracking-normal">
-                Total varsity or club tournament wins.
-                <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800"></div>
-              </div>
-            </div>
-          </label>
-          <input type="text" inputMode="decimal" placeholder="(Optional)" value={wins} onChange={e => setWins(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm font-bold outline-none text-white placeholder-slate-700 shadow-inner focus:border-emerald-500/50 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"/>
-        </div>
-      </div>
-
-      <div className="pt-6 relative z-10 flex flex-col md:flex-row gap-4 items-center justify-between border-t border-slate-800/80 mt-6">
-        <div className="w-full md:w-2/3">
-          {analyticalTrace.length > 0 && (
-            <div className="p-4 bg-slate-900/40 rounded-2xl border border-slate-800/80 space-y-2">
-              <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-1">
-                <Info className="w-3.5 h-3.5" /> Normalization Telemetry
-              </h4>
-              <div className="flex flex-wrap gap-2">
-                {analyticalTrace.map((block, idx) => (
-                  <div key={idx} className="bg-slate-950/90 border border-slate-900 p-2.5 rounded-xl flex flex-col text-[11px] flex-1 min-w-[120px]">
-                    <span className="font-black text-slate-300 truncate">{block.metricLabel}</span>
-                    <span className="text-slate-400 font-medium mt-1">Logged: <strong className="text-white">{block.rawValue}</strong></span>
-                    <span className="text-[10px] font-bold text-emerald-500 mt-0.5">Yield Index: {block.calibratedScore}/99</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-        
-        <div className="w-full md:w-auto self-stretch flex items-end">
-          <button 
-            onClick={handleManualSave}
-            disabled={isSaving}
-            className="w-full md:w-auto h-14 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-black px-8 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
-          >
-            {isSaving ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />} 
-            {isSaving ? 'Syncing...' : 'Save Metrics'}
-          </button>
+           <div className="flex gap-2">
+             <input 
+               type="text" 
+               placeholder="e.g. State Medalist, Club Champion, 2x All-District" 
+               value={newAccolade} 
+               onChange={(e) => setNewAccolade(e.target.value)}
+               onKeyDown={(e) => e.key === 'Enter' && addAccolade()}
+               className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+             />
+             <button onClick={addAccolade} className="bg-slate-800 hover:bg-slate-700 text-white px-5 rounded-xl font-black text-xs uppercase tracking-widest transition-colors shrink-0 flex items-center justify-center">
+               Add Honor
+             </button>
+           </div>
         </div>
       </div>
     </div>

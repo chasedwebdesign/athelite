@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
-import { Mail, Lock, ArrowRight, ArrowLeft, Zap, Eye, EyeOff, User, School, ShieldCheck, Check, Trophy, Target, Activity, Star } from 'lucide-react';
+import { Mail, Lock, ArrowRight, ArrowLeft, Zap, Eye, EyeOff, ShieldCheck, Check, Trophy, Target, Activity } from 'lucide-react';
 import Link from 'next/link';
 
 // Centralized Launch Date for Founder Status
@@ -23,21 +23,23 @@ export default function LoginPage() {
   const [coachType, setCoachType] = useState<'high_school' | 'college'>('college');
 
   const router = useRouter();
-  const supabase = createClient();
+  
+  // 🚨 CRITICAL FIX: Memoize the client so typing in the form doesn't trigger 429 token loops
+  const supabase = useMemo(() => createClient(), []);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
 
-    // 🚨 REQUIREMENT: TERMS OF SERVICE VALIDATION
+    // REQUIREMENT: TERMS OF SERVICE VALIDATION
     if (isSignUp && !acceptedTerms) {
       setError("You must accept the Terms of Service and Privacy Policy to create an account.");
       setLoading(false);
       return;
     }
 
-    // 🚨 STRICT .EDU EMAIL VERIFICATION FOR COLLEGE COACHES
+    // STRICT .EDU EMAIL VERIFICATION FOR COLLEGE COACHES
     if (isSignUp && userType === 'coach' && coachType === 'college') {
       if (!email.toLowerCase().endsWith('.edu')) {
         setError("NCAA/College coaches must register with a valid .edu university email address to verify their identity.");
@@ -117,11 +119,11 @@ export default function LoginPage() {
         
         {/* Header / Nav */}
         <div className="relative z-10 flex justify-between items-center w-full">
-          <Link href="/" className="inline-flex items-center text-slate-400 text-sm font-bold hover:text-white transition-colors bg-slate-900/50 backdrop-blur-md px-4 py-2 rounded-full border border-slate-800">
+          <Link href="/" className="inline-flex items-center text-slate-400 text-sm font-bold hover:text-white transition-colors bg-slate-900/50 backdrop-blur-md px-4 py-2 rounded-full border border-slate-800 shadow-sm">
             <ArrowLeft className="w-4 h-4 mr-2" /> Back to Home
           </Link>
           <div className="flex items-center gap-2">
-             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]"></div>
              <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Systems Online</span>
           </div>
         </div>
@@ -189,12 +191,12 @@ export default function LoginPage() {
       {/* ========================================================= */}
       {/* RIGHT SIDE - THE FORM (Mobile First)                        */}
       {/* ========================================================= */}
-      <div className="w-full md:w-[55%] lg:w-1/2 flex flex-col relative overflow-y-auto">
+      <div className="w-full md:w-[55%] lg:w-1/2 flex flex-col relative overflow-y-auto custom-scrollbar">
         
         {/* Mobile Header (Hidden on Desktop) */}
         <div className="md:hidden bg-slate-950 px-6 py-8 rounded-b-[2.5rem] relative overflow-hidden shadow-2xl z-20">
            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-600/30 via-transparent to-transparent pointer-events-none"></div>
-           <Link href="/" className="inline-flex items-center text-slate-400 text-xs font-bold hover:text-white transition-colors mb-6 relative z-10">
+           <Link href="/" className="inline-flex items-center text-slate-400 text-xs font-bold hover:text-white transition-colors mb-6 relative z-10 bg-slate-900/50 backdrop-blur-md px-3 py-1.5 rounded-full border border-slate-800">
              <ArrowLeft className="w-4 h-4 mr-1.5" /> Back
            </Link>
            <h2 className="text-3xl font-black text-white relative z-10 flex items-center gap-2">
@@ -219,11 +221,11 @@ export default function LoginPage() {
 
             {/* Error Toast */}
             {error && (
-              <div className="bg-red-50/80 backdrop-blur-sm text-red-600 border border-red-200 p-4 rounded-2xl text-sm font-bold flex items-start gap-3 animate-in fade-in duration-300">
-                <div className="bg-red-100 p-1 rounded-full shrink-0 mt-0.5">
+              <div className="bg-red-50/80 backdrop-blur-sm text-red-600 border border-red-200 p-4 rounded-2xl text-sm font-bold flex items-start gap-3 animate-in fade-in duration-300 shadow-sm">
+                <div className="bg-red-100 p-1.5 rounded-full shrink-0 mt-0.5">
                   <Lock className="w-4 h-4 text-red-500" />
                 </div>
-                <p>{error}</p>
+                <p className="leading-relaxed">{error}</p>
               </div>
             )}
 
@@ -309,7 +311,7 @@ export default function LoginPage() {
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-4 text-slate-400 hover:text-slate-600 transition-colors focus:outline-none flex items-center justify-center p-1 bg-white rounded-md"
+                    className="absolute right-4 text-slate-400 hover:text-slate-600 transition-colors focus:outline-none flex items-center justify-center p-1 bg-slate-100/50 hover:bg-slate-200 rounded-md"
                   >
                     {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   </button>
@@ -358,7 +360,7 @@ export default function LoginPage() {
 
             {/* Toggle Sign Up / Login */}
             <div className="text-center pt-6">
-              <p className="text-sm font-bold text-slate-500 bg-white inline-block px-4 relative z-10">
+              <p className="text-sm font-bold text-slate-500 bg-slate-50 inline-block px-4 relative z-10">
                 {isSignUp ? 'Already a member?' : "Ready to get chased?"}{' '}
                 <button 
                   onClick={() => {

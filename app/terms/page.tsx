@@ -51,12 +51,12 @@ export default function TermsOfService() {
         {/* 2. Virtual Currency (CRITICAL PROTECTIONS) */}
         <section className="space-y-4">
           <h3 className="text-xl font-black text-white border-b border-slate-800 pb-2 flex items-center gap-2">
-            <Coins className="w-5 h-5 text-amber-500" /> 2. ChasedCash, Boosts, and Virtual Items
+            <Coins className="w-5 h-5 text-amber-500" /> 2. Points, Boosts, and Virtual Items
           </h3>
           <ul className="space-y-3 list-disc list-outside ml-5 text-slate-400 marker:text-slate-600">
-            <li><strong className="text-slate-300">No Real-World Value:</strong> The platform features virtual currency ("ChasedCash") and virtual items ("Boosts", "Profile Borders"). These are purely digital items intended for gamified engagement on the Platform. They have no real-world monetary value, cannot be exchanged for fiat currency, and are not your private property.</li>
-            <li><strong className="text-slate-300">Purchases and Refunds:</strong> All purchases of Premium subscriptions, ChasedCash, or Boosts are final and non-refundable. We do not guarantee that virtual items will be available at all times.</li>
-            <li><strong className="text-slate-300">Account Termination:</strong> If your account is suspended, terminated, or deleted (either voluntarily or due to a violation of these Terms), all ChasedCash and unlocked virtual items associated with your account will be immediately forfeit without compensation.</li>
+            <li><strong className="text-slate-300">No Real-World Value:</strong> The platform features virtual currency ("Points") and virtual items ("Boosts", "Profile Borders"). These are purely digital items intended for gamified engagement on the Platform. They have no real-world monetary value, cannot be exchanged for fiat currency, and are not your private property.</li>
+            <li><strong className="text-slate-300">Purchases and Refunds:</strong> All purchases of Premium subscriptions, Points, or Boosts are final and non-refundable. We do not guarantee that virtual items will be available at all times.</li>
+            <li><strong className="text-slate-300">Account Termination:</strong> If your account is suspended, terminated, or deleted (either voluntarily or due to a violation of these Terms), all Points and unlocked virtual items associated with your account will be immediately forfeit without compensation.</li>
           </ul>
         </section>
 

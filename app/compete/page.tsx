@@ -7,7 +7,7 @@ import { Target, TrendingUp, Crosshair, Crown, Lock, Activity, Zap, Medal, Sword
 import Link from 'next/link';
 
 // 🚨 IMPORT REUSABLE COMPONENTS
-import { ChasedCash } from '@/components/ChasedCash';
+import { Points } from '@/components/Points';
 import { AvatarWithBorder } from '@/components/AnimatedBorders';
 
 const FIELD_EVENTS = ['Shot Put', 'Discus', 'Javelin', 'Hammer', 'High Jump', 'Pole Vault', 'Long Jump', 'Triple Jump'];
@@ -362,7 +362,7 @@ export default function CompetePage() {
               .in('id', aData.rival_ids);
               
             if (rDataRaw) {
-              const rData = rDataRaw.map(r => ({
+              const rData = rDataRaw.map((r: any) => ({
                 ...r,
                 prs: extractTrackPrs(r)
               }));
@@ -386,12 +386,12 @@ export default function CompetePage() {
               .limit(30);
             
             if (recsRaw) {
-               const recs = recsRaw.map(r => ({
+               const recs = recsRaw.map((r: any) => ({
                  ...r,
                  prs: extractTrackPrs(r)
                }));
 
-               const validRecs = recs.filter(r => {
+               const validRecs = recs.filter((r: any) => {
                  if (aData.rival_ids?.includes(r.id)) return false;
                  const matchPr = r.prs?.find((p: any) => p.event === topEvent.event);
                  if (!matchPr) return false;
@@ -413,7 +413,7 @@ export default function CompetePage() {
         .gt('trust_level', 0);
 
       if (allAthletesRaw) {
-        const allAthletes = allAthletesRaw.map(ath => ({
+        const allAthletes = allAthletesRaw.map((ath: any) => ({
           ...ath,
           prs: extractTrackPrs(ath),
           base_prs: extractBasePrs(ath)
@@ -550,7 +550,7 @@ export default function CompetePage() {
     
     try {
         const newCoins = userCoins + reward;
-        const newBountyTargets = bountyTargets.map(bt => bt.event === event ? { ...bt, mark: newPRMark } : bt);
+        const newBountyTargets = bountyTargets.map((bt: any) => bt.event === event ? { ...bt, mark: newPRMark } : bt);
 
         const { error } = await supabase.from('athletes').update({
             coins: newCoins,
@@ -561,7 +561,7 @@ export default function CompetePage() {
 
         const { error: postError } = await supabase.from('posts').insert({
             athlete_id: athleteId,
-            content: `Just destroyed my target in the ${event} and claimed a ${reward} ChasedCash bounty! 💰🔥`,
+            content: `Just destroyed my target in the ${event} and claimed a ${reward} Points bounty! 💰🔥`,
             linked_pr_event: event,
             linked_pr_mark: newPRMark,
             linked_prs: [{ event: event, mark: newPRMark }],
@@ -575,7 +575,7 @@ export default function CompetePage() {
             console.error("Feed Post Failed:", postError);
             showToast(`Bounty claimed, but Feed Post failed: ${postError.message}`, 'error');
         } else {
-            showToast(`Bounty Claimed! +${reward} ChasedCash.`, 'success', { label: 'View on Global Feed 🚀', href: '/feed' });
+            showToast(`Bounty Claimed! +${reward} Points.`, 'success', { label: 'View on Global Feed 🚀', href: '/feed' });
         }
 
         setUserCoins(newCoins);
@@ -594,7 +594,7 @@ export default function CompetePage() {
     try {
         const newCoins = userCoins + reward;
         
-        const updatedBounties = bountyTargets.map(bt => {
+        const updatedBounties = bountyTargets.map((bt: any) => {
            if (bt.type === 'rival_hunt' && bt.rivalId === rivalId && bt.event === event) {
                return { ...bt, status: 'claimed' };
            }
@@ -608,10 +608,10 @@ export default function CompetePage() {
 
         if (error) throw error;
 
-        const myPr = athletePrs.find(p => p.event === event);
+        const myPr = athletePrs.find((p: any) => p.event === event);
         const { error: postError } = await supabase.from('posts').insert({
             athlete_id: athleteId,
-            content: `Just overtook a rival in the ${event} and secured ${reward} ChasedCash. The throne is mine. 👑`,
+            content: `Just overtook a rival in the ${event} and secured ${reward} Points. The throne is mine. 👑`,
             linked_pr_event: event,
             linked_pr_mark: myPr?.mark || 'N/A',
             linked_prs: myPr ? [myPr] : [],
@@ -625,7 +625,7 @@ export default function CompetePage() {
              console.error("Feed Post Failed:", postError);
              showToast(`Target Overtaken! Feed Post failed: ${postError.message}`, 'error');
         } else {
-             showToast(`Target Overtaken! +${reward} ChasedCash!`, 'success', { label: 'View on Global Feed 🚀', href: '/feed' });
+             showToast(`Target Overtaken! +${reward} Points!`, 'success', { label: 'View on Global Feed 🚀', href: '/feed' });
         }
 
         setUserCoins(newCoins);
@@ -683,12 +683,12 @@ export default function CompetePage() {
       .neq('id', currentUser?.id)
       .limit(10);
 
-    const searchMapped = (searchRaw || []).map(r => ({
+    const searchMapped = (searchRaw || []).map((r: any) => ({
         ...r,
         prs: extractTrackPrs(r)
     }));
 
-    const filtered = searchMapped.filter(a => !activeRivals.some(ar => ar.id === a.id));
+    const filtered = searchMapped.filter((a: any) => !activeRivals.some(ar => ar.id === a.id));
     setSearchResults(filtered as unknown as AthleteProfile[]);
     setIsSearching(false);
   };
@@ -704,7 +704,7 @@ export default function CompetePage() {
       const updatedRivalIds = [...(currentUser.rival_ids || []), newRival.id];
       
       let newContracts: any[] = [];
-      athletePrs?.forEach(myPr => {
+      athletePrs?.forEach((myPr: any) => {
         const rivalPr = newRival.prs?.find(p => p.event === myPr.event);
         if (rivalPr) {
           const isField = FIELD_EVENTS.includes(myPr.event);
@@ -749,7 +749,7 @@ export default function CompetePage() {
     if (!currentUser) return;
     try {
       const updatedRivalIds = (currentUser.rival_ids || []).filter(id => id !== rivalId);
-      const updatedBounties = bountyTargets.filter(bt => !(bt.type === 'rival_hunt' && bt.rivalId === rivalId));
+      const updatedBounties = bountyTargets.filter((bt: any) => !(bt.type === 'rival_hunt' && bt.rivalId === rivalId));
 
       await supabase.from('athletes').update({ 
         rival_ids: updatedRivalIds,
@@ -774,7 +774,7 @@ export default function CompetePage() {
     );
   }
 
-  const standardBounties = bountyTargets.filter(bt => !bt.type);
+  const standardBounties = bountyTargets.filter((bt: any) => !bt.type);
 
   return (
     <main className="min-h-screen bg-[#F8FAFC] font-sans pb-32 relative">
@@ -834,7 +834,7 @@ export default function CompetePage() {
                    <Flame className="w-4 h-4 text-orange-500" /> The Hype Economy
                  </h4>
                  <p className="text-xs text-slate-400 leading-relaxed font-medium">
-                   Hype is our version of likes. It costs you nothing to hype up your friends, but <strong>every time someone hypes your post, you earn +2 ChasedCash!</strong> 💸 Keep stacking PRs to get more hype and buy gear in the shop.
+                   Hype is our version of likes. It costs you nothing to hype up your friends, but <strong>every time someone hypes your post, you earn +2 Points!</strong> 💸 Keep stacking PRs to get more hype and buy gear in the shop.
                  </p>
                </div>
             </div>
@@ -882,7 +882,7 @@ export default function CompetePage() {
                       </div>
 
                       <div className="relative z-10 text-right shrink-0 bg-slate-900/50 py-2 px-4 rounded-lg border border-white/5 flex items-center gap-2">
-                        <ChasedCash className="w-6 h-5" />
+                        <Points className="w-6 h-5" />
                         <span className="font-black text-xl text-white">{tier.reward}</span>
                       </div>
                     </div>
@@ -926,14 +926,14 @@ export default function CompetePage() {
                 <HelpCircle className="w-4 h-4 md:w-5 md:h-5 text-blue-500 group-hover:text-blue-600" />
               </button>
             </h1>
-            <p className="text-slate-500 font-medium text-lg">Crush your goals to earn massive ChasedCash payouts.</p>
+            <p className="text-slate-500 font-medium text-lg">Crush your goals to earn massive Points payouts.</p>
           </div>
           
           <div className="bg-white p-4 rounded-2xl shadow-sm flex items-center justify-between gap-6 md:min-w-[200px] border border-slate-200">
             <div>
               <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-0.5">Your Bank</p>
               <div className="flex items-center gap-2">
-                <ChasedCash className="w-8 h-6" />
+                <Points className="w-8 h-6" />
                 <span className="text-2xl font-black tracking-tight text-slate-900">{userCoins}</span>
               </div>
             </div>
@@ -998,8 +998,8 @@ export default function CompetePage() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {standardBounties.length > 0 ? standardBounties.map((bt, idx) => {
-                const currentRecord = athletePrs.find(p => p.event === bt.event);
+              {standardBounties.length > 0 ? standardBounties.map((bt: any, idx: number) => {
+                const currentRecord = athletePrs.find((p: any) => p.event === bt.event);
                 const currentMark = currentRecord?.mark || bt.mark;
                 
                 const currentNum = parseMarkToNumber(currentMark, bt.event);
@@ -1062,7 +1062,7 @@ export default function CompetePage() {
                             {isClaiming === bt.event ? (
                               <><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Claiming...</>
                             ) : (
-                              <>Claim {achievedTier!.reward} <ChasedCash className="w-5 h-4 ml-1.5 mr-1" /> Cash</>
+                              <>Claim {achievedTier!.reward} <Points className="w-5 h-4 ml-1.5 mr-1" /> Cash</>
                             )}
                           </span>
                         </button>
@@ -1137,16 +1137,16 @@ export default function CompetePage() {
               
               <div className="mt-8 flex flex-wrap justify-center md:justify-start items-center gap-3 relative z-10">
                  <div className="bg-slate-800 border border-yellow-500/50 text-yellow-400 text-sm font-black px-4 py-2 rounded-xl flex items-center gap-1.5 shadow-[0_0_15px_rgba(234,179,8,0.2)]">
-                   1st: 1000 <ChasedCash className="w-5 h-4" />
+                   1st: 1000 <Points className="w-5 h-4" />
                  </div>
                  <div className="bg-slate-800 border border-slate-600 text-slate-300 text-sm font-black px-4 py-2 rounded-xl flex items-center gap-1.5 shadow-sm">
-                   2nd: 700 <ChasedCash className="w-5 h-4" />
+                   2nd: 700 <Points className="w-5 h-4" />
                  </div>
                  <div className="bg-slate-800 border border-amber-700/50 text-amber-600 text-sm font-black px-4 py-2 rounded-xl flex items-center gap-1.5 shadow-sm">
-                   3rd: 500 <ChasedCash className="w-5 h-4" />
+                   3rd: 500 <Points className="w-5 h-4" />
                  </div>
                  <div className="bg-blue-900/50 border border-blue-500/50 text-blue-400 text-sm font-black px-4 py-2 rounded-xl flex items-center gap-1.5 shadow-sm">
-                   Top 50%: 200 <ChasedCash className="w-5 h-4" />
+                   Top 50%: 200 <Points className="w-5 h-4" />
                  </div>
               </div>
             </div>
@@ -1211,7 +1211,7 @@ export default function CompetePage() {
                                 <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none mb-0.5">Projected</span>
                                 <span className="text-sm font-black text-green-400 leading-none">+{reward}</span>
                               </div>
-                              <ChasedCash className="w-5 h-4 ml-1" />
+                              <Points className="w-5 h-4 ml-1" />
                             </div>
                           )}
                         </div>
@@ -1369,7 +1369,7 @@ export default function CompetePage() {
                               <span className="text-[9px] font-black text-amber-400 uppercase tracking-widest leading-none mb-1">Projected Reward</span>
                               <div className="flex items-center gap-1">
                                 <span className="text-base font-black">2,000</span>
-                                <ChasedCash className="w-5 h-4 text-amber-400" />
+                                <Points className="w-5 h-4 text-amber-400" />
                                 <span className="text-xs font-bold text-slate-400">/ athlete</span>
                               </div>
                             </div>
@@ -1413,7 +1413,7 @@ export default function CompetePage() {
                 <div className="flex-1">
                   <h2 className="text-4xl font-black mb-2 tracking-tight">The Rivals Arena</h2>
                   <p className="text-slate-300 font-medium text-lg leading-relaxed max-w-2xl">
-                    Target athletes who are faster than you to earn dynamic ChasedCash payouts, or track your friends and local competitors just for fun to assert your dominance.
+                    Target athletes who are faster than you to earn dynamic Points payouts, or track your friends and local competitors just for fun to assert your dominance.
                   </p>
                 </div>
               </div>
@@ -1423,8 +1423,8 @@ export default function CompetePage() {
             {activeRivals.length > 0 && (
               <div className="space-y-6 mb-8">
                 {activeRivals.map(r => {
-                  const shared = currentUser?.prs?.filter(myPr => r.prs?.some(rPr => rPr.event === myPr.event)) || [];
-                  const isHunting = bountyTargets.some(bt => bt.type === 'rival_hunt' && bt.rivalId === r.id && bt.status === 'active');
+                  const shared = currentUser?.prs?.filter((myPr: any) => r.prs?.some(rPr => rPr.event === myPr.event)) || [];
+                  const isHunting = bountyTargets.some((bt: any) => bt.type === 'rival_hunt' && bt.rivalId === r.id && bt.status === 'active');
                   
                   return (
                     <div key={r.id} className="bg-white rounded-[2rem] border border-slate-200 shadow-xl overflow-hidden relative">
@@ -1458,7 +1458,7 @@ export default function CompetePage() {
                            </div>
                         ) : (
                           <div className="space-y-4">
-                            {shared.map((myPr, idx) => {
+                            {shared.map((myPr: any, idx) => {
                               const rivalPr = r.prs?.find(p => p.event === myPr.event);
                               if (!rivalPr) return null;
 
@@ -1474,8 +1474,8 @@ export default function CompetePage() {
                               const delta = myVal - rivalVal;
                               const formattedDelta = formatDelta(delta, isField);
 
-                              const hasClaimed = bountyTargets.some(bt => bt.type === 'rival_claim' && bt.rivalId === r.id && bt.event === myPr.event);
-                              const hasActiveHunt = bountyTargets.some(bt => bt.type === 'rival_hunt' && bt.rivalId === r.id && bt.event === myPr.event && bt.status === 'active');
+                              const hasClaimed = bountyTargets.some((bt: any) => bt.type === 'rival_claim' && bt.rivalId === r.id && bt.event === myPr.event);
+                              const hasActiveHunt = bountyTargets.some((bt: any) => bt.type === 'rival_hunt' && bt.rivalId === r.id && bt.event === myPr.event && bt.status === 'active');
 
                               const rivalScore = getEventScore(rivalPr.mark, myPr.event, r.gender || 'Boys');
                               const dynamicReward = 100 + Math.floor((rivalScore - 40) * 15);
@@ -1538,7 +1538,7 @@ export default function CompetePage() {
                                           {isClaiming === myPr.event + '_overtake' ? (
                                             <><RefreshCw className="w-3 h-3 animate-spin" /> Claiming...</>
                                           ) : (
-                                            <>Claim {dynamicReward} <ChasedCash className="w-4 h-3.5" /> Bounty</>
+                                            <>Claim {dynamicReward} <Points className="w-4 h-3.5" /> Bounty</>
                                           )}
                                         </button>
                                       ) : hasActiveHunt ? (

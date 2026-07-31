@@ -262,6 +262,61 @@ export default function FeedPage() {
     fetchFeedAndUser(); 
   }, []); 
 
+  // --- REALTIME FEED SUBSCRIPTION ---
+  useEffect(() => {
+    const feedChannel = supabase
+      .channel('public:posts')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'posts' },
+        async (payload) => {
+          // 1. Handle NEW Posts
+          if (payload.eventType === 'INSERT') {
+            // Fetch the new post with all its joined athlete data
+            const { data: newPost } = await supabase
+              .from('posts')
+              .select(`
+                id, content, created_at, athlete_id, linked_pr_event, linked_pr_mark, linked_prs, image_url, likes, comments, is_boosted,
+                athletes (id, first_name, last_name, high_school, state, gender, avatar_url, trust_level, equipped_border, equipped_title, equipped_card, grad_year, is_premium, is_looking_for_college)
+              `)
+              .eq('id', payload.new.id)
+              .maybeSingle();
+
+            if (newPost) {
+              setPosts((currentPosts) => {
+                // Prevent duplicates if the user is the one who posted it (handled optimistically elsewhere)
+                if (currentPosts.some(p => p.id === newPost.id)) return currentPosts;
+                return [newPost as unknown as Post, ...currentPosts];
+              });
+            }
+          }
+
+          // 2. Handle UPDATES (Likes, Comments, Edits)
+          if (payload.eventType === 'UPDATE') {
+            setPosts((currentPosts) =>
+              currentPosts.map((post) =>
+                post.id === payload.new.id
+                  ? { ...post, ...payload.new } // Merge in the new likes/comments arrays
+                  : post
+              )
+            );
+          }
+
+          // 3. Handle DELETIONS
+          if (payload.eventType === 'DELETE') {
+            setPosts((currentPosts) =>
+              currentPosts.filter((post) => post.id !== payload.old.id)
+            );
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(feedChannel);
+    };
+  }, [supabase]);
+
   useEffect(() => {
     if (feedTab === 'network') {
       if (viewerRole !== 'coach') fetchCoaches();
@@ -578,7 +633,7 @@ export default function FeedPage() {
     await supabase.rpc('toggle_post_like', { p_post_id: postId, p_user_id: currentUserId });
     
     // =========================================================================
-    // 🚨 ANTI-FARMING SECURE CHASEDCASH REWARD ALGORITHM 🚨
+    // 🚨 ANTI-FARMING SECURE Points REWARD ALGORITHM 🚨
     // =========================================================================
     if (!hasLiked && postAuthorId !== currentUserId) {
       try {
@@ -595,7 +650,7 @@ export default function FeedPage() {
           .maybeSingle();
 
         if (!existingReward) {
-          // 1. Give 5 ChasedCash to the LIKER (if they are an athlete)
+          // 1. Give 5 Points to the LIKER (if they are an athlete)
           if (viewerRole === 'athlete' && currentUserProfile) {
              // Fetch absolute latest to prevent race conditions instead of relying on local state
              const { data: myData } = await supabase.from('athletes').select('coins').eq('id', currentUserId).single();
@@ -604,7 +659,7 @@ export default function FeedPage() {
              setCurrentUserProfile(prev => prev ? { ...prev, coins: myNewCoins } : null);
           }
 
-          // 2. Give 5 ChasedCash to the POSTER
+          // 2. Give 5 Points to the POSTER
           const { data: receiverData } = await supabase.from('athletes').select('coins, first_name').eq('id', postAuthorId).single();
           if (receiverData) {
             await supabase.from('athletes').update({ coins: (receiverData.coins || 0) + 5 }).eq('id', postAuthorId);
@@ -617,7 +672,7 @@ export default function FeedPage() {
                 sender_name: 'ChasedSports System',
                 sender_school: 'ChasedRewards',
                 sender_email: 'rewards@chasedsports.com',
-                content: `🔥 ${senderName.trim()} just hyped your post! Just a reminder: Every time you receive hype on your posts, you gain 5 ChasedCash per like! Keep up the great work.\n\n${rewardRef}`,
+                content: `🔥 ${senderName.trim()} just hyped your post! Just a reminder: Every time you receive hype on your posts, you gain 5 Points per like! Keep up the great work.\n\n${rewardRef}`,
                 is_read: false,
                 status: 'active'
             });
@@ -1247,7 +1302,7 @@ export default function FeedPage() {
                                   <div></div>
                                )}
                                <button type="submit" disabled={isSubmittingDiscussion || !newDiscussionContent.trim() || currentUserProfile?.trust_level === 0} className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2.5 rounded-xl font-black text-sm transition-all shadow-lg disabled:opacity-50 disabled:hover:scale-100 hover:-translate-y-0.5 active:translate-y-0 flex items-center gap-2">
-                                 {isSubmittingDiscussion ? 'Posting...' : <><Send className="w-4 h-4" /> Share</>}
+                                  {isSubmittingDiscussion ? 'Posting...' : <><Send className="w-4 h-4" /> Share</>}
                                </button>
                              </div>
                           </form>
