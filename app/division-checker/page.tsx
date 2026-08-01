@@ -198,10 +198,17 @@ export default function DivisionChecker() {
   const [result, setResult] = useState<CalculationResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // 🚨 THE FIX: Async/Await bypasses the strict inline parameter generic inference issue 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-    });
+    const fetchSession = async () => {
+      try {
+        const response: any = await supabase.auth.getSession();
+        setSession(response?.data?.session || null);
+      } catch (err) {
+        console.error("Session check failed:", err);
+      }
+    };
+    fetchSession();
   }, [supabase]);
 
   // ==========================================
@@ -632,7 +639,6 @@ export default function DivisionChecker() {
                 <div className="animate-in fade-in duration-300">
                    {SPORT_CONFIGS_META[selectedSport] ? (
                       <EditorErrorBoundary onReset={() => setLocalSportStats({ metrics: [], metaContext: {}, level: '', position: '' })}>
-                        {/* THE FIX IS HERE ↓ adding async to satisfy the Promise type return */}
                         <SportEditorRegistry 
                           sport={selectedSport}
                           sportStats={localSportStats}
