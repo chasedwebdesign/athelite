@@ -748,8 +748,9 @@ export default function DashboardPage() {
              .order('created_at', { ascending: false });
 
            if (viewLogs) {
-              const daily = viewLogs.filter(log => new Date(log.created_at) >= today).length;
-              const monthly = viewLogs.filter(log => new Date(log.created_at) >= firstOfMonth).length;
+              // 🚨 FIX 1: Explicitly typed 'log' to resolve the errors from image_5e8d6d.png
+              const daily = viewLogs.filter((log: any) => new Date(log.created_at) >= today).length;
+              const monthly = viewLogs.filter((log: any) => new Date(log.created_at) >= firstOfMonth).length;
 
               const uniqueCoaches: any[] = [];
               const seenIds = new Set();
@@ -805,11 +806,13 @@ export default function DashboardPage() {
 
             aData.prs = aData.prs.map((myPr: any) => {
               const event = myPr.event;
-              const allMarks = athletesPool.map(a => a.prs?.find((p: any) => p.event === event)?.mark).filter(Boolean);
-              allMarks.sort((a, b) => parseMarkForSorting(a, event) - parseMarkForSorting(b, event));
+              
+              // 🚨 FIX 2: Explicitly typed array parameters to resolve errors from image_5e8aa8.png
+              const allMarks = athletesPool.map((a: any) => a.prs?.find((p: any) => p.event === event)?.mark).filter(Boolean);
+              allMarks.sort((a: any, b: any) => parseMarkForSorting(a, event) - parseMarkForSorting(b, event));
               
               const myVal = parseMarkForSorting(myPr.mark, event);
-              const rankIndex = allMarks.findIndex(m => parseMarkForSorting(m, event) === myVal);
+              const rankIndex = allMarks.findIndex((m: any) => parseMarkForSorting(m, event) === myVal);
               const percentile = Math.max(0, rankIndex / allMarks.length);
               const globalRank = rankIndex !== -1 ? rankIndex + 1 : 1;
 
