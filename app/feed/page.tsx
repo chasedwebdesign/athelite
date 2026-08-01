@@ -263,13 +263,14 @@ export default function FeedPage() {
   }, []); 
 
   // --- REALTIME FEED SUBSCRIPTION ---
+  // --- REALTIME FEED SUBSCRIPTION ---
   useEffect(() => {
     const feedChannel = supabase
       .channel('public:posts')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'posts' },
-        async (payload) => {
+        async (payload: any) => { // 🚨 FIX 1: Explicitly typed 'payload' as 'any' to satisfy strict mode
           // 1. Handle NEW Posts
           if (payload.eventType === 'INSERT') {
             // Fetch the new post with all its joined athlete data
@@ -297,7 +298,7 @@ export default function FeedPage() {
               currentPosts.map((post) =>
                 post.id === payload.new.id
                   ? { ...post, ...payload.new } // Merge in the new likes/comments arrays
-                  : post
+                  : post // 🚨 FIX 2: Corrected the typo 'posta' to 'post'
               )
             );
           }

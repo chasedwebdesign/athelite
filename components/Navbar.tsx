@@ -173,14 +173,15 @@ export default function Navbar() {
     }
   }, [supabase]);
 
+  // 🚨 THE FIX: Explicitly typed the Promise payload to avoid deep-destructuring any types
   useEffect(() => {
     let isMounted = true;
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (isMounted) loadNavData(session);
+    supabase.auth.getSession().then((response: any) => {
+      if (isMounted) loadNavData(response?.data?.session || null);
     });
     
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event: any, newSession: any) => {
+    const { data } = supabase.auth.onAuthStateChange((event: any, newSession: any) => {
       if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
         if (isMounted) loadNavData(newSession);
       }
@@ -188,7 +189,7 @@ export default function Navbar() {
 
     return () => {
         isMounted = false;
-        subscription.unsubscribe();
+        data?.subscription?.unsubscribe();
     };
   }, [supabase, loadNavData]);
 
