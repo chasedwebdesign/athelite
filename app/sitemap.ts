@@ -34,14 +34,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   try {
     // 2. Fetch Universities for the College Finder SEO
+    // 🚨 FIX: Added 'slug' to the select statement so it isn't undefined in the map loop
     const { data: universities, error: uniError } = await supabase
       .from('universities')
-      .select('id');
+      .select('id, slug');
 
     if (uniError) throw uniError;
 
     const collegeRoutes: MetadataRoute.Sitemap = (universities || []).map((uni) => ({
-      url: `${baseUrl}/college/${uni.id}`,
+      url: `${baseUrl}/college/${uni.slug}`,
       lastModified: new Date(), // Replace with uni.updated_at if added to schema later
       changeFrequency: 'weekly',
       priority: 0.6,

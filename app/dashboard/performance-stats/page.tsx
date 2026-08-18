@@ -1,19 +1,20 @@
 'use client';
 
-import React, { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useEffect, useState, useMemo, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/utils/supabase/client';
 import { 
   BarChart3, Info, Activity, Search, Calendar, 
   HelpCircle, UserCircle2, Mail, TrendingUp, ChevronDown, 
-  ChevronUp, MoreHorizontal, Trash2, Crown, Lock, Eye
+  ChevronUp, MoreHorizontal, Trash2, Crown, Lock, Eye, RefreshCw, Plus, CheckCircle2
 } from 'lucide-react';
 import { AvatarWithBorder } from '@/components/AnimatedBorders';
 import ProGate from '@/components/ProGate';
 import GlobalPercentileTracker from '@/components/dashboard/sports/GlobalPercentileTracker';
 import SportEditorRegistry from '@/components/dashboard/sports/SportEditorRegistry';
-import { SPORT_CONFIGS_META } from '@/utils/constants/RecruitingStandards';
+import { SPORT_CONFIGS_META, ALL_SPORTS } from '@/utils/constants/RecruitingStandards';
+import { Points } from '@/components/Points';
 
 export const getTierStyles = (score: number) => {
   if (score >= 95) return { tier: 'Power 4 D1', nextTier: 'MAX RANK', scoreRequired: 99, colorClass: 'text-fuchsia-400', bgClass: 'bg-fuchsia-500/10', barClass: 'bg-fuchsia-500', borderClass: 'border-fuchsia-500/50', glowClass: 'shadow-[0_0_30px_rgba(217,70,239,0.4)]' };
@@ -47,15 +48,36 @@ interface PerformanceStatsProps {
   actions?: any;
 }
 
-export default function PerformanceStats({ state, actions }: PerformanceStatsProps) {
+function PerformanceStatsContent({ state, actions }: PerformanceStatsProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
-  // INTERCEPT DIRECT URL ACCESS
+  // Local Component States
+  const [isSportsMenuOpen, setIsSportsMenuOpen] = useState(false);
+  const sportsMenuRef = React.useRef<HTMLDivElement>(null);
+
+  const [isUnlocking, setIsUnlocking] = useState(false);
+  const [localUnlocked, setLocalUnlocked] = useState(false);
+
+  // Next.js Page Route Guard: If accessed directly without props, redirect to the real hub.
   useEffect(() => {
     if (!state || !actions) {
-      router.replace('/dashboard');
+      const tab = searchParams.get('tab');
+      // Forward the intent to the main dashboard instead of stripping it
+      router.replace(`/dashboard?view=performance${tab ? `&tab=${tab}` : ''}`);
     }
-  }, [state, actions, router]);
+  }, [state, actions, router, searchParams]);
+
+  // Handle clicking outside of the local sports dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (sportsMenuRef.current && !sportsMenuRef.current.contains(event.target as Node)) {
+        setIsSportsMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // RENDER LOADING FALLBACK WHILE REDIRECTING
   if (!state || !actions) {
@@ -76,8 +98,45 @@ export default function PerformanceStats({ state, actions }: PerformanceStatsPro
   const {
     setSocialSubTab, toggleSportCollapse, getDisplayRating, setSportMenuOpen, setSportActiveState,
     setSportToDelete, syncSportToSupabase, showToast, setShowImpressionTooltip,
-    setShowAllViewersModal, handleContactCoach
+    setShowAllViewersModal, handleContactCoach, handleToggleSportDropdown
   } = actions;
+
+  // Evaluate if the user has unlocked the basic numeric analytics
+  const hasUnlockedAnalytics = useMemo(() => {
+    if (localUnlocked) return true;
+    if (gatingMode?.hasAccess) return true;
+    if (athleteProfile?.unlocked_features?.includes('basic_analytics')) return true;
+    return false;
+  }, [athleteProfile, gatingMode, localUnlocked]);
+
+  // Handle Point Unlock Transaction
+  const handleUnlockAnalytics = async () => {
+    if (!athleteProfile || isUnlocking) return;
+
+    const currentCoins = athleteProfile.coins || 0;
+    if (currentCoins < 1000) {
+        showToast(`Not enough points! You need 1,000 points.`, "error");
+        return;
+    }
+
+    setIsUnlocking(true);
+    const newCoins = currentCoins - 1000;
+    const newFeatures = [...(athleteProfile.unlocked_features || []), 'basic_analytics'];
+
+    const supabase = createClient();
+    const { error } = await supabase
+        .from('athletes')
+        .update({ coins: newCoins, unlocked_features: newFeatures })
+        .eq('id', athleteProfile.id);
+
+    if (error) {
+        showToast("Failed to process transaction. Please try again.", "error");
+    } else {
+        setLocalUnlocked(true); // Instant UI Update
+        showToast("Basic Analytics unlocked successfully!", "success");
+    }
+    setIsUnlocking(false);
+  };
 
   // DUAL-LAYER PERSISTENCE: Fallback to localStorage if parent load missed it, and ensure DB errors are caught.
   const handleCollapseToggle = async (sport: string) => {
@@ -247,7 +306,7 @@ export default function PerformanceStats({ state, actions }: PerformanceStatsPro
       </div>
 
       {socialSubTab === 'performance' && (
-         <div className="bg-slate-900/40 backdrop-blur-2xl rounded-[2.5rem] p-6 md:p-10 shadow-[0_8px_40px_rgba(0,0,0,0.2)] border border-white/5">
+         <div className={`backdrop-blur-2xl rounded-[2.5rem] p-6 md:p-10 border transition-all duration-500 ${getEquippedGlow(athleteProfile?.equipped_border)}`}>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 pb-6 border-b border-white/10 gap-4">
                <div>
                  <h2 className="text-3xl font-black text-white flex items-center gap-3 tracking-tight">
@@ -255,7 +314,34 @@ export default function PerformanceStats({ state, actions }: PerformanceStatsPro
                  </h2>
                  <p className="text-slate-400 font-medium text-sm mt-2">Manage, update, and evaluate your sport-specific stats to increase match rating.</p>
                </div>
+               
+               {/* Add / Update Sports Dropdown */}
+               <div className="relative inline-block text-left w-full sm:w-auto" ref={sportsMenuRef}>
+                 <button onClick={() => setIsSportsMenuOpen(!isSportsMenuOpen)} className="inline-flex items-center justify-center w-full sm:w-auto gap-2 font-black px-6 py-3 rounded-xl transition-all shadow-[0_0_20px_rgba(6,182,212,0.3)] bg-cyan-500 hover:bg-cyan-400 text-white border border-cyan-400">
+                    <Plus className="w-4 h-4" /> Add / Update Sports <ChevronDown className={`w-4 h-4 transition-transform ${isSportsMenuOpen ? 'rotate-180' : ''}`} />
+                 </button>
+                 
+                 {isSportsMenuOpen && (
+                   <div className="absolute right-0 mt-3 w-[280px] sm:w-[320px] bg-slate-900 rounded-2xl shadow-2xl border border-cyan-500/30 p-3 sm:p-4 z-[100] max-h-[60vh] overflow-y-auto custom-scrollbar text-white text-left animate-in fade-in slide-in-from-top-2 duration-200">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 px-3 py-2 border-b border-slate-800 mb-2">Sport Specifications</p>
+                      <div className="grid grid-cols-1 gap-2">
+                        {ALL_SPORTS.map((sport: string) => {
+                          const isActive = sportStats[sport]?.isActive === true;
+                          return (
+                            <div key={sport} onMouseDown={(e) => { e.preventDefault(); handleToggleSportDropdown(sport); }} className="flex items-center gap-3 w-full text-left p-3 hover:bg-slate-800 rounded-xl cursor-pointer transition-colors group">
+                               <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors shrink-0 ${isActive ? 'bg-cyan-500 border-cyan-500' : 'bg-slate-950 border-slate-700 group-hover:border-cyan-500'}`}>
+                                  {isActive && <CheckCircle2 className="w-3 h-3 text-white" />}
+                               </div>
+                               <span className={`text-sm font-bold truncate select-none ${isActive ? 'text-white' : 'text-slate-400'}`}>{sport}</span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                   </div>
+                 )}
+               </div>
             </div>
+            
             {Object.keys(sportStats).length > 0 ? (
                <div className="grid grid-cols-1 gap-8">
                  {userSports.map((sport: string) => renderSportBlock(sport))}
@@ -282,7 +368,7 @@ export default function PerformanceStats({ state, actions }: PerformanceStatsPro
 
       {socialSubTab === 'analytics' && (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-6 duration-500">
-          <div className="bg-slate-900/60 backdrop-blur-2xl rounded-[2.5rem] p-6 md:p-10 shadow-[0_8px_40px_rgba(0,0,0,0.3)] border border-white/10 relative overflow-hidden">
+          <div className={`backdrop-blur-2xl rounded-[2.5rem] p-6 md:p-10 border relative overflow-hidden transition-all duration-500 ${getEquippedGlow(athleteProfile?.equipped_border)}`}>
             <div className="flex items-center justify-between mb-8 pb-6 border-b border-white/10">
               <div>
                 <h2 className="text-3xl font-black text-white flex items-center tracking-tight">
@@ -292,7 +378,7 @@ export default function PerformanceStats({ state, actions }: PerformanceStatsPro
               </div>
             </div>
 
-            <div className={`relative ${!gatingMode.hasAccess ? 'min-h-[350px]' : ''}`}>
+            <div className={`relative ${!hasUnlockedAnalytics ? 'min-h-[350px]' : ''}`}>
               <div className="mb-8">
                 <div className="bg-gradient-to-br from-blue-900/40 to-indigo-900/40 border border-blue-500/20 rounded-[2rem] p-8 md:p-10 flex flex-col sm:flex-row items-center justify-between gap-8 shadow-[0_10px_40px_rgba(0,0,0,0.2)] backdrop-blur-md transition-all duration-500 hover:border-blue-400/40 hover:shadow-[0_10px_40px_rgba(59,130,246,0.15)]">
                   <div>
@@ -306,19 +392,44 @@ export default function PerformanceStats({ state, actions }: PerformanceStatsPro
               </div>
 
               <div className="relative rounded-[2rem] border border-white/10 bg-black/20 p-8 overflow-hidden backdrop-blur-md">
-                {!gatingMode.hasAccess && (
+                
+                {/* 🚨 DYNAMIC POINTS LOCK / PREMIUM UPSELL OVERLAY 🚨 */}
+                {!hasUnlockedAnalytics && (
                   <div className="absolute inset-0 z-20 bg-slate-950/80 backdrop-blur-xl flex flex-col items-center justify-center text-center p-8">
                     <div className="absolute top-6 right-6 bg-slate-800 text-slate-400 font-black tracking-widest text-[10px] uppercase px-3 py-1 rounded-lg border border-white/10 shadow-sm">Locked</div>
-                    <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mb-5 border border-white/10 shadow-[0_0_30px_rgba(255,255,255,0.05)]"><Lock className="w-7 h-7 text-slate-300" /></div>
-                    <h3 className="text-2xl font-black text-white mb-2 tracking-tight">Advanced Analytics Locked</h3>
-                    <p className="text-slate-400 text-sm font-medium mb-6 max-w-sm leading-relaxed">Upgrade to Pro to track your feed impressions and see exactly who is viewing your profile.</p>
-                    <Link href="/pro" className="bg-gradient-to-r from-amber-500 to-amber-600 text-white font-black px-8 py-3.5 rounded-xl shadow-[0_10px_30px_rgba(245,158,11,0.3)] hover:scale-105 transition-transform flex items-center gap-2 text-sm tracking-wide">
-                      <Crown className="w-5 h-5 drop-shadow-md" /> Unlock Pro
-                    </Link>
+                    <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mb-5 border border-white/10 shadow-[0_0_30px_rgba(255,255,255,0.05)]">
+                      <Lock className="w-7 h-7 text-slate-300" />
+                    </div>
+                    
+                    <h3 className="text-2xl font-black text-white mb-2 tracking-tight">Basic Analytics Locked</h3>
+                    
+                    <p className="text-slate-400 text-sm font-medium mb-6 max-w-lg leading-relaxed">
+                      Unlock basic analytics to track your feed impressions and see <strong className="text-white">how many</strong> people view your profile. Upgrade to <strong className="text-amber-400">Premium</strong> below to see exactly <strong className="text-amber-400">WHO</strong> is viewing it.
+                    </p>
+                    
+                    <div className="flex flex-col sm:flex-row items-center gap-4">
+                      <button 
+                        onClick={handleUnlockAnalytics}
+                        disabled={isUnlocking}
+                        className="bg-slate-800 hover:bg-slate-700 text-white font-black px-6 py-3.5 rounded-xl shadow-lg hover:scale-105 transition-all flex items-center gap-2 text-sm border border-slate-700 active:scale-95 disabled:opacity-50 disabled:hover:scale-100"
+                      >
+                        {isUnlocking ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Points className="w-5 h-5 text-amber-400" />} 
+                        Unlock for 1,000 pts
+                      </button>
+                      
+                      <Link href="/pro" className="bg-gradient-to-r from-amber-500 to-amber-600 text-white font-black px-6 py-3.5 rounded-xl shadow-[0_10px_30px_rgba(245,158,11,0.3)] hover:scale-105 transition-transform flex items-center gap-2 text-sm tracking-wide active:scale-95">
+                        <Crown className="w-5 h-5 drop-shadow-md" /> Get Premium
+                      </Link>
+                    </div>
+
+                    {athleteProfile && (athleteProfile.coins || 0) < 1000 && (
+                      <p className="text-xs text-red-400 mt-4 font-bold">You only have {(athleteProfile.coins || 0).toLocaleString()} / 1,000 points.</p>
+                    )}
                   </div>
                 )}
 
-                <div className={`${!gatingMode.hasAccess ? 'opacity-20 select-none blur-[4px]' : ''}`}>
+                {/* Blurring active when points aren't met */}
+                <div className={`${!hasUnlockedAnalytics ? 'opacity-20 select-none blur-[4px] pointer-events-none' : ''}`}>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 mb-8">
                     <div className="bg-slate-800/40 backdrop-blur-md rounded-2xl p-6 border border-white/5 shadow-lg relative transition-all duration-300 hover:-translate-y-1 hover:border-emerald-500/30 hover:bg-slate-800/60">
                       <div className="flex items-center justify-between mb-3">
@@ -329,7 +440,7 @@ export default function PerformanceStats({ state, actions }: PerformanceStatsPro
                         <Search className="w-5 h-5 text-emerald-400" />
                       </div>
                       <h3 className="text-4xl font-black text-white tracking-tight">{athleteProfile?.search_appearances || 0}</h3>
-                      {showImpressionTooltip && gatingMode.hasAccess && (
+                      {showImpressionTooltip && hasUnlockedAnalytics && (
                         <div className="absolute top-14 left-0 w-[220px] bg-slate-800 text-slate-200 text-xs p-5 rounded-xl shadow-2xl z-50 animate-in fade-in zoom-in-95 border border-white/10">
                           <p className="mb-4 leading-relaxed font-medium">Number of times your profile appeared directly on a coach's screen.</p>
                           <button onClick={() => setShowImpressionTooltip(false)} className="w-full bg-slate-900 hover:bg-slate-950 text-white font-bold py-2.5 rounded-lg transition-colors border border-white/5">Got it</button>
@@ -359,6 +470,8 @@ export default function PerformanceStats({ state, actions }: PerformanceStatsPro
                           <button onClick={() => setShowAllViewersModal(true)} className="text-[10px] font-black text-indigo-300 hover:text-white uppercase tracking-widest bg-indigo-500/10 hover:bg-indigo-500/30 px-4 py-2 rounded-xl transition-all border border-indigo-500/20 shadow-sm">View All ({allRecentViewers.length})</button>
                         )}
                       </div>
+                      
+                      {/* Premium Only Lock stays active beneath the numbers! */}
                       <ProGate athleteProfile={athleteProfile} featureName="Advanced View Logs">
                         {recentViewers.length > 0 ? (
                           <div className="space-y-4">
@@ -389,5 +502,18 @@ export default function PerformanceStats({ state, actions }: PerformanceStatsPro
         </div>
       )}
     </div>
+  );
+}
+
+export default function PerformanceStats(props: PerformanceStatsProps) {
+  return (
+    <Suspense fallback={
+      <div className="min-h-[60vh] flex flex-col items-center justify-center animate-in fade-in duration-500">
+        <div className="w-12 h-12 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin mb-4 shadow-[0_0_20px_rgba(99,102,241,0.4)]"></div>
+        <p className="text-indigo-400 font-black uppercase tracking-widest text-xs animate-pulse">Loading Analytics...</p>
+      </div>
+    }>
+      <PerformanceStatsContent {...props} />
+    </Suspense>
   );
 }

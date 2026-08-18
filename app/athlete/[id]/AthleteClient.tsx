@@ -7,7 +7,7 @@ import {
   CheckCircle2, MapPin, Mail, X, Send, Lock, Trophy,
   Share2, ArrowLeft, Activity, School, UserCircle2, 
   Clock, Star, ShieldCheck, AlertTriangle, Search, BookOpen, 
-  Link as LinkIcon, FileText, GraduationCap, Medal, Target, Save, RefreshCw, Info
+  Link as LinkIcon, FileText, GraduationCap, Medal, Target, RefreshCw
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -64,12 +64,6 @@ const getOrdinal = (n: number | string) => {
   const v = num % 100;
   return num + (s[(v - 20) % 10] || s[v] || s[0]);
 };
-
-// Profanity & Reserved Words Filter
-const INAPPROPRIATE_WORDS = [
-  'admin', 'chasedsports', 'support', 'fuck', 'shit', 'bitch', 'ass', 
-  'dick', 'cock', 'pussy', 'cunt', 'whore', 'slut', 'fag', 'nigger', 'nigga', 'retard'
-];
 
 // 🚨 THEME ENGINE: DYNAMICALLY SKINS THE ENTIRE PORTFOLIO 🚨
 const getThemeConfig = (cardType: string | null | undefined) => {
@@ -132,15 +126,16 @@ const getThemeConfig = (cardType: string | null | undefined) => {
     premium: { glow: 'shadow-[0_0_30px_rgba(245,158,11,0.2)]', border: 'border-amber-500/50', accent: 'text-amber-400', borderHover: 'hover:border-amber-400', ring: 'focus:ring-amber-500' },
     amethyst: { glow: 'shadow-[0_0_30px_rgba(217,70,239,0.2)]', border: 'border-fuchsia-500/50', accent: 'text-fuchsia-400', borderHover: 'hover:border-fuchsia-400', ring: 'focus:ring-fuchsia-500' },
     cyber: { glow: 'shadow-[0_0_30px_rgba(6,182,212,0.2)]', border: 'border-cyan-500/50', accent: 'text-cyan-400', borderHover: 'hover:border-cyan-400', ring: 'focus:ring-cyan-500' },
+    'mythic-flare': { glow: 'shadow-[0_0_40px_rgba(244,63,94,0.3)]', border: 'border-rose-500/50', accent: 'text-rose-400', borderHover: 'hover:border-rose-400', ring: 'focus:ring-rose-500' },
   };
 
   const t = map[safeCardType] || map.obsidian;
-  const isAnimated = ['hype', 'premium', 'crimson', 'sapphire', 'amethyst', 'cyber'].includes(safeCardType);
+  const isAnimated = ['hype', 'premium', 'crimson', 'sapphire', 'amethyst', 'cyber', 'mythic-flare'].includes(safeCardType);
   const animationClass = isAnimated ? 'animate-foil' : '';
 
   return {
     isDark: true,
-    pageBg: 'bg-slate-950', // DARK MODE ENABLED PAGE-WIDE
+    pageBg: 'bg-slate-950',
     pagePattern: 'opacity-10',
 
     heroCard: `holo-card-${safeCardType} border-white/20 shadow-2xl text-white ${animationClass}`,
@@ -214,13 +209,6 @@ export default function AthleteClient() {
   const [messageContent, setMessageContent] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [sendSuccess, setSendSuccess] = useState(false);
-  
-  // Custom URL Modal State
-  const [isUrlModalOpen, setIsUrlModalOpen] = useState(false);
-  const [customUrl, setCustomUrl] = useState('');
-  const [urlError, setUrlError] = useState('');
-  const [isCheckingUrl, setIsCheckingUrl] = useState(false);
-  const [isSavingUrl, setIsSavingUrl] = useState(false);
 
   const [copySuccess, setCopySuccess] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -309,56 +297,19 @@ export default function AthleteClient() {
     if (rawIdParam) fetchProfileAndUser();
   }, [rawIdParam, supabase]);
 
-  // Handle URL Auto-Generation and Pre-population
-  useEffect(() => {
-    if (isUrlModalOpen && athlete) {
-        if (athlete.custom_slug) {
-            setCustomUrl(athlete.custom_slug);
-            setUrlError('');
-        } else if (!customUrl) {
-            const base = `${athlete.first_name}-${athlete.last_name}`;
-            const generateUniqueSlug = async (baseSlug: string) => {
-                setIsCheckingUrl(true);
-                let slug = baseSlug.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-                if (!slug) slug = 'athlete';
-                
-                let isAvailable = false;
-                let counter = 1;
-                let currentSlug = slug;
-
-                while (!isAvailable) {
-                    const { data } = await supabase.from('athletes').select('id').eq('custom_slug', currentSlug).maybeSingle();
-                    if (!data || data.id === athlete.id) {
-                        isAvailable = true;
-                    } else {
-                        counter++;
-                        currentSlug = `${slug}-${counter}`;
-                    }
-                }
-                setCustomUrl(currentSlug);
-                setIsCheckingUrl(false);
-            };
-            generateUniqueSlug(base);
-        }
-    }
-  }, [isUrlModalOpen, athlete]);
-
   // 🚨 SMART NAVIGATION FALLBACK
   const handleBackNavigation = () => {
     if (typeof window !== 'undefined') {
       const fallbackRoute = viewerRole === 'coach' ? '/dashboard/coach' 
-                          : viewerRole === 'athlete' ? '/dashboard/team' 
+                          : viewerRole === 'athlete' ? '/dashboard/profile' 
                           : '/search';
 
-      // Verify if there is a deep history stack or if they came from an internal link.
-      // A history length of 1 means they opened a fresh tab/link directly.
-      const isInternalReferrer = document.referrer.includes(window.location.host);
-
-      // If they navigated via the app UI, safely route back.
-      if (window.history.length > 2 || (window.history.length > 1 && isInternalReferrer)) {
+      // Next.js client-side navigation doesn't perfectly update document.referrer.
+      // window.history.length > 2 guarantees there is a deep stack within the application to safely pop.
+      if (window.history.length > 2) {
         router.back();
       } else {
-        // External entry: fallback directly to their logical hub instead of trapping them in search
+        // Direct link entry fallback to logical dashboard
         router.push(fallbackRoute);
       }
     }
@@ -444,43 +395,6 @@ export default function AthleteClient() {
       showToast(`Failed to send message: ${error.message}`, 'error'); 
     } finally { 
       setIsSending(false); 
-    }
-  };
-
-  const handleSaveUrl = async () => {
-    setUrlError('');
-    const slug = customUrl.trim().toLowerCase();
-    
-    if (!slug) { setUrlError('URL cannot be empty.'); return; }
-    if (slug.length < 3) { setUrlError('URL must be at least 3 characters.'); return; }
-    if (!/^[a-z0-9-]+$/.test(slug)) { setUrlError('Only letters, numbers, and hyphens are allowed.'); return; }
-    
-    if (INAPPROPRIATE_WORDS.some(word => slug.includes(word))) {
-        setUrlError('This URL contains inappropriate or reserved words.');
-        return;
-    }
-
-    setIsSavingUrl(true);
-    try {
-        const { data: existing } = await supabase.from('athletes').select('id').eq('custom_slug', slug).maybeSingle();
-        if (existing && existing.id !== athlete?.id) {
-            setUrlError('This URL is already taken by another athlete.');
-            setIsSavingUrl(false);
-            return;
-        }
-
-        const { error } = await supabase.from('athletes').update({ custom_slug: slug }).eq('id', athlete?.id);
-        if (error) throw error;
-        
-        showToast('Custom URL updated successfully!', 'success');
-        setIsUrlModalOpen(false);
-        setAthlete(prev => prev ? { ...prev, custom_slug: slug } : null);
-        
-        router.replace(`/athlete/${slug}`);
-    } catch (err: any) {
-        setUrlError(err.message || 'Failed to save URL.');
-    } finally {
-        setIsSavingUrl(false);
     }
   };
 
@@ -593,8 +507,8 @@ export default function AthleteClient() {
   if (theme.isDark) {
     backgroundEffects = (
       <>
-        {['hype', 'premium'].includes(athlete.equipped_card || '') && <div className="holo-glare rounded-[2.5rem]"></div>}
-        {['hype', 'premium', 'crimson', 'sapphire', 'amethyst', 'cyber'].includes(athlete.equipped_card || '') && <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-[0.03] mix-blend-overlay pointer-events-none rounded-[2.5rem]"></div>}
+        {['hype', 'premium', 'mythic-flare'].includes(athlete.equipped_card || '') && <div className="holo-glare rounded-[2.5rem]"></div>}
+        {['hype', 'premium', 'crimson', 'sapphire', 'amethyst', 'cyber', 'mythic-flare'].includes(athlete.equipped_card || '') && <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-[0.03] mix-blend-overlay pointer-events-none rounded-[2.5rem]"></div>}
         <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-white/5 blur-[100px] rounded-full pointer-events-none z-0"></div>
       </>
     );
@@ -662,7 +576,12 @@ export default function AthleteClient() {
           background: rgba(34, 211, 238, 0.8); filter: blur(3px); box-shadow: 0 0 20px #22d3ee;
           animation: cyberScan 3s linear infinite;
         }
-        
+
+        .holo-card-mythic-flare {
+          background: radial-gradient(circle at 50% 50%, #f43f5e 0%, #881337 40%, #000000 100%);
+          animation: voidPulse 8s ease-in-out infinite;
+        }
+
         .animate-foil { animation: foilShift 15s ease-in-out infinite; }
         .holo-glare { position: absolute; inset: 0; background: linear-gradient(105deg, transparent 20%, rgba(255,255,255,0.4) 25%, transparent 30%); background-size: 200% auto; animation: shimmerGlare 8s infinite linear; pointer-events: none; z-index: 10; mix-blend-mode: overlay;}
       `}} />
@@ -692,12 +611,12 @@ export default function AthleteClient() {
                 <Activity className={`w-4 h-4 ${theme.isDark ? 'text-emerald-400' : 'text-emerald-500'}`} />
                 <span className="text-xs font-bold uppercase tracking-widest">{athlete.profile_views || 0} <span className="hidden sm:inline">Profile Clicks</span></span>
               </div>
-              <button 
-                 onClick={() => setIsUrlModalOpen(true)} 
+              <Link 
+                 href="/dashboard/profile"
                  className={`font-black py-2 px-4 rounded-xl shadow-[0_0_15px_rgba(79,70,229,0.3)] transition-all flex items-center gap-2 text-xs uppercase tracking-widest ${theme.isDark ? 'bg-indigo-500 hover:bg-indigo-400 text-white' : 'bg-indigo-600 hover:bg-indigo-500 text-white'}`}
               >
                  <LinkIcon className="w-4 h-4" /> Edit Public URL
-              </button>
+              </Link>
             </div>
           )}
         </div>
@@ -933,54 +852,6 @@ export default function AthleteClient() {
         </div>
 
       </div>
-
-      {/* URL Customization Modal */}
-      {isUrlModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[100] flex items-center justify-center p-4">
-          <div className="bg-white rounded-[2rem] shadow-[0_0_50px_rgba(0,0,0,0.5)] w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200 border border-slate-200" role="dialog" aria-modal="true">
-            <div className="bg-slate-50 px-8 py-6 border-b border-slate-200 flex justify-between items-center">
-              <div>
-                <h3 className="font-black text-2xl text-slate-900 tracking-tight">Public URL</h3>
-                <p className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-widest mt-1">Personalize Your Portfolio Link</p>
-              </div>
-              <button onClick={() => setIsUrlModalOpen(false)} className="p-2 hover:bg-slate-200 rounded-full transition-colors bg-white shadow-sm border border-slate-200" aria-label="Close Modal"><X className="w-5 h-5 text-slate-500" /></button>
-            </div>
-            
-            <div className="p-8 space-y-6">
-              <div className="bg-blue-50 border border-blue-200 rounded-2xl p-5 text-sm text-blue-800 font-medium flex items-start gap-3 shadow-inner">
-                <Info className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
-                <p>Customize your profile link to make it easy for college coaches and teammates to find you. You can share this directly on your social media bios.</p>
-              </div>
-
-              <div>
-                <label className="text-xs font-black text-slate-500 uppercase tracking-widest block mb-2">Your Custom Link</label>
-                <div className="flex items-stretch shadow-sm rounded-xl overflow-hidden border-2 border-slate-200 focus-within:ring-2 focus-within:border-blue-500 focus-within:ring-blue-500/20 transition-all">
-                  <span className="bg-slate-50 px-3 sm:px-4 flex items-center text-slate-400 font-bold text-[10px] sm:text-sm border-r border-slate-200 truncate">
-                    chasedsports.com/athlete/
-                  </span>
-                  <input 
-                    type="text" 
-                    value={customUrl}
-                    onChange={(e) => setCustomUrl(e.target.value.replace(/[^a-zA-Z0-9-]/g, '-').toLowerCase())}
-                    className="flex-1 px-4 py-3 text-sm font-black text-slate-900 focus:outline-none"
-                    placeholder="john-doe"
-                  />
-                </div>
-                {urlError && <p className="text-xs font-bold text-red-500 mt-2 flex items-center gap-1.5"><AlertTriangle className="w-4 h-4" /> {urlError}</p>}
-                {!urlError && customUrl && <p className="text-xs font-bold text-emerald-500 mt-2 flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4" /> URL formatting looks good.</p>}
-              </div>
-
-              <button 
-                onClick={handleSaveUrl} 
-                disabled={isCheckingUrl || isSavingUrl || !customUrl} 
-                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded-xl shadow-[0_0_20px_rgba(37,99,235,0.3)] flex items-center justify-center gap-2 disabled:opacity-50 text-sm sm:text-base transition-transform active:scale-[0.98] mt-4"
-              >
-                {isSavingUrl || isCheckingUrl ? <RefreshCw className="w-5 h-5 animate-spin" /> : <><Save className="w-5 h-5" /> Save Public URL</>}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Message Modal */}
       {isMessageModalOpen && (

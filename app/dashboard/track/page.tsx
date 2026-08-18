@@ -621,13 +621,13 @@ export default function DashboardPage() {
   useEffect(() => {
     const searchColleges = async () => {
       if (searchQuery.trim().length < 3) {
-        setSearchResults([]);
+        searchResults.length > 0 && setSearchResults([]);
         return;
       }
       setIsSearchingColleges(true);
       const { data, error } = await supabase
         .from('universities')
-        .select('id, name, state, division, logo_url')
+        .select('id, slug, name, state, division, logo_url')
         .ilike('name', `%${searchQuery.trim()}%`)
         .limit(6);
       
@@ -748,7 +748,6 @@ export default function DashboardPage() {
              .order('created_at', { ascending: false });
 
            if (viewLogs) {
-              // 🚨 FIX 1: Explicitly typed 'log' to resolve the errors from image_5e8d6d.png
               const daily = viewLogs.filter((log: any) => new Date(log.created_at) >= today).length;
               const monthly = viewLogs.filter((log: any) => new Date(log.created_at) >= firstOfMonth).length;
 
@@ -807,7 +806,6 @@ export default function DashboardPage() {
             aData.prs = aData.prs.map((myPr: any) => {
               const event = myPr.event;
               
-              // 🚨 FIX 2: Explicitly typed array parameters to resolve errors from image_5e8aa8.png
               const allMarks = athletesPool.map((a: any) => a.prs?.find((p: any) => p.event === event)?.mark).filter(Boolean);
               allMarks.sort((a: any, b: any) => parseMarkForSorting(a, event) - parseMarkForSorting(b, event));
               
@@ -1750,7 +1748,8 @@ export default function DashboardPage() {
                           const isAlreadySaved = savedColleges.some(c => c.college_id === uni.id);
                           return (
                             <div key={uni.id} className="flex items-center justify-between p-4 border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
-                                <Link href={`/college/${uni.id}`} className="flex items-center gap-4 flex-1">
+                                {/* 🚨 FIX: Replaced uni.id with uni.slug for the dynamic path */}
+                                <Link href={`/college/${uni.slug}`} className="flex items-center gap-4 flex-1">
                                   <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center shrink-0 border border-slate-200 overflow-hidden shadow-sm">
                                       {uni.logo_url ? <img src={uni.logo_url} className="w-8 h-8 object-contain"/> : <School className="w-5 h-5 text-slate-400" />}
                                   </div>
@@ -1782,7 +1781,8 @@ export default function DashboardPage() {
                       if (!college) return null;
                       return (
                         <div key={saved.id} className="flex items-center gap-4 p-4 rounded-2xl border border-slate-200 bg-slate-50 hover:border-blue-300 hover:bg-blue-50 transition-colors group cursor-pointer relative">
-                          <Link href={`/college/${college.id}`} className="absolute inset-0 z-10" aria-label={`View ${college.name}`}></Link>
+                          {/* 🚨 FIX: Replaced college.id with college.slug for the dynamic path */}
+                          <Link href={`/college/${college.slug}`} className="absolute inset-0 z-10" aria-label={`View ${college.name}`}></Link>
                           <div className="w-12 h-12 bg-white rounded-full border border-slate-200 shadow-sm flex items-center justify-center shrink-0 overflow-hidden relative z-0">
                             {college.logo_url ? (
                               <img src={college.logo_url} alt={college.name} className="w-8 h-8 object-contain" />
@@ -2011,7 +2011,7 @@ export default function DashboardPage() {
                     </div>
                   </div>
 
-                  <div className="bg-amber-500 rounded-[1.5rem] p-6 shadow-lg border border-amber-400 text-amber-950 relative overflow-hidden">
+                  <div className="bg-amber-50 rounded-[1.5rem] p-6 shadow-lg border border-amber-400 text-amber-950 relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-24 h-24 bg-white/20 blur-[20px] rounded-full pointer-events-none"></div>
                     <div className="relative z-10">
                       <p className="text-[10px] font-black uppercase tracking-widest mb-1 opacity-80">Points</p>
@@ -2318,7 +2318,7 @@ export default function DashboardPage() {
                                  </p>
                                  {allRecentViewers.length > 3 && (
                                    <button onClick={() => setShowAllViewersModal(true)} className="text-[10px] font-black text-indigo-500 hover:text-indigo-600 uppercase tracking-widest bg-indigo-50 px-3 py-1.5 rounded-lg transition-colors border border-indigo-100 shadow-sm hover:shadow-md">
-                                     View All ({allRecentViewers.length})
+                                      View All ({allRecentViewers.length})
                                    </button>
                                  )}
                                </div>
@@ -2709,7 +2709,8 @@ export default function DashboardPage() {
                               if (!college) return null;
                               return (
                                 <div key={saved.id} className="flex items-center gap-4 p-4 rounded-2xl border border-slate-200 bg-slate-50 hover:border-blue-300 hover:bg-blue-50 transition-colors group cursor-pointer relative">
-                                  <Link href={`/college/${college.id}`} className="absolute inset-0 z-10" aria-label={`View ${college.name}`}></Link>
+                                  {/* 🚨 FIX: Replaced college.id with college.slug for the dynamic path */}
+                                  <Link href={`/college/${college.slug}`} className="absolute inset-0 z-10" aria-label={`View ${college.name}`}></Link>
                                   <div className="w-12 h-12 bg-white rounded-full border border-slate-200 shadow-sm flex items-center justify-center shrink-0 overflow-hidden relative z-0">
                                     {college.logo_url ? (
                                       <img src={college.logo_url} alt={college.name} className="w-8 h-8 object-contain" />
@@ -2724,11 +2725,11 @@ export default function DashboardPage() {
                                     </p>
                                   </div>
                                   <button 
-                                     onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleRemoveCollege(saved.id); }} 
-                                     className="relative z-20 p-2 text-slate-400 hover:text-red-500 hover:bg-white rounded-lg transition-colors opacity-0 group-hover:opacity-100"
-                                     title="Remove school"
+                                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleRemoveCollege(saved.id); }} 
+                                      className="relative z-20 p-2 text-slate-400 hover:text-red-500 hover:bg-white rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                                      title="Remove school"
                                   >
-                                     <Trash2 className="w-4 h-4" />
+                                      <Trash2 className="w-4 h-4" />
                                   </button>
                                 </div>
                               )

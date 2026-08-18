@@ -259,6 +259,7 @@ const getBadgeDetails = (college: any, selectedSport: string, useScoreMatch: boo
 
 interface University {
   id: string;
+  slug: string;
   name: string;
   city: string;
   state: string;
@@ -1016,7 +1017,7 @@ function SearchContent() {
                     </button>
                   )}
                   <Link 
-                    href={`/college/${uni.id}?${new URLSearchParams({
+                    href={`/college/${uni.slug}?${new URLSearchParams({
                       ...(selectedSport && { sport: selectedSport }),
                       ...(selectedGender && { gender: selectedGender })
                     }).toString()}`}

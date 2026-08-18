@@ -16,6 +16,7 @@ export default function LoginPage() {
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [isSignUp, setIsSignUp] = useState(false);
   
   // Dual-sided marketplace state
@@ -24,13 +25,14 @@ export default function LoginPage() {
 
   const router = useRouter();
   
-  // 🚨 CRITICAL FIX: Memoize the client so typing in the form doesn't trigger 429 token loops
+  // Memoize the client so typing in the form doesn't trigger 429 token loops
   const supabase = useMemo(() => createClient(), []);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setSuccessMsg(null);
 
     // REQUIREMENT: TERMS OF SERVICE VALIDATION
     if (isSignUp && !acceptedTerms) {
@@ -50,38 +52,54 @@ export default function LoginPage() {
 
     try {
       if (isSignUp) {
+        const isFounderEligible = new Date() < PRO_LAUNCH_DATE;
+
         // SIGN UP FLOW
         const { data: authData, error: authError } = await supabase.auth.signUp({
           email,
           password,
+          options: {
+            // INJECT METADATA: This tells Supabase precisely who is signing up
+            // so your database triggers can route them to athletes or coaches safely.
+            data: {
+              account_type: userType,
+              coach_type: userType === 'coach' ? coachType : null,
+              is_founder: isFounderEligible,
+            }
+          }
         });
         
         if (authError) throw authError;
 
-        // Check if the user is signing up before the launch timer expires
-        const isFounderEligible = new Date() < PRO_LAUNCH_DATE;
+        // CRITICAL UX FIX: If email confirmations are ON in Supabase, 
+        // a newly signed-up user will NOT have an active session yet.
+        if (authData.user && !authData.session) {
+            setSuccessMsg("Profile secured! Please check your email inbox for a verification link to activate your account.");
+            setLoading(false);
+            return;
+        }
 
-        // Route to the correct database table based on their selection
+        // FALLBACK CLIENT INSERTS: If the user bypasses email confirmation, we ensure 
+        // their public rows exist. We safely ignore 'duplicate key' errors in case 
+        // a Supabase trigger already successfully handled the creation.
         if (authData.user) {
           if (userType === 'athlete') {
             const { error: athleteErr } = await supabase.from('athletes').insert({ 
               id: authData.user.id,
               is_founder: isFounderEligible 
             });
-            if (athleteErr && !athleteErr.message.includes('duplicate')) {
-                throw new Error(`Failed to build athlete profile: ${athleteErr.message}`);
+            if (athleteErr && !athleteErr.code.includes('23505')) { // 23505 is Postgres for Unique Violation
+                console.warn(`Fallback athlete creation error: ${athleteErr.message}`);
             }
           } else {
-            // SAFETY SWEEP: If a Supabase trigger automatically created an athlete row, delete it!
-            await supabase.from('athletes').delete().eq('id', authData.user.id);
-            
             const { error: coachErr } = await supabase.from('coaches').insert({ 
               id: authData.user.id,
               coach_type: coachType,
               is_founder: isFounderEligible
             });
-            
-            if (coachErr) throw new Error(`Failed to build coach profile: ${coachErr.message}`);
+            if (coachErr && !coachErr.code.includes('23505')) {
+                console.warn(`Fallback coach creation error: ${coachErr.message}`);
+            }
           }
         }
         
@@ -94,13 +112,14 @@ export default function LoginPage() {
           email,
           password,
         });
+        
         if (signInError) throw signInError;
         
         router.push('/dashboard');
         router.refresh();
       }
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || "An unexpected network error occurred.");
     } finally {
       setLoading(false);
     }
@@ -189,7 +208,7 @@ export default function LoginPage() {
       </div>
 
       {/* ========================================================= */}
-      {/* RIGHT SIDE - THE FORM (Mobile First)                        */}
+      {/* RIGHT SIDE - THE FORM (Mobile First)                      */}
       {/* ========================================================= */}
       <div className="w-full md:w-[55%] lg:w-1/2 flex flex-col relative overflow-y-auto custom-scrollbar">
         
@@ -219,7 +238,7 @@ export default function LoginPage() {
               </p>
             </div>
 
-            {/* Error Toast */}
+            {/* Validation Toasts */}
             {error && (
               <div className="bg-red-50/80 backdrop-blur-sm text-red-600 border border-red-200 p-4 rounded-2xl text-sm font-bold flex items-start gap-3 animate-in fade-in duration-300 shadow-sm">
                 <div className="bg-red-100 p-1.5 rounded-full shrink-0 mt-0.5">
@@ -229,134 +248,146 @@ export default function LoginPage() {
               </div>
             )}
 
-            <form onSubmit={handleAuth} className="space-y-5">
-              
-              {/* --- DUAL SIGN-UP TOGGLE --- */}
-              {isSignUp && (
-                <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-                  <div className="flex bg-slate-200/50 p-1.5 rounded-3xl mb-4 border border-slate-200 shadow-inner">
-                    <button 
-                      type="button"
-                      onClick={() => setUserType('athlete')}
-                      className={`flex-1 py-3 rounded-[1.25rem] text-sm font-bold transition-all flex items-center justify-center ${userType === 'athlete' ? 'bg-white text-blue-600 shadow-sm border border-slate-200/50' : 'text-slate-500 hover:text-slate-700'}`}
-                    >
-                      <Zap className={`w-4 h-4 mr-2 ${userType === 'athlete' ? 'text-blue-500' : 'text-slate-400'}`} /> 
-                      Athlete
-                    </button>
-                    <button 
-                      type="button"
-                      onClick={() => setUserType('coach')}
-                      className={`flex-1 py-3 rounded-[1.25rem] text-sm font-bold transition-all flex items-center justify-center ${userType === 'coach' ? 'bg-white text-purple-600 shadow-sm border border-slate-200/50' : 'text-slate-500 hover:text-slate-700'}`}
-                    >
-                      <Trophy className={`w-4 h-4 mr-2 ${userType === 'coach' ? 'text-purple-500' : 'text-slate-400'}`} /> 
-                      Coach
-                    </button>
-                  </div>
+            {successMsg && (
+              <div className="bg-emerald-50/80 backdrop-blur-sm text-emerald-700 border border-emerald-200 p-4 rounded-2xl text-sm font-bold flex items-start gap-3 animate-in fade-in duration-300 shadow-sm">
+                <div className="bg-emerald-100 p-1.5 rounded-full shrink-0 mt-0.5">
+                  <Mail className="w-4 h-4 text-emerald-600" />
+                </div>
+                <p className="leading-relaxed">{successMsg}</p>
+              </div>
+            )}
 
-                  {/* --- COACH TYPE RADIO BUTTONS --- */}
-                  {userType === 'coach' && (
-                    <div className="grid grid-cols-2 gap-3 mb-6 animate-in zoom-in-95 duration-200">
+            {/* Hide form fields if success message implies hard stop (like email verification wait) */}
+            {!successMsg && (
+              <form onSubmit={handleAuth} className="space-y-5">
+                
+                {/* --- DUAL SIGN-UP TOGGLE --- */}
+                {isSignUp && (
+                  <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                    <div className="flex bg-slate-200/50 p-1.5 rounded-3xl mb-4 border border-slate-200 shadow-inner">
                       <button 
                         type="button"
-                        onClick={() => setCoachType('high_school')}
-                        className={`px-4 py-3.5 rounded-2xl border-2 text-sm font-bold transition-all text-center flex flex-col items-center gap-1 ${coachType === 'high_school' ? 'border-purple-500 bg-purple-50 text-purple-700 shadow-sm' : 'border-slate-200 text-slate-500 hover:bg-slate-100 hover:border-slate-300'}`}
+                        onClick={() => setUserType('athlete')}
+                        className={`flex-1 py-3 rounded-[1.25rem] text-sm font-bold transition-all flex items-center justify-center ${userType === 'athlete' ? 'bg-white text-blue-600 shadow-sm border border-slate-200/50' : 'text-slate-500 hover:text-slate-700'}`}
                       >
-                        High School
+                        <Zap className={`w-4 h-4 mr-2 ${userType === 'athlete' ? 'text-blue-500' : 'text-slate-400'}`} /> 
+                        Athlete
                       </button>
                       <button 
                         type="button"
-                        onClick={() => setCoachType('college')}
-                        className={`px-4 py-3.5 rounded-2xl border-2 text-sm font-bold transition-all text-center flex flex-col items-center gap-1 ${coachType === 'college' ? 'border-purple-500 bg-purple-50 text-purple-700 shadow-sm' : 'border-slate-200 text-slate-500 hover:bg-slate-100 hover:border-slate-300'}`}
+                        onClick={() => setUserType('coach')}
+                        className={`flex-1 py-3 rounded-[1.25rem] text-sm font-bold transition-all flex items-center justify-center ${userType === 'coach' ? 'bg-white text-purple-600 shadow-sm border border-slate-200/50' : 'text-slate-500 hover:text-slate-700'}`}
                       >
-                        College
+                        <Trophy className={`w-4 h-4 mr-2 ${userType === 'coach' ? 'text-purple-500' : 'text-slate-400'}`} /> 
+                        Coach
                       </button>
                     </div>
-                  )}
-                </div>
-              )}
 
-              {/* Email Input */}
-              <div className="space-y-1.5 group">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2 group-focus-within:text-blue-500 transition-colors">Email Address</label>
-                <div className="relative flex items-center">
-                  <div className="absolute left-4 pointer-events-none">
-                    <Mail className="h-5 w-5 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
+                    {/* --- COACH TYPE RADIO BUTTONS --- */}
+                    {userType === 'coach' && (
+                      <div className="grid grid-cols-2 gap-3 mb-6 animate-in zoom-in-95 duration-200">
+                        <button 
+                          type="button"
+                          onClick={() => setCoachType('high_school')}
+                          className={`px-4 py-3.5 rounded-2xl border-2 text-sm font-bold transition-all text-center flex flex-col items-center gap-1 ${coachType === 'high_school' ? 'border-purple-500 bg-purple-50 text-purple-700 shadow-sm' : 'border-slate-200 text-slate-500 hover:bg-slate-100 hover:border-slate-300'}`}
+                        >
+                          High School
+                        </button>
+                        <button 
+                          type="button"
+                          onClick={() => setCoachType('college')}
+                          className={`px-4 py-3.5 rounded-2xl border-2 text-sm font-bold transition-all text-center flex flex-col items-center gap-1 ${coachType === 'college' ? 'border-purple-500 bg-purple-50 text-purple-700 shadow-sm' : 'border-slate-200 text-slate-500 hover:bg-slate-100 hover:border-slate-300'}`}
+                        >
+                          College
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  <input 
-                    type="email" 
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder={userType === 'coach' && coachType === 'college' ? "coach@university.edu" : userType === 'coach' ? "coach@school.org" : "athlete@example.com"}
-                    className="w-full bg-white border-2 border-slate-200 text-slate-900 rounded-2xl pl-12 pr-4 py-3.5 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 font-bold shadow-sm placeholder:font-medium placeholder:text-slate-400 transition-all"
-                  />
-                </div>
-              </div>
+                )}
 
-              {/* Password Input */}
-              <div className="space-y-1.5 group">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2 group-focus-within:text-blue-500 transition-colors">Password</label>
-                <div className="relative flex items-center">
-                  <div className="absolute left-4 pointer-events-none">
-                    <Lock className="h-5 w-5 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
-                  </div>
-                  <input 
-                    type={showPassword ? "text" : "password"}
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full bg-white border-2 border-slate-200 text-slate-900 rounded-2xl pl-12 pr-12 py-3.5 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 font-bold shadow-sm placeholder:font-medium placeholder:text-slate-400 transition-all"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-4 text-slate-400 hover:text-slate-600 transition-colors focus:outline-none flex items-center justify-center p-1 bg-slate-100/50 hover:bg-slate-200 rounded-md"
-                  >
-                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                  </button>
-                </div>
-              </div>
-
-              {/* --- TERMS OF SERVICE CHECKBOX --- */}
-              {isSignUp && (
-                <label className="flex items-start gap-3 p-2 cursor-pointer group mt-4 bg-slate-100/50 rounded-2xl border border-slate-200/50 hover:bg-slate-100 transition-colors animate-in fade-in duration-300">
-                  <div className="relative flex items-center justify-center mt-0.5 shrink-0 ml-1">
-                    <input
-                      type="checkbox"
+                {/* Email Input */}
+                <div className="space-y-1.5 group">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2 group-focus-within:text-blue-500 transition-colors">Email Address</label>
+                  <div className="relative flex items-center">
+                    <div className="absolute left-4 pointer-events-none">
+                      <Mail className="h-5 w-5 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
+                    </div>
+                    <input 
+                      type="email" 
                       required
-                      checked={acceptedTerms}
-                      onChange={(e) => setAcceptedTerms(e.target.checked)}
-                      className="peer sr-only"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder={userType === 'coach' && coachType === 'college' ? "coach@university.edu" : userType === 'coach' ? "coach@school.org" : "athlete@example.com"}
+                      className="w-full bg-white border-2 border-slate-200 text-slate-900 rounded-2xl pl-12 pr-4 py-3.5 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 font-bold shadow-sm placeholder:font-medium placeholder:text-slate-400 transition-all"
                     />
-                    <div className="w-5 h-5 rounded-lg border-2 border-slate-300 bg-white peer-checked:bg-blue-600 peer-checked:border-blue-600 transition-all shadow-sm group-hover:border-blue-400 flex items-center justify-center">
-                      <Check className="w-3.5 h-3.5 text-white opacity-0 peer-checked:opacity-100 transition-opacity pointer-events-none stroke-[3]" />
-                    </div>
                   </div>
-                  <span className="text-xs font-semibold text-slate-500 leading-relaxed pr-2">
-                    I agree to the{' '}
-                    <Link href="/terms" target="_blank" className="text-blue-600 hover:text-blue-700 underline underline-offset-2">Terms of Service</Link>
-                    {' '}and{' '}
-                    <Link href="/privacy" target="_blank" className="text-blue-600 hover:text-blue-700 underline underline-offset-2">Privacy Policy</Link>, 
-                    and confirm I am at least 13 years old.
-                  </span>
-                </label>
-              )}
+                </div>
 
-              {/* Primary Action Button */}
-              <button 
-                type="submit"
-                disabled={loading || (isSignUp && !acceptedTerms)}
-                className={`w-full group text-white px-8 py-4 rounded-2xl font-black text-lg transition-all flex justify-center items-center mt-6 disabled:opacity-50 disabled:cursor-not-allowed
-                  ${userType === 'coach' && isSignUp 
-                    ? 'bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500 shadow-[0_0_20px_rgba(147,51,234,0.3)] hover:shadow-[0_0_25px_rgba(147,51,234,0.5)]' 
-                    : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-[0_0_20px_rgba(37,99,235,0.3)] hover:shadow-[0_0_25px_rgba(37,99,235,0.5)]'
-                  }`}
-              >
-                {loading ? 'Processing...' : (isSignUp ? 'Create Profile' : 'Secure Login')}
-                {!loading && <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />}
-              </button>
-            </form>
+                {/* Password Input */}
+                <div className="space-y-1.5 group">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2 group-focus-within:text-blue-500 transition-colors">Password</label>
+                  <div className="relative flex items-center">
+                    <div className="absolute left-4 pointer-events-none">
+                      <Lock className="h-5 w-5 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
+                    </div>
+                    <input 
+                      type={showPassword ? "text" : "password"}
+                      required
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full bg-white border-2 border-slate-200 text-slate-900 rounded-2xl pl-12 pr-12 py-3.5 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 font-bold shadow-sm placeholder:font-medium placeholder:text-slate-400 transition-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-4 text-slate-400 hover:text-slate-600 transition-colors focus:outline-none flex items-center justify-center p-1 bg-slate-100/50 hover:bg-slate-200 rounded-md"
+                    >
+                      {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* --- TERMS OF SERVICE CHECKBOX --- */}
+                {isSignUp && (
+                  <label className="flex items-start gap-3 p-2 cursor-pointer group mt-4 bg-slate-100/50 rounded-2xl border border-slate-200/50 hover:bg-slate-100 transition-colors animate-in fade-in duration-300">
+                    <div className="relative flex items-center justify-center mt-0.5 shrink-0 ml-1">
+                      <input
+                        type="checkbox"
+                        required
+                        checked={acceptedTerms}
+                        onChange={(e) => setAcceptedTerms(e.target.checked)}
+                        className="peer sr-only"
+                      />
+                      <div className="w-5 h-5 rounded-lg border-2 border-slate-300 bg-white peer-checked:bg-blue-600 peer-checked:border-blue-600 transition-all shadow-sm group-hover:border-blue-400 flex items-center justify-center">
+                        <Check className="w-3.5 h-3.5 text-white opacity-0 peer-checked:opacity-100 transition-opacity pointer-events-none stroke-[3]" />
+                      </div>
+                    </div>
+                    <span className="text-xs font-semibold text-slate-500 leading-relaxed pr-2">
+                      I agree to the{' '}
+                      <Link href="/terms" target="_blank" className="text-blue-600 hover:text-blue-700 underline underline-offset-2">Terms of Service</Link>
+                      {' '}and{' '}
+                      <Link href="/privacy" target="_blank" className="text-blue-600 hover:text-blue-700 underline underline-offset-2">Privacy Policy</Link>, 
+                      and confirm I am at least 13 years old.
+                    </span>
+                  </label>
+                )}
+
+                {/* Primary Action Button */}
+                <button 
+                  type="submit"
+                  disabled={loading || (isSignUp && !acceptedTerms)}
+                  className={`w-full group text-white px-8 py-4 rounded-2xl font-black text-lg transition-all flex justify-center items-center mt-6 disabled:opacity-50 disabled:cursor-not-allowed
+                    ${userType === 'coach' && isSignUp 
+                      ? 'bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500 shadow-[0_0_20px_rgba(147,51,234,0.3)] hover:shadow-[0_0_25px_rgba(147,51,234,0.5)]' 
+                      : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-[0_0_20px_rgba(37,99,235,0.3)] hover:shadow-[0_0_25px_rgba(37,99,235,0.5)]'
+                    }`}
+                >
+                  {loading ? 'Processing...' : (isSignUp ? 'Create Profile' : 'Secure Login')}
+                  {!loading && <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />}
+                </button>
+              </form>
+            )}
 
             {/* Toggle Sign Up / Login */}
             <div className="text-center pt-6">
@@ -366,6 +397,7 @@ export default function LoginPage() {
                   onClick={() => {
                     setIsSignUp(!isSignUp);
                     setError(null);
+                    setSuccessMsg(null);
                   }}
                   className="text-slate-900 font-black hover:text-blue-600 transition-colors focus:outline-none ml-1 border-b-2 border-slate-900 hover:border-blue-600 pb-0.5"
                 >

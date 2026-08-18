@@ -2,16 +2,27 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { createClient } from '@/utils/supabase/client';
+import { useRouter } from 'next/navigation';
 import { 
   Users, MessageSquare, Trophy, Shield, Crown, Activity, 
   Gift, AlertCircle, X, CheckCircle2, ChevronRight, 
-  Star, Target, ArrowRight, Sparkles, Search, MapPin, Plus, Building2
+  Star, Target, ArrowRight, Sparkles, Search, MapPin, Plus, Building2,
+  GraduationCap
 } from 'lucide-react';
 import Link from 'next/link';
 
 // 🚨 REUSABLE COMPONENTS
 import { Points } from '@/components/Points';
 import { AvatarWithBorder } from '@/components/AnimatedBorders';
+
+// --- TEAM SPORTS CONFIG ---
+const TEAM_SPORTS = [
+  'Football', 'Soccer', 'Lacrosse', 'Field Hockey', 
+  'Basketball', 'Volleyball', 'Baseball', 'Softball', 
+  'Ice Hockey', 'Water Polo'
+];
+
+const CURRENT_YEAR = 2026;
 
 // --- GAMIFIED TIER SYSTEM ---
 const getLocalTierStyles = (score: number) => {
@@ -126,27 +137,33 @@ interface TeamMember {
   last_name: string;
   avatar_url: string | null;
   equipped_border: string | null;
-  sport_scores: Record<string, number>; 
+  sport_scores: Record<string, number>;
+  sport_honors: Record<string, string[]>;
+  sport_levels: Record<string, string>;
   sports: string[];
   created_at: string;
+  grad_year: number | null;
   is_premium: boolean;
 }
 
 interface ChatMessage {
   id: string;
+  team_name: string;
   sender_id: string;
   sender_name: string;
   text: string;
-  timestamp: Date;
+  created_at: string;
 }
 
 export default function TeamHeadquarters() {
-  // 1. STABILITY FIX: Use useState to preserve the client
   const [supabase] = useState(() => createClient());
+  const router = useRouter();
+  
   const [loading, setLoading] = useState(true);
   
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
-  const [activeTab, setActiveTab] = useState<'leaderboards' | 'rewards' | 'chat'>('leaderboards');
+  const [activeTab, setActiveTab] = useState<'roster' | 'rewards' | 'chat'>('roster');
+  const [rosterView, setRosterView] = useState<'current' | 'past'>('current');
   
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
@@ -155,15 +172,17 @@ export default function TeamHeadquarters() {
   const [availableSports, setAvailableSports] = useState<string[]>([]);
   const [activeSport, setActiveSport] = useState<string>('Track & Field');
 
-  const [lastCashClaim, setLastCashClaim] = useState<Date | null>(null);
+  const [lastPointsClaim, setLastPointsClaim] = useState<Date | null>(null);
   const [claimedMilestones, setClaimedMilestones] = useState<Set<number>>(new Set());
   const [isClaiming, setIsClaiming] = useState(false);
 
-  const [userCoins, setUserCoins] = useState(0);
+  const [userPoints, setUserPoints] = useState(0);
 
   const [chatInput, setChatInput] = useState('');
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [isSendingChat, setIsSendingChat] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'error' | 'success' } | null>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
@@ -179,7 +198,6 @@ export default function TeamHeadquarters() {
     setTimeout(() => setToast(null), 5000); 
   };
 
-  // 2. STABILITY FIX: Mounting ref to prevent StrictMode execution overlap
   const hasFetchedData = useRef(false);
 
   useEffect(() => {
@@ -202,7 +220,7 @@ export default function TeamHeadquarters() {
 
         if (userData) {
           setCurrentUser(userData);
-          setUserCoins(userData.coins || 0);
+          setUserPoints(userData.coins || 0);
 
           if (!userData.high_school || userData.high_school.trim() === '') {
             setNeedsOnboarding(true);
@@ -216,7 +234,7 @@ export default function TeamHeadquarters() {
             ? new Date(userData.last_cash_claim) 
             : new Date(userData.created_at);
             
-          setLastCashClaim(claimThreshold);
+          setLastPointsClaim(claimThreshold);
 
           const rawSchool = userData.high_school.trim();
           const strippedSchoolQuery = rawSchool.replace(/\b(high school|h\.s\.|hs|highschool|senior high)\b/gi, '').trim();
@@ -255,6 +273,8 @@ export default function TeamHeadquarters() {
           }
 
           const scoresMap: Record<string, Record<string, number>> = {};
+          const honorsMap: Record<string, Record<string, string[]>> = {};
+          const levelsMap: Record<string, Record<string, string>> = {};
           const activeSportsMap: Record<string, string[]> = {};
           const globalSportsSet = new Set<string>();
           const trackMetricsMap: Record<string, any[]> = {}; 
@@ -263,15 +283,37 @@ export default function TeamHeadquarters() {
 
           sportsData.forEach((row: any) => {
             if (!scoresMap[row.athlete_id]) scoresMap[row.athlete_id] = {};
+            if (!honorsMap[row.athlete_id]) honorsMap[row.athlete_id] = {};
+            if (!levelsMap[row.athlete_id]) levelsMap[row.athlete_id] = {};
             if (!activeSportsMap[row.athlete_id]) activeSportsMap[row.athlete_id] = [];
             
             let contextRating = 0;
+            let parsedMeta: any = {};
+            
             if (row.meta_context && typeof row.meta_context === 'object') {
-                contextRating = (row.meta_context as any).calculatedRating || 0;
+                parsedMeta = row.meta_context;
+                contextRating = parsedMeta.calculatedRating || 0;
             } else if (typeof row.meta_context === 'string') {
-                try { contextRating = JSON.parse(row.meta_context).calculatedRating || 0; } catch(e){}
+                try { 
+                  parsedMeta = JSON.parse(row.meta_context); 
+                  contextRating = parsedMeta.calculatedRating || 0; 
+                } catch(e){}
             }
             
+            // Extract All Honors from meta_context.accolades for Team Sports displays
+            let allHonors: string[] = [];
+            if (parsedMeta.accolades && Array.isArray(parsedMeta.accolades)) {
+              allHonors = parsedMeta.accolades.map((acc: any) => {
+                if (acc.type === 'Honor') return acc.text;
+                if (acc.type === 'HS_Team' || acc.type === 'Club_Team') return `${acc.level || ''} ${acc.placement || ''}`.trim();
+                if (acc.type === 'Individual') return `Indiv: ${acc.placement || ''}`.trim();
+                return acc.placement || acc.text || 'Honored Athlete';
+              }).filter(Boolean);
+            }
+            
+            honorsMap[row.athlete_id][row.sport_name] = allHonors;
+            levelsMap[row.athlete_id][row.sport_name] = parsedMeta.level || 'Varsity Competitor';
+
             const calculatedRatingValue = row.custom_fit_score || contextRating || 0;
             scoresMap[row.athlete_id][row.sport_name] = calculatedRatingValue;
             
@@ -339,8 +381,11 @@ export default function TeamHeadquarters() {
               avatar_url: t.avatar_url || null,
               equipped_border: t.equipped_border || null,
               sport_scores: integratedScores,
+              sport_honors: honorsMap[t.id] || {},
+              sport_levels: levelsMap[t.id] || {},
               sports: Array.from(individualAthleteSports),
               created_at: t.created_at || new Date().toISOString(),
+              grad_year: t.grad_year ? parseInt(t.grad_year, 10) : null,
               is_premium: t.is_premium || false
             };
           });
@@ -350,18 +395,28 @@ export default function TeamHeadquarters() {
           const sortedSportsArray = Array.from(globalSportsSet);
           setAvailableSports(sortedSportsArray);
           
-          // Set initial default sport natively without triggering loops
           if (sortedSportsArray.length > 0) {
             setActiveSport(sortedSportsArray[0]);
           }
 
           const storedClaimedMilestones = localStorage.getItem(`claimed_milestones_${session.user.id}`);
           if (storedClaimedMilestones) setClaimedMilestones(new Set(JSON.parse(storedClaimedMilestones)));
+
+          // --- FETCH CHAT MESSAGES ---
+          const oneMonthAgo = new Date();
+          oneMonthAgo.setDate(oneMonthAgo.getDate() - 30);
+          
+          const { data: dbMessages, error: msgErr } = await supabase
+            .from('team_messages')
+            .select('*')
+            .eq('team_name', rawSchool)
+            .gte('created_at', oneMonthAgo.toISOString())
+            .order('created_at', { ascending: true });
+            
+          if (!msgErr && dbMessages) {
+            setChatMessages(dbMessages);
+          }
         }
-        
-        setChatMessages([
-          { id: '1', sender_id: 'sys', sender_name: 'System', text: 'Welcome to the Team Locker Room.', timestamp: new Date() }
-        ]);
         
         setLoading(false);
       } catch (err: any) {
@@ -371,7 +426,14 @@ export default function TeamHeadquarters() {
     }
     
     loadTeamData();
-  }, [supabase]); // 3. STABILITY FIX: activeSport removed from dependencies
+  }, [supabase]); 
+
+  // --- AUTO SCROLL CHAT ---
+  useEffect(() => {
+    if (chatScrollRef.current && activeTab === 'chat') {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+    }
+  }, [chatMessages, activeTab]);
 
   // --- TEAM ONBOARDING LOGIC ---
   useEffect(() => {
@@ -428,6 +490,13 @@ export default function TeamHeadquarters() {
 
   const handleJoinTeam = async (schoolName: string) => {
     if (!currentUser) return;
+    
+    // ENFORCING TRUST LEVEL CHECK
+    if (currentUser.trust_level !== 1) {
+      showToast("You must be a verified athlete (Trust Level 1) to join a team. Please update your profile.", 'error');
+      return;
+    }
+
     setIsClaiming(true);
     try {
       const { error } = await supabase
@@ -455,6 +524,12 @@ export default function TeamHeadquarters() {
     e.preventDefault();
     if (!currentUser || isClaiming) return;
     
+    // ENFORCING TRUST LEVEL CHECK
+    if (currentUser.trust_level !== 1) {
+      showToast("You must be a verified athlete (Trust Level 1) to create a school hub. Please update your profile.", 'error');
+      return;
+    }
+
     const finalSchoolName = sanitizeSchoolName(createData.name);
     if (!finalSchoolName) {
       showToast("Please enter a valid school name.", 'error');
@@ -496,45 +571,77 @@ export default function TeamHeadquarters() {
     }
   };
 
-  const handleSendChat = (e: React.FormEvent) => {
+  const handleSendChat = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!chatInput.trim() || !currentUser) return;
-    
-    const newMsg: ChatMessage = {
-      id: Date.now().toString(),
+    if (!chatInput.trim() || !currentUser || isSendingChat) return;
+    setIsSendingChat(true);
+
+    const newMsgData = {
+      team_name: teamName,
       sender_id: currentUser.id,
       sender_name: currentUser.first_name,
       text: chatInput,
-      timestamp: new Date()
+      created_at: new Date().toISOString()
     };
     
-    setChatMessages([...chatMessages, newMsg]);
+    // Optimistic UI update
+    const optimisticMsg = { ...newMsgData, id: `temp-${Date.now()}` };
+    setChatMessages(prev => [...prev, optimisticMsg]);
     setChatInput('');
+
+    try {
+      const { data: insertedMsg, error } = await supabase
+        .from('team_messages')
+        .insert({
+          team_name: newMsgData.team_name,
+          sender_id: newMsgData.sender_id,
+          sender_name: newMsgData.sender_name,
+          text: newMsgData.text
+        })
+        .select()
+        .single();
+        
+      if (error) throw error;
+      
+      // Swap optimistic message with real message
+      setChatMessages(prev => prev.map(m => m.id === optimisticMsg.id ? insertedMsg : m));
+    } catch (err: any) {
+      showToast('Failed to send message: ' + err.message, 'error');
+      // Remove optimistic message if failed
+      setChatMessages(prev => prev.filter(m => m.id !== optimisticMsg.id));
+    } finally {
+      setIsSendingChat(false);
+    }
   };
 
   // --- REWARDS MATH ---
   const multiplier = 1.00 + (teamMembers.length * 0.05);
-  const baseReward = 500;
+  const baseReward = 50; 
   const payoutPerAthlete = Math.floor(baseReward * multiplier);
   
   const claimableRecruits = teamMembers.filter(r => {
-    if (!lastCashClaim || r.id === currentUser?.id) return false;
-    return new Date(r.created_at) > lastCashClaim;
+    if (!lastPointsClaim || r.id === currentUser?.id) return false;
+    return new Date(r.created_at) > lastPointsClaim;
   });
   
-  const totalPendingCash = claimableRecruits.length * payoutPerAthlete;
+  const totalPendingPoints = claimableRecruits.length * payoutPerAthlete;
 
+  // REVERTED TO EVERY 10 ATHLETES
   const totalMilestonesUnlocked = Math.floor(teamMembers.length / 10);
   const milestones = Array.from({ length: totalMilestonesUnlocked }, (_, i) => (i + 1) * 10);
   const nextMilestone = (totalMilestonesUnlocked + 1) * 10;
   const progressToNext = teamMembers.length % 10;
+
+  // --- FIND OG JOIN ORDER ---
+  const userIndex = teamMembers.findIndex(m => m.id === currentUser?.id);
+  const userJoinOrder = userIndex !== -1 ? userIndex + 1 : 99999;
 
   const handleClaimRecruitRewards = async () => {
     if (!currentUser || claimableRecruits.length === 0 || isClaiming) return;
     setIsClaiming(true);
 
     try {
-      const newBalance = userCoins + totalPendingCash;
+      const newBalance = userPoints + totalPendingPoints;
       const now = new Date().toISOString();
 
       const { error } = await supabase
@@ -547,10 +654,10 @@ export default function TeamHeadquarters() {
 
       if (error) throw error;
 
-      setUserCoins(newBalance);
-      setLastCashClaim(new Date(now));
+      setUserPoints(newBalance);
+      setLastPointsClaim(new Date(now));
 
-      showToast(`Payload Claimed! +${totalPendingCash.toLocaleString()} Points added.`, 'success');
+      showToast(`Payload Claimed! +${totalPendingPoints.toLocaleString()} Points added.`, 'success');
     } catch (err: any) {
       showToast(err.message, 'error');
     } finally {
@@ -560,35 +667,39 @@ export default function TeamHeadquarters() {
 
   const handleClaimMilestone = async (milestoneCount: number) => {
     if (!currentUser || claimedMilestones.has(milestoneCount) || isClaiming) return;
+    
+    // Safety check incase they bypass UI
+    if (milestoneCount < userJoinOrder) {
+        showToast("You joined the team after this milestone was already achieved.", "error");
+        return;
+    }
+
     setIsClaiming(true);
 
     try {
-      let rewardMessage = "";
-      
-      if (currentUser.is_premium) {
-        const newBalance = userCoins + 1000;
-        const { error } = await supabase.from('athletes').update({ coins: newBalance }).eq('id', currentUser.id);
-        if (error) throw error;
-        setUserCoins(newBalance);
-        rewardMessage = "Milestone Reached! +1,000 Points awarded.";
-      } else {
-        const { error } = await supabase.from('athletes').update({ is_premium: true }).eq('id', currentUser.id);
-        if (error) throw error;
-        setCurrentUser({ ...currentUser, is_premium: true });
-        rewardMessage = "Milestone Reached! 1 Month of Premium activated.";
-      }
+      const { error } = await supabase.rpc('claim_team_milestone', { target_athlete_id: currentUser.id });
+      if (error) throw error;
 
       const newClaimedMilestones = new Set(claimedMilestones).add(milestoneCount);
       setClaimedMilestones(newClaimedMilestones);
       localStorage.setItem(`claimed_milestones_${currentUser.id}`, JSON.stringify(Array.from(newClaimedMilestones)));
 
-      showToast(rewardMessage, 'success');
+      showToast("Milestone Reached! 1x Ultra Background & 1x Ultra Border added to your account.", 'success');
+      
+      setTimeout(() => {
+         router.push('/shop');
+      }, 1500);
+
     } catch (err: any) {
       showToast(err.message, 'error');
-    } finally {
       setIsClaiming(false);
     }
   };
+
+  // ROSTER SPLIT LOGIC
+  const currentRosterMembers = teamMembers.filter(m => !m.grad_year || m.grad_year >= CURRENT_YEAR);
+  const pastRosterMembers = teamMembers.filter(m => m.grad_year && m.grad_year < CURRENT_YEAR);
+  const displayedRoster = rosterView === 'current' ? currentRosterMembers : pastRosterMembers;
 
   if (loading) {
     return (
@@ -756,14 +867,14 @@ export default function TeamHeadquarters() {
             </div>
             <h1 className="text-4xl md:text-5xl font-black tracking-tight text-white mb-2">{teamName}</h1>
             <p className="text-slate-400 font-medium flex items-center gap-2">
-              <Users className="w-4 h-4" /> {teamMembers.length} Active Athletes
+              <Users className="w-4 h-4" /> {teamMembers.length} Total Athletes
             </p>
           </div>
 
           <div className="flex items-center gap-3">
             <div className="bg-slate-950/50 px-5 py-3 rounded-2xl border border-slate-800 flex items-center gap-2 shadow-inner">
               <Points className="w-5 h-5 text-emerald-400" />
-              <span className="font-black text-xl text-white">{userCoins.toLocaleString()}</span>
+              <span className="font-black text-xl text-white">{userPoints.toLocaleString()}</span>
             </div>
           </div>
         </div>
@@ -772,11 +883,11 @@ export default function TeamHeadquarters() {
       <div className="max-w-6xl mx-auto px-6 pt-8">
         
         <div className="flex gap-2 mb-8 border-b border-slate-800 pb-px overflow-x-auto hide-scrollbar">
-          <button onClick={() => setActiveTab('leaderboards')} className={`px-6 py-3 font-bold text-sm tracking-wide transition-all border-b-2 whitespace-nowrap ${activeTab === 'leaderboards' ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-slate-500 hover:text-slate-300'}`}>
-            <Trophy className="w-4 h-4 inline mr-2 -mt-0.5" /> Leaderboards
+          <button onClick={() => setActiveTab('roster')} className={`px-6 py-3 font-bold text-sm tracking-wide transition-all border-b-2 whitespace-nowrap ${activeTab === 'roster' ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-slate-500 hover:text-slate-300'}`}>
+            <Trophy className="w-4 h-4 inline mr-2 -mt-0.5" /> Team Roster
           </button>
           <button onClick={() => setActiveTab('rewards')} className={`px-6 py-3 font-black text-sm tracking-wide transition-all border-b-2 whitespace-nowrap rounded-t-lg ${activeTab === 'rewards' ? 'bg-amber-500/10 border-amber-500 text-amber-400' : 'border-transparent text-slate-500 hover:text-slate-300'}`}>
-            <Gift className="w-4 h-4 inline mr-2 -mt-0.5" /> Bounty & Rewards
+            <Gift className="w-4 h-4 inline mr-2 -mt-0.5" /> Rewards
           </button>
           <button onClick={() => setActiveTab('chat')} className={`px-6 py-3 font-bold text-sm tracking-wide transition-all border-b-2 whitespace-nowrap ${activeTab === 'chat' ? 'border-blue-500 text-blue-400' : 'border-transparent text-slate-500 hover:text-slate-300'}`}>
             <MessageSquare className="w-4 h-4 inline mr-2 -mt-0.5" /> Team Chat
@@ -784,9 +895,9 @@ export default function TeamHeadquarters() {
         </div>
 
         {/* =========================================
-            TAB 1: SPORT LEADERBOARDS
+            TAB 1: SPORT ROSTER & LEADERBOARDS
         ========================================= */}
-        {activeTab === 'leaderboards' && (
+        {activeTab === 'roster' && (
           <div className="animate-in fade-in slide-in-from-bottom-4 space-y-6">
             
             {/* Sport Selector Pills */}
@@ -806,21 +917,37 @@ export default function TeamHeadquarters() {
               <div className="p-6 md:p-8 border-b border-slate-800 bg-slate-900/50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
                   <h3 className="text-2xl font-black text-white mb-2 flex items-center gap-3">
-                    <Activity className="w-7 h-7 text-emerald-500" /> {activeSport} Rankings
+                    <Activity className="w-7 h-7 text-emerald-500" /> {activeSport}
                   </h3>
                   <p className="text-slate-400 font-medium text-sm">
-                    {activeSport.includes('Track') ? 'See who runs the yard. Track & Field is ranked by Base Recruiting Score.' : `Ranked by calculated Fit Score & Skill Tier.`}
+                    {activeSport.includes('Track') ? 'See who runs the yard. Ranked by Base Recruiting Score.' : TEAM_SPORTS.includes(activeSport) ? 'See who leads the pack. Displayed by accolades and varsity rank.' : `Ranked by calculated Fit Score & Skill Tier.`}
                   </p>
+                </div>
+
+                <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 shrink-0">
+                  <button 
+                    onClick={() => setRosterView('current')} 
+                    className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-colors ${rosterView === 'current' ? 'bg-emerald-500 text-emerald-950' : 'text-slate-500 hover:text-slate-300'}`}
+                  >
+                    Active Roster
+                  </button>
+                  <button 
+                    onClick={() => setRosterView('past')} 
+                    className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-colors ${rosterView === 'past' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-slate-300'}`}
+                  >
+                    Past (Alumni)
+                  </button>
                 </div>
               </div>
 
-              <div className="flex flex-col p-2 gap-2">
-                {teamMembers.filter(m => m.sports.includes(activeSport)).length === 0 ? (
-                  <div className="p-8 text-center text-slate-500 font-bold text-sm border border-dashed border-slate-800 rounded-2xl m-2">
-                    No active competitors logged inside this bracket yet.
+              <div className="flex flex-col p-2 gap-2 min-h-[300px]">
+                {displayedRoster.filter(m => m.sports.includes(activeSport)).length === 0 ? (
+                  <div className="p-8 text-center text-slate-500 font-bold text-sm border border-dashed border-slate-800 rounded-2xl m-2 flex flex-col items-center justify-center h-full min-h-[200px]">
+                    <Users className="w-8 h-8 text-slate-700 mb-2" />
+                    {rosterView === 'past' ? 'No alumni recorded in this bracket yet.' : 'No active competitors logged inside this bracket yet.'}
                   </div>
                 ) : (
-                  teamMembers
+                  displayedRoster
                     .filter(m => m.sports.includes(activeSport))
                     .sort((a, b) => {
                       const scoreA = a.sport_scores[activeSport] || 0;
@@ -830,41 +957,79 @@ export default function TeamHeadquarters() {
                     })
                     .map((athlete, idx) => {
                       const rank = idx + 1;
-                      const isTop3 = rank <= 3;
+                      const isTop3 = rank <= 3 && rosterView === 'current';
                       const score = athlete.sport_scores[activeSport] || 0;
                       const isTrack = activeSport.includes('Track');
-                      const tierStyles = !isTrack ? getLocalTierStyles(score) : null;
+                      const isTeamSport = TEAM_SPORTS.includes(activeSport);
+                      const tierStyles = !isTrack && !isTeamSport ? getLocalTierStyles(score) : null;
+                      
+                      const honorsList = athlete.sport_honors[activeSport] || [];
+                      const baselineLevel = athlete.sport_levels[activeSport] || 'Varsity Competitor';
                       
                       return (
-                        <Link href={`/athlete/${athlete.id}`} key={athlete.id} className={`p-4 md:p-6 flex items-center gap-4 transition-all block w-full text-left cursor-pointer group rounded-2xl ${isTop3 ? 'bg-slate-800/30 border border-slate-700/50' : 'border border-transparent hover:bg-slate-800/30'}`}>
-                          <div className="w-8 shrink-0 text-center">
-                            {rank === 1 ? <Crown className="w-6 h-6 mx-auto text-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.5)]" /> :
+                        <Link href={`/athlete/${athlete.id}`} key={athlete.id} className={`p-4 md:p-6 flex items-start sm:items-center gap-4 transition-all block w-full text-left cursor-pointer group rounded-2xl ${isTop3 ? 'bg-slate-800/30 border border-slate-700/50' : 'border border-transparent hover:bg-slate-800/30'}`}>
+                          <div className="w-8 shrink-0 text-center pt-2 sm:pt-0">
+                            {rosterView === 'past' ? <GraduationCap className="w-5 h-5 mx-auto text-slate-500" /> : 
+                             rank === 1 ? <Crown className="w-6 h-6 mx-auto text-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.5)]" /> :
                              rank === 2 ? <div className="w-6 h-6 rounded-full bg-slate-300 mx-auto border-2 border-slate-400 shadow-[0_0_8px_rgba(203,213,225,0.3)]"></div> :
                              rank === 3 ? <div className="w-6 h-6 rounded-full bg-amber-600 mx-auto border-2 border-amber-700 shadow-[0_0_8px_rgba(217,119,6,0.3)]"></div> :
                              <span className="font-black text-lg text-slate-600">#{rank}</span>}
                           </div>
                           
-                          <AvatarWithBorder avatarUrl={athlete.avatar_url} borderId={athlete.equipped_border} sizeClasses="w-12 h-12 shadow-md shrink-0" />
+                          <div className="pt-1 sm:pt-0 shrink-0">
+                            <AvatarWithBorder avatarUrl={athlete.avatar_url} borderId={athlete.equipped_border} sizeClasses="w-12 h-12 shadow-md" />
+                          </div>
                           
-                          <div className="flex-1 min-w-0">
-                            <h4 className="font-bold text-white truncate text-lg group-hover:text-emerald-400 transition-colors flex items-center gap-2">
-                              {athlete.first_name} {athlete.last_name}
-                              {!isTrack && score > 0 && tierStyles && (
+                          <div className="flex-1 min-w-0 flex flex-col justify-center">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h4 className="font-bold text-white truncate text-lg group-hover:text-emerald-400 transition-colors">
+                                {athlete.first_name} {athlete.last_name}
+                              </h4>
+                              {!isTeamSport && !isTrack && score > 0 && tierStyles && (
                                  <span className={`text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-md border ${tierStyles.colorClass} ${tierStyles.bgClass} ${tierStyles.borderClass} hidden sm:inline-block`}>
                                    {tierStyles.tier}
                                  </span>
                               )}
-                            </h4>
-                            {athlete.is_premium && <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-widest font-black text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-md mt-1"><Star className="w-3 h-3" /> Premium</span>}
+                              {rosterView === 'past' && athlete.grad_year && (
+                                 <span className="text-[10px] font-black text-slate-400 bg-slate-900 px-2 py-0.5 rounded-md border border-slate-800">
+                                   Class of '{athlete.grad_year.toString().slice(-2)}
+                                 </span>
+                              )}
+                              {athlete.is_premium && <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-widest font-black text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-md"><Star className="w-3 h-3" /> Premium</span>}
+                            </div>
+                            
+                            {/* Detailed Array of Honors for Team Sports */}
+                            {isTeamSport && honorsList.length > 0 && (
+                               <div className="flex flex-wrap gap-1.5 mt-2">
+                                 {honorsList.map((honor, hIdx) => (
+                                   <span key={hIdx} className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-md border border-slate-700 bg-slate-900/80 text-slate-300 truncate max-w-[200px] sm:max-w-xs shadow-sm">
+                                     {honor}
+                                   </span>
+                                 ))}
+                               </div>
+                            )}
                           </div>
                           
-                          <div className="text-right shrink-0 bg-slate-950 px-4 py-2 rounded-xl border border-slate-800">
-                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-0.5">
-                              {isTrack ? 'Recruit Score' : 'Fit Score'}
-                            </span>
-                            <span className={`font-black text-xl ${isTop3 ? 'text-emerald-400' : 'text-slate-300'}`}>
-                              {score}
-                            </span>
+                          <div className="text-right shrink-0 bg-slate-950 px-4 py-2 rounded-xl border border-slate-800 w-28 md:w-40 flex flex-col justify-center h-full">
+                            {isTeamSport ? (
+                               <>
+                                 <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-0.5">
+                                   Level
+                                 </span>
+                                 <span className="font-black text-xs text-slate-300 truncate" title={baselineLevel}>
+                                   {baselineLevel}
+                                 </span>
+                               </>
+                            ) : (
+                               <>
+                                 <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-0.5">
+                                   {isTrack ? 'Recruit Score' : 'Fit Score'}
+                                 </span>
+                                 <span className={`font-black text-xl ${isTop3 ? 'text-emerald-400' : 'text-slate-300'}`}>
+                                   {score}
+                                 </span>
+                               </>
+                            )}
                           </div>
                         </Link>
                       );
@@ -886,7 +1051,7 @@ export default function TeamHeadquarters() {
               <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
                 <div>
                   <h2 className="text-3xl md:text-4xl font-black text-white mb-2 flex items-center gap-3">
-                    <Target className="w-8 h-8 text-amber-500" /> Bounty Multiplier
+                    <Target className="w-8 h-8 text-amber-500" /> Rewards Multiplier
                   </h2>
                   <p className="text-amber-200/80 font-medium max-w-lg">
                     Earn Points for every athlete that joins your school after you. The more total athletes signed up from your school, the higher the payout multiplier grows for everyone!
@@ -895,7 +1060,7 @@ export default function TeamHeadquarters() {
                 <div className="text-center bg-slate-950/50 p-6 rounded-2xl border border-amber-500/30 backdrop-blur-md shrink-0 min-w-[200px]">
                   <p className="text-xs font-black text-amber-500 uppercase tracking-widest mb-1">Current Yield</p>
                   <p className="text-5xl font-black text-white">{multiplier.toFixed(2)}x</p>
-                  <p className="text-sm font-bold text-amber-200/60 mt-2">{payoutPerAthlete} Cash / recruit</p>
+                  <p className="text-sm font-bold text-amber-200/60 mt-2">{payoutPerAthlete} Points / recruit</p>
                 </div>
               </div>
             </div>
@@ -909,8 +1074,8 @@ export default function TeamHeadquarters() {
                     <p className="text-sm text-slate-400 font-medium">Athletes who joined since your last claim.</p>
                   </div>
                   <div className="bg-emerald-500/10 px-4 py-2 rounded-xl border border-emerald-500/20 text-right">
-                    <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-0.5">Pending Cash</p>
-                    <p className="text-xl font-black text-emerald-400">+{totalPendingCash.toLocaleString()}</p>
+                    <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-0.5">Pending Points</p>
+                    <p className="text-xl font-black text-emerald-400">+{totalPendingPoints.toLocaleString()}</p>
                   </div>
                 </div>
 
@@ -945,7 +1110,7 @@ export default function TeamHeadquarters() {
                   disabled={claimableRecruits.length === 0 || isClaiming}
                   className="w-full mt-auto bg-gradient-to-r from-emerald-400 to-emerald-600 hover:from-emerald-300 hover:to-emerald-500 text-emerald-950 font-black py-4 rounded-xl transition-all shadow-[0_0_15px_rgba(16,185,129,0.2)] hover:scale-[1.02] disabled:opacity-50 disabled:hover:scale-100 flex items-center justify-center gap-2"
                 >
-                  {isClaiming ? 'Claiming...' : `Claim +${totalPendingCash.toLocaleString()} Points`} <ArrowRight className="w-5 h-5" />
+                  {isClaiming ? 'Claiming...' : `Claim +${totalPendingPoints.toLocaleString()} Points`} <ArrowRight className="w-5 h-5" />
                 </button>
               </div>
 
@@ -979,21 +1144,25 @@ export default function TeamHeadquarters() {
                   ) : (
                     milestones.reverse().map(ms => {
                       const isClaimed = claimedMilestones.has(ms);
+                      const isEligible = ms >= userJoinOrder;
+                      
                       return (
-                        <div key={ms} className={`border p-4 rounded-2xl flex items-center justify-between transition-all ${isClaimed ? 'bg-slate-950/50 border-slate-800 opacity-60' : 'bg-fuchsia-500/10 border-fuchsia-500/30'}`}>
+                        <div key={ms} className={`border p-4 rounded-2xl flex items-center justify-between transition-all ${!isEligible ? 'bg-slate-900 border-slate-800 opacity-60' : isClaimed ? 'bg-slate-950/50 border-slate-800 opacity-60' : 'bg-fuchsia-500/10 border-fuchsia-500/30'}`}>
                           <div>
-                            <p className={`font-black ${isClaimed ? 'text-slate-400' : 'text-fuchsia-400'}`}>{ms} Athlete Milestone</p>
-                            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-0.5">Reward: Premium / 1k Cash</p>
+                            <p className={`font-black ${!isEligible || isClaimed ? 'text-slate-400' : 'text-fuchsia-400'}`}>{ms} Athlete Milestone</p>
+                            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-0.5">Reward: 1x Ultra Card, 1x Ultra Border</p>
                           </div>
-                          {isClaimed ? (
-                            <span className="text-slate-500 text-xs font-black uppercase tracking-widest bg-slate-900 px-3 py-1.5 rounded-lg">Claimed</span>
+                          {!isEligible ? (
+                            <span className="text-slate-500 text-[10px] font-black uppercase tracking-widest bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800">Missed (OGs Only)</span>
+                          ) : isClaimed ? (
+                            <span className="text-slate-500 text-[10px] font-black uppercase tracking-widest bg-slate-900 px-3 py-1.5 rounded-lg">Claimed</span>
                           ) : (
                             <button 
                               onClick={() => handleClaimMilestone(ms)}
                               disabled={isClaiming}
                               className="bg-fuchsia-600 hover:bg-fuchsia-500 text-white text-xs font-black px-4 py-2 rounded-lg transition-colors shadow-[0_0_10px_rgba(192,38,211,0.3)] disabled:opacity-50"
                             >
-                              Claim Reward
+                              Claim Vaults
                             </button>
                           )}
                         </div>
@@ -1012,34 +1181,53 @@ export default function TeamHeadquarters() {
         ========================================= */}
         {activeTab === 'chat' && (
           <div className="animate-in fade-in slide-in-from-bottom-4 bg-slate-900 border border-slate-800 rounded-3xl flex flex-col h-[600px] overflow-hidden shadow-xl">
-            <div className="p-4 md:p-6 border-b border-slate-800 bg-slate-900/50 shrink-0">
-              <h3 className="text-xl font-black text-white flex items-center gap-3">
-                <MessageSquare className="w-6 h-6 text-blue-500" /> Team Locker Room
-              </h3>
+            <div className="p-4 md:p-6 border-b border-slate-800 bg-slate-900/50 shrink-0 flex justify-between items-center">
+              <div>
+                <h3 className="text-xl font-black text-white flex items-center gap-3">
+                  <MessageSquare className="w-6 h-6 text-blue-500" /> Team Locker Room
+                </h3>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mt-1">Messages auto-clear after 30 days</p>
+              </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 bg-slate-950/50 custom-scrollbar">
-              {chatMessages.map(msg => {
-                const isMe = msg.sender_id === currentUser?.id;
-                const isSystem = msg.sender_id === 'sys';
+            <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 bg-slate-950/50 custom-scrollbar scroll-smooth">
+              {chatMessages.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-slate-500">
+                  <MessageSquare className="w-8 h-8 mb-2 opacity-50" />
+                  <p className="font-bold text-sm">No recent messages.</p>
+                  <p className="text-xs mt-1">Start the conversation with your team.</p>
+                </div>
+              ) : (
+                chatMessages.map(msg => {
+                  const isMe = msg.sender_id === currentUser?.id;
+                  const isSystem = msg.sender_id === 'sys';
+                  
+                  // Simple time formatter
+                  const msgTime = new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-                if (isSystem) {
+                  if (isSystem) {
+                    return (
+                      <div key={msg.id} className="text-center my-6">
+                        <span className="bg-slate-800 text-slate-400 text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full">{msg.text}</span>
+                      </div>
+                    );
+                  }
+
                   return (
-                    <div key={msg.id} className="text-center my-6">
-                      <span className="bg-slate-800 text-slate-400 text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full">{msg.text}</span>
+                    <div key={msg.id} className={`flex flex-col max-w-[85%] sm:max-w-[70%] ${isMe ? 'ml-auto items-end' : 'mr-auto items-start'}`}>
+                      <div className="flex items-baseline gap-2 mb-1">
+                        <Link href={`/athlete/${msg.sender_id}`} className={`text-[10px] font-bold hover:text-blue-400 transition-colors ${isMe ? 'text-slate-400 order-2' : 'text-slate-300 ml-1'}`}>
+                          {isMe ? 'You' : msg.sender_name}
+                        </Link>
+                        <span className={`text-[9px] font-bold text-slate-600 ${isMe ? 'order-1' : ''}`}>{msgTime}</span>
+                      </div>
+                      <div className={`px-4 py-2.5 rounded-2xl text-sm md:text-base font-medium shadow-sm ${isMe ? 'bg-blue-600 text-white rounded-br-sm' : 'bg-slate-800 text-slate-200 rounded-bl-sm border border-slate-700'} ${msg.id.startsWith('temp') ? 'opacity-50' : 'opacity-100'}`}>
+                        {msg.text}
+                      </div>
                     </div>
                   );
-                }
-
-                return (
-                  <div key={msg.id} className={`flex flex-col max-w-[80%] ${isMe ? 'ml-auto items-end' : 'mr-auto items-start'}`}>
-                    <Link href={`/athlete/${msg.sender_id}`} className="text-[10px] font-bold text-slate-500 hover:text-blue-400 transition-colors mb-1 ml-1">{msg.sender_name}</Link>
-                    <div className={`px-4 py-2.5 rounded-2xl text-sm md:text-base font-medium ${isMe ? 'bg-blue-600 text-white rounded-br-sm' : 'bg-slate-800 text-slate-200 rounded-bl-sm border border-slate-700'}`}>
-                      {msg.text}
-                    </div>
-                  </div>
-                );
-              })}
+                })
+              )}
             </div>
 
             <div className="p-4 bg-slate-900 border-t border-slate-800 shrink-0">
@@ -1051,8 +1239,8 @@ export default function TeamHeadquarters() {
                   placeholder="Message the team..."
                   className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:border-blue-500 text-white placeholder-slate-500 transition-colors"
                 />
-                <button type="submit" disabled={!chatInput.trim()} className="bg-blue-600 hover:bg-blue-500 text-white p-3 rounded-xl transition-colors disabled:opacity-50">
-                  <ChevronRight className="w-5 h-5" />
+                <button type="submit" disabled={!chatInput.trim() || isSendingChat} className="bg-blue-600 hover:bg-blue-500 text-white p-3 rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center min-w-[50px]">
+                  {isSendingChat ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : <ChevronRight className="w-5 h-5" />}
                 </button>
               </form>
             </div>

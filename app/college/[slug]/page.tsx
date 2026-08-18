@@ -99,22 +99,23 @@ function getBudgetTier(expense: number | null, sportName: string) {
 export async function generateStaticParams() {
   const supabase = createClient();
 
-  const { data: universities } = await supabase.from('universities').select('id');
+  // MIGRATION: Select slug instead of id
+  const { data: universities } = await supabase.from('universities').select('slug');
   
-  // Explicitly typing uni resolves the map error
-  return (universities || []).map((uni: { id: string | number }) => ({ 
-    id: uni.id.toString() 
+  return (universities || []).map((uni: { slug: string }) => ({ 
+    slug: uni.slug
   }));
 }
 
-export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const resolvedParams = await params;
   const supabase = createClient();
 
+  // MIGRATION: Query by slug
   const { data: university } = await supabase
     .from('universities')
     .select('name, city, state, division, tuition_in_state')
-    .eq('id', resolvedParams.id)
+    .eq('slug', resolvedParams.slug)
     .single();
 
   if (!university) {
@@ -126,7 +127,8 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   return {
     title: `How Much Is ${university.name} Tuition? (2026 Rankings & Recruiting)`,
     description: `In-state tuition at ${university.name} is ${inStateCost}. See national & state rankings, athletic recruiting standards, average scholarships, acceptance rates, and alumni ROI.`,
-    alternates: { canonical: `https://www.chasedsports.com/college/${resolvedParams.id}` },
+    // MIGRATION: Canonical URL uses slug
+    alternates: { canonical: `https://www.chasedsports.com/college/${resolvedParams.slug}` },
     openGraph: {
       title: `${university.name} Athletics & State/National Rankings`,
       description: `Target recruiting standards, national rankings, state benchmarks, and ROI stats for ${university.name}.`,
@@ -143,7 +145,7 @@ export default async function CollegePage({
   params, 
   searchParams 
 }: { 
-  params: Promise<{ id: string }>,
+  params: Promise<{ slug: string }>,
   searchParams: Promise<{ sport?: string; gender?: string }>
 }) {
   const resolvedParams = await params;
@@ -152,10 +154,11 @@ export default async function CollegePage({
   const supabase = createClient();
 
   // 1. Fetch Target University
+  // MIGRATION: Query by slug, but pull all data (including ID for relationships)
   const { data: collegeData, error: uniError } = await supabase
     .from('universities')
     .select('*')
-    .eq('id', resolvedParams.id)
+    .eq('slug', resolvedParams.slug)
     .single();
 
   if (uniError || !collegeData) {
@@ -171,7 +174,6 @@ export default async function CollegePage({
     supabase.from('universities').select('id, state, median_earnings, tuition_in_state, acceptance_rate').ilike('state', collegeData.state)
   ]);
 
-  // Typing these arrays natively fixes the parameter 'u' implicitly has 'any' type in the safety net block
   const universitiesList: CollegeSafetyNetData[] = [
     ...(c1.data || []),
     ...(c2.data || []),
@@ -181,7 +183,7 @@ export default async function CollegePage({
 
   const stateUniversitiesList: CollegeSafetyNetData[] = stateRes.data || [];
 
-  // Safety net: Inject target college into lists if missing
+  // Safety net: Inject target college into lists if missing (Still correctly matching on ID)
   if (!universitiesList.some(u => String(u.id).trim().toLowerCase() === String(collegeData.id).trim().toLowerCase())) {
     universitiesList.push({
       id: collegeData.id, state: collegeData.state, median_earnings: collegeData.median_earnings,
@@ -290,10 +292,11 @@ export default async function CollegePage({
   };
 
   // 3. Fetch & Filter Programs Server-Side
+  // MIGRATION: Even though we are routing by slug, database relations still use the core ID
   let progQuery = supabase
     .from('programs')
     .select(`*, recruiting_standards (*)`)
-    .eq('university_id', resolvedParams.id);
+    .eq('university_id', collegeData.id);
 
   if (resolvedSearchParams.sport) progQuery = progQuery.eq('sport', resolvedSearchParams.sport);
   if (resolvedSearchParams.gender) progQuery = progQuery.eq('gender', resolvedSearchParams.gender);
@@ -323,7 +326,8 @@ export default async function CollegePage({
 
             {isFiltered && (
               <Link 
-                href={`/college/${resolvedParams.id}`}
+                // MIGRATION: Update reset link to use slug
+                href={`/college/${resolvedParams.slug}`}
                 className="inline-flex items-center text-sm font-bold text-slate-600 hover:text-slate-800 transition-colors bg-slate-100 px-5 py-2.5 rounded-full border border-slate-200 hover:bg-slate-200 shadow-sm"
               >
                 View All {collegeData.majors_offered?.length || 'Athletic'} Programs
@@ -447,7 +451,8 @@ export default async function CollegePage({
               <h3 className="text-2xl font-black text-slate-900 mb-2 tracking-tight">No programs match this filter</h3>
               <p className="text-slate-500 font-medium mb-6">This school does not offer this specific sport or gender combination.</p>
               <Link 
-                href={`/college/${resolvedParams.id}`}
+                // MIGRATION: Update reset link to use slug
+                href={`/college/${resolvedParams.slug}`}
                 className="inline-block px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-colors shadow-lg shadow-blue-600/30"
               >
                 View All Programs

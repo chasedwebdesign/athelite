@@ -1,257 +1,294 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { createClient } from '@/utils/supabase/client';
-import { useRouter } from 'next/navigation'; 
-import { 
-  MessageSquare, Send, ShieldCheck, CheckCircle2, MapPin, Mail, X, Trophy, 
-  School, UserCircle2, Users, AlertCircle, Flame, Target, Crown, Search, 
-  Rocket, AlertTriangle, ChevronDown, Sparkles, Activity, Star, Zap, TrendingUp, 
-  HelpCircle, MoreHorizontal, Edit2, Trash2, Flag, Paintbrush, Briefcase, 
-  RefreshCw, ArrowDownWideNarrow, Info, SlidersHorizontal, Clock, Radio
-} from 'lucide-react';
+import { useRouter, usePathname } from 'next/navigation'; 
+import { ShieldCheck, CheckCircle2, AlertCircle, Flame, Users, Star, Crown, Send, Target, Award, Info, Clock, Activity, GraduationCap, Dumbbell, Eye, Filter, Heart, Search, Trash2, ChevronDown, BarChart3, Video, Maximize2 } from 'lucide-react';
 import Link from 'next/link';
-
 import { AvatarWithBorder } from '@/components/AnimatedBorders';
+import { Points } from '@/components/Points';
 
-const BAD_WORDS = ['fuck', 'shit', 'bitch', 'ass', 'asshole', 'dick', 'pussy', 'cunt', 'slut', 'whore', 'fag', 'faggot', 'nigger', 'nigga', 'retard', 'bastard', 'motherfucker'];
+// 🚨 THEME ENGINE: DYNAMICALLY SKINS THE POST CARDS 🚨
+const getThemeConfig = (cardType: string | null | undefined) => {
+  const safeCardType = cardType === 'default' || !cardType ? 'base' : cardType;
+  const isBase = safeCardType === 'base';
 
-const containsBadWords = (text: string) => {
-  return BAD_WORDS.some(word => {
-    const regex = new RegExp(`\\b${word}\\b`, 'i');
-    return regex.test(text);
-  });
-};
-
-const censorText = (text: string) => {
-  let censored = text;
-  BAD_WORDS.forEach(word => {
-    const regex = new RegExp(`\\b${word}\\b`, 'ig');
-    censored = censored.replace(regex, '***');
-  });
-  return censored;
-};
-
-const ALL_TRACK_EVENTS = [
-  '60 Meters', '100 Meters', '200 Meters', '400 Meters', '800 Meters', '1500 Meters', '1600 Meters', '3000 Meters', '3200 Meters',
-  '100m Hurdles', '110m Hurdles', '200m Hurdles', '300m Hurdles', '400m Hurdles',
-  'Shot Put', 'Discus', 'Javelin', 'Hammer', 'High Jump', 'Pole Vault', 'Long Jump', 'Triple Jump'
-];
-
-interface AthleteData {
-  id: string;
-  first_name: string;
-  last_name: string;
-  high_school: string;
-  state: string;
-  gender: string;
-  avatar_url: string | null;
-  trust_level: number;
-  equipped_border?: string | null;
-  equipped_title?: string | null; 
-  equipped_card?: string | null; 
-  grad_year?: number | null;
-  is_premium?: boolean; 
-  is_looking_for_college?: boolean;
-  coins?: number;
-  last_login_date?: string | null;
-  athlete_sports?: {
-    sport_name: string;
-    position: string | null;
-    level_of_play: string | null;
-    metrics: { name: string; value: string }[] | null;
-    custom_fit_score: number;
-    is_active: boolean;
-  }[];
-}
-
-interface CoachData {
-  id: string;
-  first_name: string | null;
-  last_name: string | null;
-  school_name: string | null;
-  avatar_url: string | null;
-  coach_type: string;
-  is_verified: boolean;
-  division?: string | null;
-  sport?: string | null;
-  coach_title?: string | null;
-}
-
-interface CommentData {
-  id: string; athlete_id: string; name: string; avatar_url: string | null; border: string | null; text: string; created_at: string;
-}
-
-interface Post {
-  id: string; content: string; created_at: string; athlete_id: string; linked_pr_event?: string | null; linked_pr_mark?: string | null;  
-  linked_prs?: { event: string; mark: string }[] | null; image_url?: string | null; likes?: string[]; 
-  comments?: CommentData[]; is_boosted?: boolean; athletes: AthleteData;
-}
-
-const SPORT_OPTIONS = [
-  'Track & Field', 'Cross Country', 'Football', 'Soccer', 'Lacrosse', 
-  'Field Hockey', 'Basketball', 'Volleyball', 'Wrestling', 'Baseball', 
-  'Softball', 'Golf', 'Tennis', 'Ice Hockey', 'Water Polo', 'Gymnastics'
-];
-
-const SPORT_POSITIONS: Record<string, string[]> = {
-  'Football': ['QB', 'RB', 'WR', 'TE', 'OL', 'C', 'G', 'T', 'DL', 'DT', 'DE', 'EDGE', 'LB', 'ILB', 'OLB', 'CB', 'S', 'K', 'P', 'LS', 'ATH'],
-  'Soccer': ['ST', 'CF', 'LW', 'RW', 'CAM', 'CM', 'CDM', 'LM', 'RM', 'LB', 'RB', 'LWB', 'RWB', 'CB', 'GK'],
-  'Basketball': ['PG', 'SG', 'CG', 'SF', 'PF', 'C'],
-  'Baseball': ['RHP', 'LHP', 'C', '1B', '2B', '3B', 'SS', 'INF', 'LF', 'CF', 'RF', 'OF', 'UTIL'],
-  'Softball': ['RHP', 'LHP', 'C', '1B', '2B', '3B', 'SS', 'INF', 'LF', 'CF', 'RF', 'OF', 'UTIL'],
-  'Volleyball': ['OH', 'OPP', 'RS', 'MB', 'MH', 'S', 'L', 'DS'],
-  'Lacrosse': ['ATT', 'MID', 'FOGO', 'LSM', 'DEF', 'G'],
-  'Field Hockey': ['FWD', 'MID', 'DEF', 'GK'],
-  'Ice Hockey': ['C', 'LW', 'RW', 'F', 'D', 'G'],
-  'Water Polo': ['Attacker', 'Center', 'Center Defender', 'Utility', 'Goalkeeper']
-};
-
-const COACH_TITLES = [
-  'Head Coach', 'Associate Head Coach', 'Assistant Coach', 
-  'Director of Operations', 'Recruiting Coordinator', 'Graduate Assistant', 
-  'Volunteer Assistant', 'Positional Coach', 'Strength & Conditioning'
-];
-
-const getScoreTier = (score: number) => {
-  if (score >= 95) return 'Power 4 D1';
-  if (score >= 85) return 'Mid-Major D1';
-  if (score >= 75) return 'D1 Walk-On / Top D2';
-  if (score >= 65) return 'D2 / D3 Prospect';
-  if (score >= 55) return 'NAIA Prospect';
-  if (score >= 40) return 'Strong Varsity';
-  if (score >= 20) return 'Varsity Contributor';
-  if (score > 0) return 'Developmental';
-  return 'Unranked';
-};
-
-const getValidGradYears = () => {
-  const today = new Date();
-  const currentYear = today.getFullYear();
-  const isAfterRollover = today.getMonth() > 6 || (today.getMonth() === 6 && today.getDate() >= 15);
-  const seniorYear = isAfterRollover ? currentYear + 1 : currentYear;
-  return [seniorYear, seniorYear + 1, seniorYear + 2, seniorYear + 3];
-};
-
-const getCardStyles = (cardId: string | null | undefined, type: 'post' | 'dir') => {
-  let id = cardId || 'base';
-  if (id === 'default') id = 'base';
-
-  const isFoil = ['hype', 'premium', 'crimson', 'sapphire'].includes(id);
-  const isAnimated = ['hype', 'premium', 'crimson', 'sapphire', 'amethyst', 'cyber'].includes(id);
-  const hasGlare = ['hype', 'premium'].includes(id); 
-  const hasTrophy = ['hype', 'premium'].includes(id);
-
-  let bgClass = '';
-  if (id === 'base') {
-     bgClass = type === 'post' ? 'bg-white/[0.02]' : 'bg-gradient-to-b from-white/[0.05] to-transparent';
-  } else {
-     bgClass = `holo-card-${id}`;
+  if (isBase) {
+    return {
+      isDark: false,
+      cardType: safeCardType,
+      heroCard: 'bg-white/90 backdrop-blur-xl border-white/50 shadow-xl',
+      heroName: 'text-slate-900',
+      heroMeta: 'text-slate-600',
+      statBadge: 'bg-slate-100 border-slate-200 text-slate-700',
+    };
   }
 
+  const map: Record<string, any> = {
+    obsidian: { border: 'border-slate-600/50', accent: 'text-slate-400' },
+    crimson: { border: 'border-red-500/50', accent: 'text-red-400' },
+    sapphire: { border: 'border-blue-500/50', accent: 'text-blue-400' },
+    hype: { border: 'border-indigo-500/50', accent: 'text-indigo-400' },
+    premium: { border: 'border-amber-500/50', accent: 'text-amber-400' },
+    amethyst: { border: 'border-fuchsia-500/50', accent: 'text-fuchsia-400' },
+    cyber: { border: 'border-cyan-500/50', accent: 'text-cyan-400' },
+    'mythic-flare': { border: 'border-rose-500/50', accent: 'text-rose-400' },
+  };
+
+  const t = map[safeCardType] || map.obsidian;
+  const isAnimated = ['hype', 'premium', 'crimson', 'sapphire', 'amethyst', 'cyber', 'mythic-flare'].includes(safeCardType);
+  const animationClass = isAnimated ? 'animate-foil' : '';
+
   return {
-     bgClass,
-     isFoil,
-     isCustom: id !== 'base',
-     isAnimated,
-     hasGlare,
-     hasTrophy,
-     borderClass: id === 'base' ? (type === 'post' ? 'border-white/5 hover:border-white/10' : 'border-white/10') : 'border-white/20 shadow-xl'
+    isDark: true,
+    cardType: safeCardType,
+    heroCard: `holo-card-${safeCardType} border-white/20 shadow-2xl text-white ${animationClass}`,
+    heroName: 'text-white drop-shadow-md',
+    heroMeta: 'text-white/90',
+    statBadge: `bg-black/40 ${t.border} text-white`,
   };
 };
 
-const formatLastSeen = (dateString?: string | null) => {
-  if (!dateString) return { text: "Status Unknown", color: "bg-slate-500", dot: "bg-slate-400" };
-  const lastDate = new Date(dateString);
-  const today = new Date();
-  
-  const diffTime = Math.abs(today.getTime() - lastDate.getTime());
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-
-  if (diffDays <= 1) return { text: "Active Today", color: "bg-emerald-500/20 border-emerald-500/30 text-emerald-300", dot: "bg-emerald-400 animate-pulse" };
-  if (diffDays <= 3) return { text: `Active ${diffDays}d ago`, color: "bg-amber-500/20 border-amber-500/30 text-amber-300", dot: "bg-amber-400" };
-  if (diffDays <= 7) return { text: `Active this week`, color: "bg-blue-500/20 border-blue-500/30 text-blue-300", dot: "bg-blue-400" };
-  return { text: "Inactive > 1 Week", color: "bg-slate-700/50 border-slate-600 text-slate-400", dot: "bg-slate-500" };
+const parseHonors = (rawHonors: any): string[] => {
+    if (!rawHonors) return ['Developing Prospect'];
+    
+    if (Array.isArray(rawHonors)) {
+        const parsed = rawHonors.map((h: any) => {
+            if (typeof h === 'string') return h.trim();
+            if (typeof h === 'object' && h !== null) {
+                if (h.placement && h.level) return `${h.placement} ${h.level}`;
+                if (h.level) return h.level;
+                if (h.placement) return h.placement;
+                return h.type || 'Accolade';
+            }
+            return '';
+        }).filter(h => h.length > 0);
+        return parsed.length > 0 ? parsed : ['Developing Prospect'];
+    } else if (typeof rawHonors === 'string') {
+        const parsed = rawHonors.split(/[,•|]+/).map((h: string) => h.trim()).filter((h: string) => h.length > 0);
+        return parsed.length > 0 ? parsed : ['Developing Prospect'];
+    }
+    
+    return ['Developing Prospect'];
 };
 
-export default function FeedPage() {
+const getTimeRemaining = (endTime: string) => {
+    const total = Date.parse(endTime) - Date.parse(new Date().toISOString());
+    if (total <= 0) return 'Expired';
+    const days = Math.floor(total / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((total / (1000 * 60 * 60)) % 24);
+    const minutes = Math.floor((total / 1000 / 60) % 60);
+    
+    if (days > 0) return `${days}d ${hours}h`;
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    return `${minutes}m`;
+};
+
+// 🚨 SMART POLLING & TIKTOK UX VIDEO COMPONENT 🚨
+const CloudflareStreamVideo = ({ uid }: { uid: string }) => {
+  const [isReady, setIsReady] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  useEffect(() => {
+    let attempts = 0;
+    let timeoutId: NodeJS.Timeout;
+    let isMounted = true;
+
+    const checkReady = async () => {
+      if (!isMounted) return;
+      attempts++;
+      
+      try {
+        const response = await fetch(`https://customer-4lk9yxcqvek697fx.cloudflarestream.com/${uid}/manifest/video.m3u8`);
+        
+        if (response.ok) {
+          setTimeout(() => {
+            if (isMounted) setIsReady(true);
+          }, 1000);
+        } else {
+          throw new Error("Manifest not ready");
+        }
+      } catch (e) {
+        if (attempts < 60) {
+          timeoutId = setTimeout(checkReady, 2500);
+        }
+      }
+    };
+
+    checkReady();
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timeoutId);
+    };
+  }, [uid]);
+
+  useEffect(() => {
+    const handleFullscreenSync = () => {
+      const activeFullscreen = !!(document.fullscreenElement || (document as any).webkitFullscreenElement);
+      setIsFullscreen(activeFullscreen);
+      
+      if (!activeFullscreen && iframeRef.current) {
+        try {
+          iframeRef.current.contentWindow?.postMessage(JSON.stringify({method: 'muted', value: true}), '*');
+        } catch(e) {}
+      }
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenSync);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenSync);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenSync);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenSync);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isFullscreen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => { document.body.style.overflow = 'unset'; };
+  }, [isFullscreen]);
+
+  // 🚨 SMART VIEWPORT OBSERVER: ONLY PLAY WHEN VISIBLE 🚨
+  useEffect(() => {
+    if (!isReady || !iframeRef.current || !containerRef.current) return;
+    
+    // Disable auto-pausing mechanics if the user explicitly launched full screen
+    if (isFullscreen) return;
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          try {
+            iframeRef.current?.contentWindow?.postMessage(JSON.stringify({method: 'play'}), '*');
+          } catch(e) {}
+        } else {
+          try {
+            iframeRef.current?.contentWindow?.postMessage(JSON.stringify({method: 'pause'}), '*');
+          } catch(e) {}
+        }
+      });
+    }, {
+      threshold: 0.6 // Requires 60% of the video container to be visible
+    });
+
+    observer.observe(containerRef.current);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [isReady, isFullscreen]);
+
+  const handleVideoClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!iframeRef.current || !containerRef.current) return;
+
+    if (!isFullscreen) {
+      try {
+        iframeRef.current.contentWindow?.postMessage(JSON.stringify({method: 'muted', value: false}), '*');
+        iframeRef.current.contentWindow?.postMessage(JSON.stringify({method: 'play'}), '*');
+      } catch(e) {}
+
+      const target = containerRef.current;
+      if (target.requestFullscreen) {
+        target.requestFullscreen().catch(() => {});
+      } else if ((target as any).webkitRequestFullscreen) {
+        (target as any).webkitRequestFullscreen();
+      } else {
+        setIsFullscreen(true);
+      }
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      } else if ((document as any).webkitExitFullscreen) {
+        (document as any).webkitExitFullscreen();
+      }
+      
+      try {
+        iframeRef.current.contentWindow?.postMessage(JSON.stringify({method: 'muted', value: true}), '*');
+      } catch(e) {}
+      
+      setIsFullscreen(false);
+    }
+  };
+
+  return (
+    <div
+      ref={containerRef}
+      onClick={handleVideoClick}
+      className={`relative overflow-hidden cursor-pointer group/video transition-all duration-300 ${
+        isFullscreen
+          ? 'fixed inset-0 z-[99999] w-screen h-[100dvh] bg-black flex items-center justify-center rounded-none border-none'
+          : 'w-full aspect-video rounded-2xl border border-white/10 mb-4 bg-[#0B0F19] shadow-inner'
+      }`}
+    >
+      {!isReady && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 backdrop-blur-xl z-20">
+          <div className="relative w-12 h-12 flex items-center justify-center mb-3">
+            <div className="absolute inset-0 border-2 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
+            <Video className="w-5 h-5 text-indigo-400 animate-pulse" />
+          </div>
+          <span className="text-[10px] font-black text-indigo-300 uppercase tracking-widest animate-pulse">
+            Processing Video...
+          </span>
+          <p className="text-[10px] font-medium text-slate-400 mt-2 text-center px-4">
+            Optimizing for feed playback.<br/>This usually takes about a minute.
+          </p>
+        </div>
+      )}
+
+      {isReady && (
+        <>
+          <iframe
+            ref={iframeRef}
+            src={`https://customer-4lk9yxcqvek697fx.cloudflarestream.com/${uid}/iframe?controls=false&autoplay=false&loop=true&muted=true&preload=auto&letterboxColor=transparent`}
+            className={`border-none absolute h-full w-full bg-transparent pointer-events-none ${isFullscreen ? 'max-w-full max-h-full object-contain inset-0 m-auto' : 'top-0 left-0'}`}
+            allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen"
+          ></iframe>
+        </>
+      )}
+    </div>
+  );
+};
+
+export default function FeaturedPage() {
   const supabase = createClient();
   const router = useRouter(); 
+  const pathname = usePathname();
   
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [coachesList, setCoachesList] = useState<CoachData[]>([]);
-  const [recruitsList, setRecruitsList] = useState<AthleteData[]>([]);
+  const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [currentUserEmail, setCurrentUserEmail] = useState<string>(''); 
-  const [currentUserProfile, setCurrentUserProfile] = useState<AthleteData | null>(null);
-  const [coachProfile, setCoachProfile] = useState<CoachData | null>(null);
+  const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
   const [viewerRole, setViewerRole] = useState<'guest' | 'athlete' | 'coach'>('guest');
+  const [lastPostStats, setLastPostStats] = useState<{likes: number, views: number} | null>(null);
+
+  const [isFeatureFormOpen, setIsFeatureFormOpen] = useState(false);
+  const [featuredMsg, setFeaturedMsg] = useState('');
+  const [featuredSport, setFeaturedSport] = useState('');
+  const [selectedOtherSports, setSelectedOtherSports] = useState<string[]>([]);
+  const [includeGpa, setIncludeGpa] = useState(false);
   
-  const [isUpperclassman, setIsUpperclassman] = useState(false);
-  
-  const [feedTab, setFeedTab] = useState<'feed' | 'network'>('feed');
-  const [searchQuery, setSearchQuery] = useState('');
-  
-  const [filterDivision, setFilterDivision] = useState('');
-  const [filterCoachSport, setFilterCoachSport] = useState('');
-  const [filterTitle, setFilterTitle] = useState('');
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null);
 
-  const [filterAthleteState, setFilterAthleteState] = useState('');
-  const [filterGradYear, setFilterGradYear] = useState('');
-  const [filterSport, setFilterSport] = useState('');
-  const [filterPosition, setFilterPosition] = useState('');
-  const [filterTargetScore, setFilterTargetScore] = useState('');
-  const [showMobileFilters, setShowMobileFilters] = useState(false); 
-
-  const [newDiscussionContent, setNewDiscussionContent] = useState('');
-  const [isSubmittingDiscussion, setIsSubmittingDiscussion] = useState(false);
-
-  const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({});
-  const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
-  const [isSubmittingComment, setIsSubmittingComment] = useState<Record<string, boolean>>({});
-
-  const [isMessageModalOpen, setIsMessageModalOpen] = useState(false);
-  const [messageRecipient, setMessageRecipient] = useState<{ id: string, name: string, school: string, role: string } | null>(null);
-  const [messageContent, setMessageContent] = useState('');
-  const [isSending, setIsSending] = useState(false);
-  const [sendSuccess, setSendSuccess] = useState(false);
-  const [existingThread, setExistingThread] = useState<any>(null);
-  const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
-  const [isCheckingThread, setIsCheckingThread] = useState(false);
-
-  const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
-  const [editingPostId, setEditingPostId] = useState<string | null>(null);
-  const [editPostContent, setEditPostContent] = useState('');
-  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
-  const [editCommentContent, setEditCommentContent] = useState('');
-  
-  const [postToDelete, setPostToDelete] = useState<string | null>(null);
-  const [commentToDelete, setCommentToDelete] = useState<{postId: string, commentId: string} | null>(null);
-
-  const [reportModal, setReportModal] = useState<{type: 'post'|'comment', id: string, targetId: string, content: string} | null>(null);
-  const [reportReason, setReportReason] = useState('Inappropriate Language');
-  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
-  const [showScoringModal, setShowScoringModal] = useState(false);
-
-  const [isEditingProfile, setIsEditingProfile] = useState(false);
-  const [editFirstName, setEditFirstName] = useState('');
-  const [editLastName, setEditLastName] = useState('');
-  const [editSchoolName, setEditSchoolName] = useState('');
-  const [editDivision, setEditDivision] = useState('');
-  const [editSport, setEditSport] = useState('');
-  const [editCoachTitle, setEditCoachTitle] = useState('');
-  const [schoolOptions, setSchoolOptions] = useState<{id: string, name: string, division: string}[]>([]);
-  const [showSchoolDropdown, setShowSchoolDropdown] = useState(false);
-  const [isSearchingSchool, setIsSearchingSchool] = useState(false);
-  const [showSportDropdown, setShowSportDropdown] = useState(false);
-  const [showTitleDropdown, setShowTitleDropdown] = useState(false);
-  const [isSavingProfile, setIsSavingProfile] = useState(false);
-
-  const [animatingHype, setAnimatingHype] = useState<string | null>(null);
-  const [coinPopId, setCoinPopId] = useState<string | null>(null);
+  const [isDraftLoaded, setIsDraftLoaded] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitStatus, setSubmitStatus] = useState(''); 
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'error' | 'success' } | null>(null);
+  const [animatingLikeId, setAnimatingLikeId] = useState<string | null>(null);
+
+  const [activeFilter, setActiveFilter] = useState<string>('All');
+  const trackedRefs = useRef<Set<string>>(new Set());
 
   const showToast = (message: string, type: 'error' | 'success' = 'error') => {
     setToast({ message, type });
@@ -259,708 +296,380 @@ export default function FeedPage() {
   };
 
   useEffect(() => { 
-    fetchFeedAndUser(); 
+    fetchFeaturedAndUser(); 
   }, []); 
 
-  // --- REALTIME FEED SUBSCRIPTION ---
-  // --- REALTIME FEED SUBSCRIPTION ---
   useEffect(() => {
-    const feedChannel = supabase
-      .channel('public:posts')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'posts' },
-        async (payload: any) => { // 🚨 FIX 1: Explicitly typed 'payload' as 'any' to satisfy strict mode
-          // 1. Handle NEW Posts
-          if (payload.eventType === 'INSERT') {
-            // Fetch the new post with all its joined athlete data
-            const { data: newPost } = await supabase
-              .from('posts')
-              .select(`
-                id, content, created_at, athlete_id, linked_pr_event, linked_pr_mark, linked_prs, image_url, likes, comments, is_boosted,
-                athletes (id, first_name, last_name, high_school, state, gender, avatar_url, trust_level, equipped_border, equipped_title, equipped_card, grad_year, is_premium, is_looking_for_college)
-              `)
-              .eq('id', payload.new.id)
-              .maybeSingle();
-
-            if (newPost) {
-              setPosts((currentPosts) => {
-                // Prevent duplicates if the user is the one who posted it (handled optimistically elsewhere)
-                if (currentPosts.some(p => p.id === newPost.id)) return currentPosts;
-                return [newPost as unknown as Post, ...currentPosts];
-              });
-            }
-          }
-
-          // 2. Handle UPDATES (Likes, Comments, Edits)
-          if (payload.eventType === 'UPDATE') {
-            setPosts((currentPosts) =>
-              currentPosts.map((post) =>
-                post.id === payload.new.id
-                  ? { ...post, ...payload.new } // Merge in the new likes/comments arrays
-                  : post // 🚨 FIX 2: Corrected the typo 'posta' to 'post'
-              )
-            );
-          }
-
-          // 3. Handle DELETIONS
-          if (payload.eventType === 'DELETE') {
-            setPosts((currentPosts) =>
-              currentPosts.filter((post) => post.id !== payload.old.id)
-            );
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(feedChannel);
-    };
-  }, [supabase]);
-
-  useEffect(() => {
-    if (feedTab === 'network') {
-      if (viewerRole !== 'coach') fetchCoaches();
-      if (viewerRole === 'coach') fetchRecruits();
+    const draft = localStorage.getItem('chased_featured_draft');
+    if (draft) {
+      try {
+        const parsed = JSON.parse(draft);
+        if (parsed.featuredSport) setFeaturedSport(parsed.featuredSport);
+        if (parsed.featuredMsg) setFeaturedMsg(parsed.featuredMsg);
+        if (parsed.selectedOtherSports) setSelectedOtherSports(parsed.selectedOtherSports);
+        if (parsed.includeGpa !== undefined) setIncludeGpa(parsed.includeGpa);
+        if (parsed.featuredSport || parsed.featuredMsg) setIsFeatureFormOpen(true);
+      } catch(e) {}
     }
-  }, [feedTab, viewerRole]);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (!(event.target as Element).closest('.more-dropdown')) setActiveDropdown(null);
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    setIsDraftLoaded(true);
   }, []);
 
   useEffect(() => {
-    const searchUniversities = async () => {
-      if (!editSchoolName || editSchoolName.length < 2) {
-        setSchoolOptions([]);
-        return;
-      }
-      setIsSearchingSchool(true);
-      const { data } = await supabase.from('universities').select('id, name, division').ilike('name', `%${editSchoolName}%`).order('name').limit(10);
-      if (data) setSchoolOptions(data);
-      setIsSearchingSchool(false);
-    };
-    const timeoutId = setTimeout(searchUniversities, 300);
-    return () => clearTimeout(timeoutId);
-  }, [editSchoolName]);
+    if (isDraftLoaded) {
+      localStorage.setItem('chased_featured_draft', JSON.stringify({
+        featuredSport, featuredMsg, selectedOtherSports, includeGpa
+      }));
+    }
+  }, [featuredSport, featuredMsg, selectedOtherSports, includeGpa, isDraftLoaded]);
 
-  async function fetchFeedAndUser() {
+  async function fetchFeaturedAndUser() {
     const { data: { session } } = await supabase.auth.getSession();
     
-    let currentTrustLevel = 0;
-    let isAthlete = false;
-    let uId = '';
-
     if (session) {
-      uId = session.user.id;
-      setCurrentUserId(uId);
-      setCurrentUserEmail(session.user.email || '');
+      setCurrentUserId(session.user.id);
+      
+      supabase.from('posts')
+        .delete()
+        .eq('athlete_id', session.user.id)
+        .eq('channel', 'featured')
+        .lt('boosted_until', new Date().toISOString())
+        .then();
 
       const { data: cData } = await supabase.from('coaches').select('*').eq('id', session.user.id).maybeSingle();
-      
       if (cData) {
         setViewerRole('coach');
-        setCoachProfile(cData);
       } else {
-        const { data: aData } = await supabase.from('athletes').select('*').eq('id', session.user.id).maybeSingle();
+        const { data: aData } = await supabase.from('athletes').select(`
+            *,
+            athlete_sports ( sport_name, custom_fit_score, is_active, metrics, meta_context )
+        `).eq('id', session.user.id).maybeSingle();
 
         if (aData) {
           setViewerRole('athlete');
-          setCurrentUserProfile(aData as AthleteData);
-          currentTrustLevel = aData.trust_level || 0;
-          isAthlete = true;
+          setCurrentUserProfile(aData);
           
-          if (aData.grad_year) {
-            const currentYear = new Date().getFullYear();
-            if (aData.grad_year <= currentYear + 2) setIsUpperclassman(true);
+          const { data: lpData } = await supabase.from('posts').select('likes').eq('athlete_id', session.user.id).eq('channel', 'featured').order('created_at', { ascending: false }).limit(1).maybeSingle();
+          if (lpData) {
+              setLastPostStats({ likes: lpData.likes?.length || 0, views: aData.profile_views || 0 });
           }
         }
       }
-    }
-
-    if (isAthlete && currentTrustLevel >= 1 && uId) {
-       const welcomeMsg = `A New Athlete Has Verified!`;
-       
-       // FIX: Using .limit(1) instead of .maybeSingle() prevents cascading duplication
-       // if a race condition ever creates more than 1 welcome message.
-       const { data: existingWelcomeRows } = await supabase.from('posts')
-          .select('id')
-          .eq('athlete_id', uId)
-          .eq('content', welcomeMsg)
-          .limit(1);
-
-       if (!existingWelcomeRows || existingWelcomeRows.length === 0) {
-           await supabase.from('posts').insert({
-               athlete_id: uId,
-               content: welcomeMsg
-           });
-       }
     }
 
     const { data: feedData } = await supabase
       .from('posts')
       .select(`
-        id, content, created_at, athlete_id, linked_pr_event, linked_pr_mark, linked_prs, image_url, likes, comments, is_boosted,
-        athletes (id, first_name, last_name, high_school, state, gender, avatar_url, trust_level, equipped_border, equipped_title, equipped_card, grad_year, is_premium, is_looking_for_college, athlete_sports (sport_name, position, custom_fit_score, metrics))
+        id, content, created_at, athlete_id, channel, is_boosted, boosted_until, likes,
+        athletes (id, first_name, last_name, state, avatar_url, equipped_border, equipped_card, is_premium, grad_year)
       `)
-      .order('created_at', { ascending: false })
-      .limit(100);
+      .eq('channel', 'featured')
+      .gte('boosted_until', new Date().toISOString())
+      .order('created_at', { ascending: false });
       
-    setPosts((feedData as unknown as Post[]) || []);
+    setPosts(feedData || []);
     setLoading(false);
   }
 
-  async function fetchCoaches() {
-    const { data, error } = await supabase
-      .from('coaches')
-      .select('id, first_name, last_name, school_name, avatar_url, coach_type, is_verified, division, sport, coach_title')
-      .order('school_name', { ascending: true });
-      
-    if (error) showToast("Could not load coaches.", "error");
-    if (data) setCoachesList(data as unknown as CoachData[]);
-  }
-
-  async function fetchRecruits() {
-    const { data, error } = await supabase
-      .from('athletes')
-      .select(`
-        id, first_name, last_name, high_school, state, gender, avatar_url, grad_year, trust_level, is_premium, is_looking_for_college, equipped_border, equipped_card, last_login_date,
-        athlete_sports (sport_name, position, level_of_play, metrics, custom_fit_score, is_active)
-      `)
-      .not('first_name', 'is', null)
-      .order('trust_level', { ascending: false })
-      .limit(300);
-
-    if (error) {
-      console.error("Supabase Recruits Fetch Error:", error.message);
-      showToast("Could not load recruiting boards.", "error");
-    }
-
-    if (data) {
-      const validRecruits = (data as unknown as AthleteData[]).filter(r => {
-          const fName = r.first_name || '';
-          const lName = r.last_name || '';
-          return fName.trim().length > 0 && lName.trim().length > 0;
-      });
-      setRecruitsList(validRecruits);
-    }
-  }
-
-  const handleEditToggle = () => {
-    if (!coachProfile) return;
-    setEditFirstName(coachProfile.first_name || '');
-    setEditLastName(coachProfile.last_name || '');
-    setEditSchoolName(coachProfile.school_name || '');
-    setEditDivision(coachProfile.division || '');
-    setEditSport(coachProfile.sport || '');
-    setEditCoachTitle(coachProfile.coach_title || '');
-    setIsEditingProfile(true);
-  };
-
-  const handleSaveProfile = async () => {
-    if (!coachProfile?.id) return;
-    setIsSavingProfile(true);
-    try {
-      const { error } = await supabase.from('coaches').update({
-        first_name: editFirstName.trim(), last_name: editLastName.trim(),
-        school_name: editSchoolName.trim(), division: editDivision.trim() || null,
-        sport: editSport.trim(), coach_title: editCoachTitle.trim()
-      }).eq('id', coachProfile.id);
-
-      if (error) throw error;
-
-      setCoachProfile(prev => prev ? { 
-        ...prev, first_name: editFirstName.trim(), last_name: editLastName.trim(), 
-        school_name: editSchoolName.trim(), division: editDivision.trim() || null,
-        sport: editSport.trim(), coach_title: editCoachTitle.trim()
-      } : null);
-      
-      setIsEditingProfile(false);
-      showToast("Profile updated successfully!", "success");
-    } catch (err: any) { showToast(`Failed to save profile: ${err.message}`); } 
-    finally { setIsSavingProfile(false); }
-  };
-
-  const handleCreateDiscussion = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newDiscussionContent.trim() || !currentUserId || viewerRole !== 'athlete') return;
-
-    if (currentUserProfile?.trust_level === 0) {
-        showToast("You must be verified (Trust Level 1) to post in the feed.", "error");
-        return;
-    }
-
-    let finalContent = newDiscussionContent.trim();
-    let wasCensored = false;
-
-    if (containsBadWords(finalContent)) {
-      finalContent = censorText(finalContent);
-      wasCensored = true;
-      supabase.from('reports').insert({ reporter_id: currentUserId, reported_id: currentUserId, content_type: 'post', content_id: 'new', content_snapshot: newDiscussionContent, reason: 'Auto-detected Profanity' }).then(); 
-    }
-
-    setIsSubmittingDiscussion(true);
-    try {
-      const { data, error } = await supabase.from('posts').insert({
-        athlete_id: currentUserId,
-        content: finalContent
-      }).select(`
-        id, content, created_at, athlete_id, linked_pr_event, linked_pr_mark, linked_prs, image_url, likes, comments, is_boosted,
-        athletes (id, first_name, last_name, high_school, state, gender, avatar_url, trust_level, equipped_border, equipped_title, equipped_card, grad_year, is_premium, is_looking_for_college)
-      `).single();
-
-      if (error) throw error;
-
-      setPosts([data as unknown as Post, ...posts]);
-      setNewDiscussionContent('');
-      
-      if (wasCensored) showToast("Warning: Inappropriate language was removed.", "error");
-      else showToast("Post shared with the community!", "success");
-    } catch (err: any) { showToast(err.message, "error"); }
-    finally { setIsSubmittingDiscussion(false); }
-  };
-
-  const handleSavePostEdit = async (postId: string) => {
-    if (!editPostContent.trim()) return;
-    let finalContent = editPostContent.trim();
-    let wasCensored = false;
-
-    if (containsBadWords(finalContent)) {
-      finalContent = censorText(finalContent);
-      wasCensored = true;
-      if (currentUserId) supabase.from('reports').insert({ reporter_id: currentUserId, reported_id: currentUserId, content_type: 'post', content_id: postId, content_snapshot: editPostContent, reason: 'Auto-detected Profanity' }).then(); 
-    }
-
-    try {
-      const { error } = await supabase.from('posts').update({ content: finalContent }).eq('id', postId);
-      if (error) throw error;
-      setPosts(posts.map(p => p.id === postId ? { ...p, content: finalContent } : p));
-      setEditingPostId(null);
-      if (wasCensored) showToast("Warning: Inappropriate language was removed and flagged.", "error");
-      else showToast("Post updated successfully.", "success");
-    } catch (err: any) { showToast(err.message, "error"); }
-  };
-
-  const confirmDeletePost = async () => {
-    if (!postToDelete) return;
-    try {
-      await supabase.from('posts').delete().eq('id', postToDelete);
-      setPosts(posts.filter(p => p.id !== postToDelete));
-      showToast("Post deleted successfully.", "success");
-    } catch (err: any) { 
-      showToast(err.message, "error"); 
-    } finally {
-      setPostToDelete(null);
-    }
-  };
-
-  const confirmDeleteComment = async () => {
-    if (!commentToDelete) return;
-    try {
-      const targetPost = posts.find(p => p.id === commentToDelete.postId);
-      if (!targetPost || !targetPost.comments) return;
-      
-      const updatedComments = targetPost.comments.filter(c => c.id !== commentToDelete.commentId);
-      await supabase.from('posts').update({ comments: updatedComments }).eq('id', commentToDelete.postId);
-      setPosts(posts.map(p => p.id === commentToDelete.postId ? { ...p, comments: updatedComments } : p));
-      showToast("Comment deleted successfully.", "success");
-    } catch (err: any) { 
-      showToast(err.message, "error"); 
-    } finally {
-      setCommentToDelete(null);
-    }
-  };
-
-  const handleSaveCommentEdit = async (postId: string, commentId: string) => {
-    if (!editCommentContent.trim()) return;
-    let finalContent = editCommentContent.trim();
-    if (containsBadWords(finalContent)) finalContent = censorText(finalContent);
-
-    try {
-      const targetPost = posts.find(p => p.id === postId);
-      if (!targetPost || !targetPost.comments) return;
-      const updatedComments = targetPost.comments.map(c => c.id === commentId ? { ...c, text: finalContent } : c);
-      await supabase.from('posts').update({ comments: updatedComments }).eq('id', postId);
-      setPosts(posts.map(p => p.id === postId ? { ...p, comments: updatedComments } : p));
-      setEditingCommentId(null);
-    } catch (err: any) { showToast(err.message, "error"); }
-  };
-
-  const handleSubmitReport = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!currentUserId || !reportModal) return;
-    setIsSubmittingReport(true);
-    try {
-      await supabase.from('reports').insert({
-        reporter_id: currentUserId, reported_id: reportModal.targetId,
-        content_type: reportModal.type, content_id: reportModal.id,
-        content_snapshot: reportModal.content, reason: reportReason
-      });
-      showToast("Report submitted successfully.", "success");
-      setReportModal(null);
-    } catch (err: any) { showToast("Failed to submit report.", "error"); } 
-    finally { setIsSubmittingReport(false); }
-  };
-
-  const handleToggleFire = async (postId: string, postAuthorId: string) => {
-    if (!currentUserId) { router.push('/login'); return; }
+  // 🚨 FEED IMPRESSION TRACKER (SECURE RPC UPDATE) 🚨
+  const handleImpression = useCallback(async (athleteId: string) => {
+    // Avoid incrementing analytics when viewing your own post
+    if (athleteId === currentUserId) return;
     
-    if (viewerRole === 'athlete' && (currentUserProfile?.trust_level || 0) === 0) {
-        showToast("You must be verified (Trust Level 1) to give Hype.", "error");
-        return;
+    try {
+        // Trigger the Supabase RPC atomic increment to safely bypass RLS
+        await supabase.rpc('increment_search_appearances', { target_athlete_id: athleteId });
+    } catch (e) {
+        console.error("Failed to track feed impression");
     }
+  }, [currentUserId]);
 
-    setAnimatingHype(postId);
-    setTimeout(() => setAnimatingHype(null), 300);
+  useEffect(() => {
+    if (posts.length === 0) return;
 
-    const targetPost = posts.find(p => p.id === postId);
-    if (!targetPost) return;
-    const hasLiked = targetPost.likes?.includes(currentUserId);
-
-    // Optimistically update the UI to feel lightning fast
-    setPosts(currentPosts => currentPosts.map(post => {
-      if (post.id === postId) {
-        const likes = post.likes || [];
-        return { ...post, likes: hasLiked ? likes.filter(id => id !== currentUserId) : [...likes, currentUserId] };
-      }
-      return post;
-    }));
-    
-    // Toggle the actual like mapping array in the DB
-    await supabase.rpc('toggle_post_like', { p_post_id: postId, p_user_id: currentUserId });
-    
-    // =========================================================================
-    // 🚨 ANTI-FARMING SECURE Points REWARD ALGORITHM 🚨
-    // =========================================================================
-    if (!hasLiked && postAuthorId !== currentUserId) {
-      try {
-        // We use the messages table as a secure, server-side audit log to prevent un-hype/re-hype farming
-        const rewardRef = `[HYPE_REF:${postId}_${currentUserId}]`;
-
-        // Check if this exact user has ever triggered a reward for this exact post
-        const { data: existingReward } = await supabase
-          .from('messages')
-          .select('id')
-          .eq('athlete_id', postAuthorId)
-          .eq('sender_school', 'ChasedRewards')
-          .like('content', `%${rewardRef}%`)
-          .maybeSingle();
-
-        if (!existingReward) {
-          // 1. Give 5 Points to the LIKER (if they are an athlete)
-          if (viewerRole === 'athlete' && currentUserProfile) {
-             // Fetch absolute latest to prevent race conditions instead of relying on local state
-             const { data: myData } = await supabase.from('athletes').select('coins').eq('id', currentUserId).single();
-             const myNewCoins = (myData?.coins || 0) + 5;
-             await supabase.from('athletes').update({ coins: myNewCoins }).eq('id', currentUserId);
-             setCurrentUserProfile(prev => prev ? { ...prev, coins: myNewCoins } : null);
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          const athleteId = entry.target.getAttribute('data-athlete-id');
+          const postId = entry.target.getAttribute('data-post-id');
+          
+          if (athleteId && postId && !trackedRefs.current.has(postId)) {
+            trackedRefs.current.add(postId);
+            handleImpression(athleteId);
+            observer.unobserve(entry.target);
           }
-
-          // 2. Give 5 Points to the POSTER
-          const { data: receiverData } = await supabase.from('athletes').select('coins, first_name').eq('id', postAuthorId).single();
-          if (receiverData) {
-            await supabase.from('athletes').update({ coins: (receiverData.coins || 0) + 5 }).eq('id', postAuthorId);
-
-            const senderName = viewerRole === 'coach' ? `Coach ${coachProfile?.last_name || ''}` : `${currentUserProfile?.first_name || ''} ${currentUserProfile?.last_name || ''}`;
-            
-            // Insert the audit log via the direct messaging system so the user gets notified AND we block future farming
-            await supabase.from('messages').insert({
-                athlete_id: postAuthorId,
-                sender_name: 'ChasedSports System',
-                sender_school: 'ChasedRewards',
-                sender_email: 'rewards@chasedsports.com',
-                content: `🔥 ${senderName.trim()} just hyped your post! Just a reminder: Every time you receive hype on your posts, you gain 5 Points per like! Keep up the great work.\n\n${rewardRef}`,
-                is_read: false,
-                status: 'active'
-            });
-          }
-
-          setCoinPopId(postId);
-          setTimeout(() => setCoinPopId(null), 1000);
         }
-      } catch (e) {
-         console.error("Hype Reward Error", e);
-      }
+      });
+    }, { threshold: 0.4 }); // Trigger when 40% of the post is visible
+
+    // Ensure DOM layout is fully painted before querying for cards
+    setTimeout(() => {
+       const cards = document.querySelectorAll('.feed-post-card');
+       cards.forEach(card => observer.observe(card));
+    }, 100);
+
+    return () => observer.disconnect();
+  }, [posts, activeFilter, handleImpression]);
+
+  // 🚨 STRICT 60S REQUIREMENT APPLIED HERE 🚨
+  const handleVideoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 50 * 1024 * 1024) {
+        return showToast("Video must be under 50MB.", "error");
     }
+
+    const videoElement = document.createElement('video');
+    videoElement.preload = 'metadata';
+    videoElement.onloadedmetadata = () => {
+        window.URL.revokeObjectURL(videoElement.src);
+        if (Math.ceil(videoElement.duration) > 60) { 
+            showToast("Highlight must be exactly 60 seconds or less.", "error");
+            e.target.value = ''; 
+            setVideoFile(null);
+            setVideoPreviewUrl(null);
+        } else {
+            setVideoFile(file);
+            setVideoPreviewUrl(URL.createObjectURL(file));
+        }
+    };
+    videoElement.onerror = () => {
+        showToast("Invalid or corrupted video file.", "error");
+        e.target.value = '';
+    }
+    videoElement.src = URL.createObjectURL(file);
   };
 
-  const handleAddComment = async (e: React.FormEvent, postId: string) => {
-    e.preventDefault(); 
-    
-    if (viewerRole === 'athlete' && (currentUserProfile?.trust_level || 0) === 0) {
-        showToast("You must be verified (Trust Level 1) to comment.", "error");
-        return;
-    }
+  const handleLike = async (postId: string, currentLikes: string[] = []) => {
+      if (viewerRole === 'guest' || !currentUserId) {
+          return showToast("Please log in to like posts.", "error");
+      }
 
-    const text = commentInputs[postId];
-    if (!text || !text.trim() || !currentUserId) return;
-    let finalContent = text.trim();
-    if (containsBadWords(finalContent)) finalContent = censorText(finalContent);
+      const hasLiked = currentLikes.includes(currentUserId);
+      const newLikes = hasLiked
+          ? currentLikes.filter(id => id !== currentUserId)
+          : [...currentLikes, currentUserId];
 
-    setIsSubmittingComment(prev => ({ ...prev, [postId]: true }));
+      setPosts(posts.map(p => p.id === postId ? { ...p, likes: newLikes } : p));
+
+      if (!hasLiked) {
+          setAnimatingLikeId(postId);
+          setTimeout(() => setAnimatingLikeId(null), 1200); 
+      }
+
+      const { error } = await supabase.from('posts').update({ likes: newLikes }).eq('id', postId);
+      if (error) {
+          setPosts(posts.map(p => p.id === postId ? { ...p, likes: currentLikes } : p));
+          showToast("Failed to process like.", "error");
+      }
+  };
+
+  const handleDeletePost = async (postId: string) => {
+      setIsDeleting(postId);
+      const { error } = await supabase.from('posts').delete().eq('id', postId);
+      
+      if (error) {
+          showToast("Failed to remove post.", "error");
+          setIsDeleting(null);
+      } else {
+          setPosts(posts.filter(p => p.id !== postId));
+          showToast("Post successfully removed.", "success");
+          setIsDeleting(null);
+      }
+  };
+
+  let parsedGpa: string | null = null;
+  let resumeHonorsFallback: any = null;
+
+  if (currentUserProfile?.saved_resume) {
     try {
-      const myAvatar = viewerRole === 'coach' ? coachProfile?.avatar_url : currentUserProfile?.avatar_url;
-      const myBorder = viewerRole === 'coach' ? 'none' : currentUserProfile?.equipped_border;
-      const myName = viewerRole === 'coach' ? `Coach ${coachProfile?.last_name || ''}` : currentUserProfile?.first_name + ' ' + currentUserProfile?.last_name;
+      const res = JSON.parse(currentUserProfile.saved_resume);
+      parsedGpa = res.gpa || null;
+      resumeHonorsFallback = res.honors || res.accolades || null;
+    } catch (e) {}
+  }
 
-      const newComment: CommentData = {
-        id: Math.random().toString(), athlete_id: currentUserId, name: myName.trim(),
-        avatar_url: myAvatar || '', border: myBorder || 'none', text: finalContent, created_at: new Date().toISOString()
+  const activeUserSports = currentUserProfile?.athlete_sports
+    ?.filter((s: any) => s.is_active === true)
+    .map((s: any) => s.sport_name) || [];
+
+  const availableOtherSports = activeUserSports.filter((s: string) => s !== featuredSport);
+
+  const toggleOtherSport = (sport: string) => {
+      setSelectedOtherSports(prev => 
+          prev.includes(sport) ? prev.filter(s => s !== sport) : [...prev, sport]
+      );
+  };
+
+  let liveScore = null;
+  let liveStats: any[] = [];
+  let rawLiveHonors: any = null;
+
+  if (featuredSport && currentUserProfile?.athlete_sports) {
+      const activeSport = currentUserProfile.athlete_sports.find((s: any) => s.sport_name === featuredSport);
+      if (activeSport) {
+          liveScore = activeSport.custom_fit_score > 0 ? activeSport.custom_fit_score : null;
+          liveStats = activeSport.metrics || [];
+          
+          if (activeSport.meta_context && (activeSport.meta_context.honors || activeSport.meta_context.accolades)) {
+              rawLiveHonors = activeSport.meta_context.honors || activeSport.meta_context.accolades;
+          } else {
+              rawLiveHonors = resumeHonorsFallback;
+          }
+      }
+  }
+
+  const liveHonorsArray = parseHonors(rawLiveHonors);
+  const previewTheme = getThemeConfig(currentUserProfile?.equipped_card);
+
+  const activePost = posts.find(p => p.athlete_id === currentUserId);
+
+  const handleCreateFeatured = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (viewerRole !== 'athlete' || !currentUserId || !currentUserProfile) return;
+    if (currentUserProfile.trust_level === 0) return showToast("Verification required to post.", "error");
+    if (currentUserProfile.coins < 100) return showToast("You need 100 Points to feature yourself.", "error");
+    if (!featuredSport) return showToast("Please select a sport to promote.", "error");
+    if (!featuredMsg.trim()) return showToast("A recruiting message is required to post.", "error");
+
+    setIsSubmitting(true);
+    setSubmitStatus('Preparing upload...');
+
+    try {
+      let streamUid = null;
+
+      if (videoFile) {
+          setSubmitStatus('Uploading highlight...');
+          const urlRes = await fetch('/api/stream/upload-url', { method: 'POST' });
+          const { uploadURL, uid } = await urlRes.json();
+
+          if (!uploadURL) throw new Error("Failed to secure upload channel.");
+
+          const formData = new FormData();
+          formData.append('file', videoFile);
+
+          const uploadRes = await fetch(uploadURL, {
+              method: 'POST',
+              body: formData,
+          });
+
+          if (!uploadRes.ok) throw new Error("Video upload failed.");
+          streamUid = uid; 
+          setSubmitStatus('Finalizing post...');
+      }
+
+      if (activePost) {
+          const { error: delErr } = await supabase.from('posts').delete().eq('id', activePost.id);
+          if (delErr) throw new Error("Failed to clear previous active feature.");
+      }
+
+      const days = currentUserProfile.is_premium ? 6 : 3;
+      const boostedUntil = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+
+      const payload = { 
+          text: featuredMsg.trim(), 
+          sport: featuredSport, 
+          honors: rawLiveHonors || 'Developing Prospect', 
+          score: liveScore,
+          stats: liveStats,
+          gpa: includeGpa ? parsedGpa : null,
+          otherSports: selectedOtherSports,
+          cloudflareUid: streamUid 
       };
 
-      setPosts(currentPosts => currentPosts.map(post => post.id === postId ? { ...post, comments: [...(post.comments || []), newComment] } : post));
-      setCommentInputs(prev => ({ ...prev, [postId]: '' }));
+      const { error: coinErr } = await supabase.from('athletes').update({ coins: currentUserProfile.coins - 100 }).eq('id', currentUserId);
+      if (coinErr) throw coinErr;
 
-      const targetPost = posts.find(p => p.id === postId);
-      await supabase.from('posts').update({ comments: [...(targetPost?.comments || []), newComment] }).eq('id', postId);
-    } catch (err: any) { showToast("Failed to submit: " + err.message); } 
-    finally { setIsSubmittingComment(prev => ({ ...prev, [postId]: false })); }
-  };
+      const { data, error } = await supabase.from('posts').insert({
+        athlete_id: currentUserId,
+        content: JSON.stringify(payload),
+        channel: 'featured',
+        is_boosted: true,
+        boosted_until: boostedUntil
+      }).select(`id, content, created_at, athlete_id, channel, is_boosted, boosted_until, likes, athletes (id, first_name, last_name, state, avatar_url, equipped_border, equipped_card, is_premium, grad_year)`).single();
 
-  const toggleComments = (postId: string) => { setExpandedComments(prev => ({ ...prev, [postId]: !prev[postId] })); };
+      if (error) throw error;
 
-  const openMessageModal = async (id: string, name: string, school: string, role: string) => {
-    if (viewerRole === 'guest' || !currentUserId) { router.push('/login?reason=contact'); return; }
-    
-    if (viewerRole === 'athlete' && role === 'coach' && (currentUserProfile?.trust_level || 0) < 1) {
-       showToast("You must be verified (Trust Level 1) to direct message coaches.", "error");
-       return;
-    }
-    
-    setMessageRecipient({ id, name, school, role });
-    setSendSuccess(false); 
-    setMessageContent(''); 
-    setShowDuplicateWarning(false);
-    setExistingThread(null);
-    setIsMessageModalOpen(true);
-    setIsCheckingThread(true);
-
-    try {
-      let fetchQuery = supabase.from('messages').select('*');
-
-      if (role === 'coach') {
-         fetchQuery = fetchQuery.eq('athlete_id', currentUserId).eq('coach_id', id);
-      } else if (viewerRole === 'coach' && role === 'athlete') {
-         fetchQuery = fetchQuery.eq('athlete_id', id).eq('coach_id', currentUserId);
-      } else {
-         fetchQuery = fetchQuery.or(`and(athlete_id.eq.${id},sender_id.eq.${currentUserId}),and(athlete_id.eq.${currentUserId},sender_id.eq.${id})`);
-      }
-
-      const { data, error } = await fetchQuery.order('created_at', { ascending: false }).limit(1).maybeSingle();
-
-      if (error) {
-         if (error.message.includes('coach_id') || error.message.includes('sender_id')) {
-            showToast("DATABASE ERROR: Please run the provided SQL snippet to add missing routing columns.", "error");
-            setIsMessageModalOpen(false); 
-            return;
-         }
-         throw error;
-      }
-
-      if (data) setExistingThread(data);
-
-    } catch (e) {
-      console.error("Thread Check Error:", e);
-    } finally {
-      setIsCheckingThread(false);
-    }
-  };
-
-  const handleSendMessage = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!messageRecipient || !currentUserId) return;
-
-    if (existingThread && !showDuplicateWarning) {
-      setShowDuplicateWarning(true);
-      return;
-    }
-
-    let finalContent = messageContent.trim();
-    if (containsBadWords(finalContent)) finalContent = censorText(finalContent);
-
-    setIsSending(true);
-    try {
-      if (!isUpperclassman && messageRecipient.role === 'coach') {
-         finalContent = `[⚠️ NCAA COMPLIANCE WARNING: The sender is an underclassman (Freshman/Sophomore). Per NCAA rules, you cannot reply to this message until June 15th after their Sophomore year.]\n\n${finalContent}`;
-      }
-
-      if (existingThread) {
-        const newReply = {
-          sender_id: currentUserId,
-          content: finalContent,
-          created_at: new Date().toISOString()
-        };
-        const updatedHistory = [...(existingThread.chat_history || []), newReply];
-        
-        const { error } = await supabase.from('messages').update({
-          chat_history: updatedHistory,
-          status: 'active',
-          is_read: false
-        }).eq('id', existingThread.id);
-        
-        if (error) throw error;
-
-      } else {
-        const senderName = viewerRole === 'coach' 
-          ? `Coach ${coachProfile?.last_name || ''}`.trim()
-          : `${currentUserProfile?.first_name || ''} ${currentUserProfile?.last_name || ''}`.trim();
-
-        const senderSchool = viewerRole === 'coach'
-          ? coachProfile?.school_name || ''
-          : currentUserProfile?.high_school || '';
-
-        let finalAthleteId = currentUserId;
-        let finalCoachId = null;
-
-        if (viewerRole === 'athlete' && messageRecipient.role === 'coach') {
-          finalAthleteId = currentUserId;
-          finalCoachId = messageRecipient.id;
-        } else if (viewerRole === 'coach' && messageRecipient.role === 'athlete') {
-          finalAthleteId = messageRecipient.id;
-          finalCoachId = currentUserId;
-        }
-
-        const { error } = await supabase.from('messages').insert({
-          athlete_id: finalAthleteId,
-          coach_id: finalCoachId,
-          sender_id: currentUserId,
-          sender_name: senderName || 'Unknown',
-          sender_school: senderSchool || 'Unknown',
-          sender_email: currentUserEmail, 
-          content: finalContent, 
-          status: 'pending',
-          is_read: false,
-          chat_history: []
-        });
-
-        if (error) {
-           if (error.message.includes('coach_id') || error.message.includes('sender_id')) {
-              showToast("DATABASE ERROR: You must run the provided SQL snippet to send messages.", "error");
-              setIsSending(false);
-              return;
-           }
-           throw error;
-        }
-      }
+      setCurrentUserProfile((prev: any) => ({ ...prev, coins: prev.coins - 100 }));
+      setPosts((prev) => [data, ...prev.filter(p => p.id !== activePost?.id)]);
       
-      setSendSuccess(true);
-      setTimeout(() => { setIsMessageModalOpen(false); setSendSuccess(false); setMessageContent(''); setShowDuplicateWarning(false); setExistingThread(null); }, 2000);
-    } catch (error: any) { 
-      console.error("Messaging Error:", error);
-      showToast(`Database Error: ${error?.message || 'Check browser console'}`, 'error'); 
-    } finally { 
-      setIsSending(false); 
+      setFeaturedMsg(''); 
+      setFeaturedSport('');
+      setSelectedOtherSports([]);
+      setIncludeGpa(false);
+      setVideoFile(null);
+      setVideoPreviewUrl(null);
+      setIsFeatureFormOpen(false);
+      localStorage.removeItem('chased_featured_draft');
+      
+      showToast("You are now featured!", "success");
+    } catch (err: any) {
+      showToast(err.message, "error");
+    } finally {
+      setIsSubmitting(false);
+      setSubmitStatus('');
     }
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString); const today = new Date();
-    const isToday = date.getDate() === today.getDate() && date.getMonth() === today.getMonth() && date.getFullYear() === today.getFullYear();
-    if (isToday) return `Today at ${date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-  };
+  const availableFilters = ['All', ...Array.from(new Set(posts.map(post => {
+      try { return JSON.parse(post.content).sport; } catch(e) { return null; }
+  })))].filter(Boolean) as string[];
 
-  const FeedSkeleton = () => (
-    <div className="space-y-8 animate-pulse">
-      {[1, 2, 3].map((i) => (
-        <div key={i} className="bg-white/[0.02] border border-white/5 rounded-[2rem] p-6 sm:p-8">
-          <div className="flex items-start gap-4 mb-5">
-            <div className="w-12 h-12 bg-white/5 rounded-full shrink-0" />
-            <div className="space-y-2 flex-1 pt-1">
-              <div className="w-32 h-4 bg-white/5 rounded" />
-              <div className="w-24 h-3 bg-white/5 rounded" />
-            </div>
-          </div>
-          <div className="space-y-3 mb-6"><div className="w-full h-3 bg-white/5 rounded" /><div className="w-5/6 h-3 bg-white/5 rounded" /></div>
-        </div>
-      ))}
-    </div>
-  );
-
-  const validGradYears = useMemo(() => getValidGradYears(), []);
-
-  const filteredDirectory = useMemo(() => {
-    if (viewerRole !== 'coach') {
-      const baseFiltered = coachesList.filter(c => {
-        const matchQuery = !searchQuery || c.school_name?.toLowerCase().includes(searchQuery.toLowerCase()) || c.last_name?.toLowerCase().includes(searchQuery.toLowerCase()) || c.first_name?.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchDiv = !filterDivision || c.division === filterDivision;
-        const matchSport = !filterCoachSport || c.sport === filterCoachSport;
-        return matchQuery && matchDiv && matchSport;
+  const filteredPosts = activeFilter === 'All' 
+      ? posts 
+      : posts.filter(post => {
+          try { return JSON.parse(post.content).sport === activeFilter; } catch(e) { return false; }
       });
-      const exactMatches = baseFiltered.filter(c => !filterTitle || c.coach_title === filterTitle);
-      return exactMatches.length > 0 ? exactMatches : baseFiltered;
-    } else {
-      return recruitsList.filter(athlete => {
-        const fullName = `${athlete.first_name || ''} ${athlete.last_name || ''}`.trim().toLowerCase();
-        const searchMatch = !searchQuery || fullName.includes(searchQuery.toLowerCase()) || (athlete.high_school && athlete.high_school.toLowerCase().includes(searchQuery.toLowerCase()));
-        const stateMatch = !filterAthleteState || athlete.state === filterAthleteState;
-        const gradYearMatch = !filterGradYear || athlete.grad_year?.toString() === filterGradYear;
-        
-        let sportMatch = false;
-        let positionMatch = false;
-        let sportData = null;
-
-        if (filterSport) {
-          sportData = athlete.athlete_sports?.find(s => s.sport_name === filterSport && s.is_active);
-          sportMatch = !!sportData;
-          if (sportMatch && filterPosition) {
-             positionMatch = !!sportData?.metrics?.some(m => m.name.toLowerCase().includes(filterPosition.toLowerCase())) || !!sportData?.position?.toLowerCase().includes(filterPosition.toLowerCase());
-          } else {
-             positionMatch = true;
-          }
-        } else {
-          sportMatch = true;
-          positionMatch = true;
-        }
-
-        let scoreMatch = true;
-        if (filterTargetScore && sportMatch && sportData) {
-          const targetNum = parseInt(filterTargetScore);
-          if (!isNaN(targetNum)) {
-             if (sportData.custom_fit_score < targetNum) scoreMatch = false;
-          }
-        }
-
-        return searchMatch && stateMatch && gradYearMatch && sportMatch && positionMatch && scoreMatch;
-      });
-    }
-  }, [viewerRole, coachesList, recruitsList, searchQuery, filterDivision, filterCoachSport, filterTitle, filterAthleteState, filterGradYear, filterSport, filterPosition, filterTargetScore]);
-
-  const positionOptions = filterSport === 'Track & Field' ? ALL_TRACK_EVENTS : (SPORT_POSITIONS[filterSport] || []);
-  const filteredSports = SPORT_OPTIONS.filter(s => s.toLowerCase().includes(editSport.toLowerCase()) && s.toLowerCase() !== editSport.toLowerCase());
-  const filteredTitles = COACH_TITLES.filter(t => t.toLowerCase().includes(editCoachTitle.toLowerCase()) && t.toLowerCase() !== editCoachTitle.toLowerCase());
-  const profileIncomplete = viewerRole === 'coach' && coachProfile && (!coachProfile.first_name || !coachProfile.last_name || !coachProfile.school_name || !coachProfile.sport || !coachProfile.coach_title);
 
   return (
     <main className="min-h-screen bg-[#06090F] text-white font-sans pb-32 relative selection:bg-blue-500/30 overflow-hidden">
-      
-      {/* GLOWS */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-blue-600/10 blur-[120px] rounded-full pointer-events-none z-0"></div>
-      <div className="absolute top-1/3 right-0 w-[500px] h-[500px] bg-purple-600/5 blur-[150px] rounded-full pointer-events-none z-0"></div>
-
+      
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes foilShift { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
         @keyframes shimmerGlare { 0% { background-position: -200% center; } 100% { background-position: 200% center; } }
-        @keyframes pulseHype { 0% { transform: scale(1); } 50% { transform: scale(1.15) rotate(-5deg); } 100% { transform: scale(1); } }
-        @keyframes floatUpFade { 0% { opacity: 0; transform: translateY(10px) scale(0.8); } 20% { opacity: 1; transform: translateY(0px) scale(1.2); } 80% { opacity: 1; transform: translateY(-30px) scale(1); } 100% { opacity: 0; transform: translateY(-40px) scale(0.9); } }
         
+        @keyframes heartExplode {
+            0% { transform: scale(1); filter: drop-shadow(0 0 0px rgba(244,63,94,0)); }
+            15% { transform: scale(1.3) rotate(-8deg); filter: drop-shadow(0 0 25px rgba(244,63,94,0.9)); }
+            30% { transform: scale(0.95) rotate(5deg); }
+            50% { transform: scale(1.1) rotate(-3deg); }
+            100% { transform: scale(1); filter: drop-shadow(0 0 10px rgba(244,63,94,0.5)); }
+        }
+        
+        @keyframes floatFire1 {
+            0% { transform: translate(0, 0) scale(0) rotate(0deg); opacity: 0; }
+            20% { opacity: 1; transform: translate(-12px, -20px) scale(1.5) rotate(-15deg); }
+            80% { opacity: 0.8; transform: translate(-20px, -60px) scale(1.2) rotate(-20deg); }
+            100% { transform: translate(-25px, -80px) scale(0.8) rotate(-25deg); opacity: 0; }
+        }
+        @keyframes floatFire2 {
+            0% { transform: translate(0, 0) scale(0) rotate(0deg); opacity: 0; }
+            20% { opacity: 1; transform: translate(15px, -25px) scale(1.6) rotate(15deg); }
+            80% { opacity: 0.8; transform: translate(25px, -70px) scale(1.3) rotate(20deg); }
+            100% { transform: translate(30px, -90px) scale(0.9) rotate(25deg); opacity: 0; }
+        }
+        @keyframes floatFire3 {
+            0% { transform: translate(0, 0) scale(0) rotate(0deg); opacity: 0; }
+            20% { opacity: 1; transform: translate(0px, -35px) scale(1.8) rotate(0deg); }
+            80% { opacity: 0.8; transform: translate(3px, -85px) scale(1.4) rotate(5deg); }
+            100% { transform: translate(5px, -110px) scale(1) rotate(10deg); opacity: 0; }
+        }
+
+        .animate-heart-explode { animation: heartExplode 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+
         .holo-card-base { background: transparent; }
         .holo-card-obsidian { background: linear-gradient(135deg, #0f172a 0%, #334155 25%, #000000 50%, #0f172a 75%, #1e293b 100%); background-size: 300% 300%; }
         .holo-card-crimson { background: linear-gradient(135deg, #450a0a 0%, #dc2626 50%, #450a0a 100%); background-size: 300% 300%; }
         .holo-card-sapphire { background: linear-gradient(135deg, #172554 0%, #0ea5e9 50%, #172554 100%); background-size: 300% 300%; }
-        
         .holo-card-hype { background: linear-gradient(135deg, rgba(255,255,255,0.15) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.15) 75%, transparent 75%, transparent 100%), linear-gradient(135deg, #4f46e5 0%, #9333ea 25%, #ec4899 50%, #3b82f6 75%, #4f46e5 100%); background-size: 40px 40px, 300% 300%; }
         .holo-card-premium { background: repeating-linear-gradient(45deg, rgba(255,255,255,0.05) 0px, rgba(255,255,255,0.05) 2px, transparent 2px, transparent 6px), linear-gradient(135deg, #b45309 0%, #f59e0b 25%, #fef08a 50%, #d97706 75%, #78350f 100%); background-size: 100% 100%, 300% 300%; }
-
-        .animate-foil { animation: foilShift 15s ease-in-out infinite; }
-        .holo-glare { position: absolute; inset: 0; background: linear-gradient(105deg, transparent 20%, rgba(255,255,255,0.4) 25%, transparent 30%); background-size: 200% auto; animation: shimmerGlare 8s infinite linear; pointer-events: none; z-index: 10; mix-blend-mode: overlay;}
-        .hype-pop { animation: pulseHype 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
-        .coin-float { position: absolute; top: -20px; left: 50%; margin-left: -20px; color: #4ade80; font-weight: 900; font-size: 1.1rem; text-shadow: 0 2px 10px rgba(74,222,128,0.4); pointer-events: none; animation: floatUpFade 1s forwards cubic-bezier(0.175, 0.885, 0.32, 1.275); z-index: 50; }
+        .holo-card-amethyst { background: radial-gradient(circle at 50% 50%, #c026d3 0%, #7e22ce 30%, #3b0764 80%, #000000 100%); }
+        .holo-card-cyber { background: linear-gradient(rgba(16, 185, 129, 0.15) 1px, transparent 1px), linear-gradient(90deg, rgba(16, 185, 129, 0.15) 1px, transparent 1px), linear-gradient(135deg, #022c22 0%, #064e3b 50%, #083344 100%); background-size: 20px 20px, 20px 20px, 100% 100%; box-shadow: inset 0 0 40px rgba(6, 182, 212, 0.3); }
+        .holo-card-mythic-flare { background: radial-gradient(circle at 50% 50%, #f43f5e 0%, #881337 40%, #000000 100%); }
         
+        .animate-foil { animation: foilShift 15s ease-in-out infinite; }
+        .holo-glare { position: absolute; inset: 0; background: linear-gradient(105deg, transparent 20%, rgba(255,255,255,0.4) 25%, transparent 30%); background-size: 200% auto; animation: shimmerGlare 8s infinite linear; pointer-events: none; mix-blend-mode: overlay;}
         .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(255,255,255,0.2); border-radius: 10px; }
@@ -975,1108 +684,580 @@ export default function FeedPage() {
         </div>
       )}
 
-      {/* 🚨 DELETE CONFIRMATION MODALS (REPLACING NATIVE ALERTS) 🚨 */}
-      {(postToDelete || commentToDelete) && (
-        <div className="fixed inset-0 z-[600] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => { setPostToDelete(null); setCommentToDelete(null); }}></div>
-          <div className="bg-[#0f172a] rounded-[2.5rem] w-full max-w-sm shadow-2xl relative z-10 overflow-hidden animate-in zoom-in-95 duration-400 border border-rose-500/30">
-            <div className="bg-rose-950/30 border-b border-rose-900/50 p-6 flex justify-between items-center relative overflow-hidden">
-              <div className="absolute -right-6 -top-6 w-32 h-32 bg-rose-500/20 rounded-full blur-3xl"></div>
-              <div className="relative z-10 flex items-center gap-4">
-                <div className="w-12 h-12 bg-rose-500/10 rounded-full flex items-center justify-center border border-rose-500/30">
-                  <AlertTriangle className="w-5 h-5 text-rose-400" />
-                </div>
-                <div>
-                  <h3 className="font-black text-xl text-white tracking-tight">Confirm Deletion</h3>
-                  <p className="text-[10px] font-black text-rose-400 uppercase tracking-widest mt-0.5">This cannot be undone</p>
-                </div>
-              </div>
-            </div>
-            
-            <div className="p-6 md:p-8 space-y-6">
-              <p className="text-sm text-slate-300 font-medium leading-relaxed">
-                Are you absolutely sure you want to permanently delete this {postToDelete ? 'post' : 'comment'}?
-              </p>
-
-              <div className="flex gap-3 w-full">
-                <button onClick={() => { setPostToDelete(null); setCommentToDelete(null); }} className="flex-1 bg-white/5 hover:bg-white/10 text-white font-bold py-3 rounded-xl transition-colors border border-white/10">
-                  Cancel
-                </button>
-                <button onClick={postToDelete ? confirmDeletePost : confirmDeleteComment} className="flex-1 bg-rose-600 hover:bg-rose-500 text-white font-black py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2">
-                  <Trash2 className="w-4 h-4" /> Delete
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 🚨 SCORING GUIDE MODAL 🚨 */}
-      {showScoringModal && (
-        <div className="fixed inset-0 z-[600] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setShowScoringModal(false)}></div>
-          <div className="bg-[#0f172a] rounded-[2.5rem] w-full max-w-lg shadow-2xl relative z-10 overflow-hidden animate-in zoom-in-95 duration-400 border border-indigo-500/30">
-            <div className="bg-indigo-950/30 border-b border-indigo-900/50 p-6 flex justify-between items-center relative overflow-hidden">
-              <div className="absolute -right-6 -top-6 w-32 h-32 bg-indigo-500/20 rounded-full blur-3xl"></div>
-              <div className="relative z-10 flex items-center gap-4">
-                <div className="w-12 h-12 bg-indigo-500/10 rounded-full flex items-center justify-center border border-indigo-500/30">
-                  <Star className="w-5 h-5 text-indigo-400" />
-                </div>
-                <div>
-                  <h3 className="font-black text-xl text-white tracking-tight">Scoring System</h3>
-                  <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mt-0.5">Overall Recruiting Metrics</p>
-                </div>
-              </div>
-              <button onClick={() => setShowScoringModal(false)} className="relative z-10 p-2 bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white rounded-full transition-colors"><X className="w-5 h-5" /></button>
-            </div>
-            
-            <div className="p-6 md:p-8 space-y-4">
-              <p className="text-sm text-slate-300 font-medium leading-relaxed mb-6">
-                ChasedSports standardizes metrics across all sports, positions, and genders into a master <strong className="text-white">0-99 score</strong> to identify prospects instantly.
-              </p>
-
-              <div className="grid grid-cols-1 gap-3">
-                <div className="flex items-center gap-4 bg-black/20 p-3 rounded-2xl border border-white/5">
-                  <div className="w-16 text-center shrink-0"><span className="text-xl font-black text-fuchsia-400">95+</span></div>
-                  <div>
-                    <h4 className="font-black text-white text-sm">Power 4 D1</h4>
-                    <p className="text-[10px] text-slate-400 font-medium">Top tier national talent. Immediate impact at major programs.</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-4 bg-black/20 p-3 rounded-2xl border border-white/5">
-                  <div className="w-16 text-center shrink-0"><span className="text-xl font-black text-purple-400">85+</span></div>
-                  <div>
-                    <h4 className="font-black text-white text-sm">Mid-Major D1</h4>
-                    <p className="text-[10px] text-slate-400 font-medium">Strong D1 prospect. Competitive at the mid-major level.</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-4 bg-black/20 p-3 rounded-2xl border border-white/5">
-                  <div className="w-16 text-center shrink-0"><span className="text-xl font-black text-blue-400">75+</span></div>
-                  <div>
-                    <h4 className="font-black text-white text-sm">D1 Walk-On / Top D2</h4>
-                    <p className="text-[10px] text-slate-400 font-medium">Fringe D1 standard or high-impact D2 recruit.</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-4 bg-black/20 p-3 rounded-2xl border border-white/5">
-                  <div className="w-16 text-center shrink-0"><span className="text-xl font-black text-emerald-400">65+</span></div>
-                  <div>
-                    <h4 className="font-black text-white text-sm">D2 / D3 Prospect</h4>
-                    <p className="text-[10px] text-slate-400 font-medium">Solid collegiate potential for competitive D2/D3 programs.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 🚨 COACH PROFILE EDIT MODAL 🚨 */}
-      {viewerRole === 'coach' && isEditingProfile && (
-        <div className="fixed inset-0 z-[600] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setIsEditingProfile(false)}></div>
-          <div className="bg-[#0f172a] rounded-[2.5rem] w-full max-w-lg shadow-2xl relative z-10 overflow-hidden animate-in zoom-in-95 duration-400 border border-indigo-500/30">
-            <div className="bg-indigo-950/30 border-b border-indigo-900/50 p-6 flex justify-between items-center relative overflow-hidden">
-              <div className="absolute -right-6 -top-6 w-32 h-32 bg-indigo-500/20 rounded-full blur-3xl"></div>
-              <div className="relative z-10 flex items-center gap-4">
-                <div className="w-12 h-12 bg-indigo-500/10 rounded-full flex items-center justify-center border border-indigo-500/30">
-                  <Briefcase className="w-5 h-5 text-indigo-400" />
-                </div>
-                <div>
-                  <h3 className="font-black text-xl text-white tracking-tight">Complete Profile</h3>
-                  <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mt-0.5">NCAA Directory Setup</p>
-                </div>
-              </div>
-              <button onClick={() => setIsEditingProfile(false)} className="relative z-10 p-2 bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white rounded-full transition-colors"><X className="w-5 h-5" /></button>
-            </div>
-            
-            <div className="p-6 md:p-8 space-y-4">
-               <div className="grid grid-cols-2 gap-3 mb-1">
-                 <div>
-                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">First Name</label>
-                   <input type="text" value={editFirstName} onChange={e => setEditFirstName(e.target.value)} placeholder="John" className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 mt-1" />
-                 </div>
-                 <div>
-                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Last Name</label>
-                   <input type="text" value={editLastName} onChange={e => setEditLastName(e.target.value)} placeholder="Doe" className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 mt-1" />
-                 </div>
-               </div>
-
-               <div className="relative">
-                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">University Name</label>
-                 <div className="relative">
-                   <input type="text" value={editSchoolName} onChange={e => { setEditSchoolName(e.target.value); setEditDivision(''); setShowSchoolDropdown(true); }} onFocus={() => { if (editSchoolName.length >= 2) setShowSchoolDropdown(true); }} onBlur={() => setShowSchoolDropdown(false)} placeholder="Search for your university..." className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 mt-1 pr-10" />
-                   {isSearchingSchool && <div className="absolute right-3 top-1/2 -translate-y-1/2 mt-0.5"><RefreshCw className="w-4 h-4 text-slate-500 animate-spin" /></div>}
-                 </div>
-                 {showSchoolDropdown && schoolOptions.length > 0 && (
-                   <div className="absolute z-50 w-full mt-1 bg-slate-800 border border-slate-600 rounded-xl shadow-xl overflow-hidden max-h-48 overflow-y-auto custom-scrollbar">
-                     {schoolOptions.map(option => (
-                       <button key={option.id} type="button" onMouseDown={(e) => { e.preventDefault(); setEditSchoolName(option.name); setEditDivision(option.division || ''); setShowSchoolDropdown(false); }} className="w-full text-left px-4 py-2.5 text-sm text-slate-300 hover:bg-slate-700 hover:text-white transition-colors flex justify-between items-center border-b border-slate-700/50 last:border-0">
-                         <span className="truncate pr-2">{option.name}</span>
-                         {option.division && <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-slate-400 bg-slate-900 px-2 py-0.5 rounded">{option.division}</span>}
-                       </button>
-                     ))}
-                   </div>
-                 )}
-               </div>
-
-               <div className="grid grid-cols-2 gap-3 mb-2">
-                 <div className="relative">
-                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Sport</label>
-                   <input type="text" value={editSport} onChange={e => { setEditSport(e.target.value); setShowSportDropdown(true); }} onFocus={() => setShowSportDropdown(true)} onBlur={() => setShowSportDropdown(false)} placeholder="e.g. Football" className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 mt-1" />
-                   {showSportDropdown && filteredSports.length > 0 && (
-                     <div className="absolute z-50 w-full mt-1 bg-slate-800 border border-slate-600 rounded-xl shadow-xl overflow-hidden max-h-48 overflow-y-auto custom-scrollbar">
-                       {filteredSports.map(sport => (
-                         <button key={sport} type="button" onMouseDown={(e) => { e.preventDefault(); setEditSport(sport); setShowSportDropdown(false); }} className="w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 hover:text-white transition-colors">{sport}</button>
-                       ))}
-                     </div>
-                   )}
-                 </div>
-                 <div className="relative">
-                   <label className={`text-[10px] font-bold uppercase tracking-widest ml-1 transition-colors ${!editSport.trim() ? 'text-slate-600' : 'text-slate-400'}`}>Title</label>
-                   <input type="text" value={editCoachTitle} onChange={e => { setEditCoachTitle(e.target.value); setShowTitleDropdown(true); }} onFocus={() => setShowTitleDropdown(true)} onBlur={() => setShowTitleDropdown(false)} disabled={!editSport.trim()} placeholder={editSport.trim() ? "e.g. Head Coach" : "Select a sport first"} className={`w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 mt-1 transition-all ${!editSport.trim() ? 'opacity-50 cursor-not-allowed bg-slate-800' : ''}`} />
-                   {showTitleDropdown && editSport.trim() && filteredTitles.length > 0 && (
-                     <div className="absolute z-50 w-full mt-1 bg-slate-800 border border-slate-600 rounded-xl shadow-xl overflow-hidden max-h-48 overflow-y-auto custom-scrollbar">
-                       {filteredTitles.map(title => (
-                         <button key={title} type="button" onMouseDown={(e) => { e.preventDefault(); setEditCoachTitle(title); setShowTitleDropdown(false); }} className="w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 hover:text-white transition-colors">{title}</button>
-                       ))}
-                     </div>
-                   )}
-                 </div>
-               </div>
-
-               <div className="mt-4">
-                 <button onClick={handleSaveProfile} disabled={isSavingProfile || !editFirstName.trim() || !editLastName.trim() || !editSchoolName.trim() || !editSport.trim() || !editCoachTitle.trim()} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-3.5 rounded-xl transition-all shadow-lg disabled:opacity-50 flex items-center justify-center">
-                   {isSavingProfile ? 'Saving...' : 'Save Profile'}
-                 </button>
-               </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 🚨 MESSAGING MODAL WITH THREAD APPENDING LOGIC 🚨 */}
-      {isMessageModalOpen && messageRecipient && (
-        <div className="fixed inset-0 z-[500] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setIsMessageModalOpen(false)}></div>
-          <div className="bg-[#0f172a] rounded-[2.5rem] w-full max-w-lg shadow-2xl relative z-10 overflow-hidden animate-in zoom-in-95 duration-400 border border-white/10">
-            <div className="bg-white/[0.02] border-b border-white/5 p-6 md:p-8 flex justify-between items-center relative overflow-hidden">
-              <div className="absolute -right-6 -top-6 w-32 h-32 bg-blue-500/20 rounded-full blur-3xl"></div>
-              <div className="relative z-10 flex items-center gap-4">
-                <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center border border-white/20">
-                  <Mail className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <h3 className="font-black text-2xl text-white tracking-tight">Message</h3>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5 flex items-center gap-1.5"><Target className="w-3 h-3 text-blue-500"/> {messageRecipient.name}</p>
-                </div>
-              </div>
-              <button onClick={() => setIsMessageModalOpen(false)} className="relative z-10 p-2 bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white rounded-full transition-colors border border-transparent hover:border-white/10"><X className="w-5 h-5" /></button>
-            </div>
-            
-            <div className="p-6 md:p-8">
-              {sendSuccess ? (
-                <div className="text-center py-8 animate-in zoom-in-95 duration-300">
-                  <div className="w-20 h-20 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-5 border border-emerald-500/30">
-                    <CheckCircle2 className="w-10 h-10 text-emerald-400" />
-                  </div>
-                  <h4 className="text-3xl font-black text-white mb-2 tracking-tight">Delivered!</h4>
-                  <p className="text-slate-400 text-sm">Sent directly to {messageRecipient.name}'s secure inbox.</p>
-                </div>
-              ) : isCheckingThread ? (
-                <div className="text-center py-8 animate-in fade-in">
-                  <div className="w-8 h-8 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mx-auto mb-3"></div>
-                  <p className="text-slate-400 text-sm font-bold animate-pulse">Establishing connection...</p>
-                </div>
-              ) : showDuplicateWarning ? (
-                <div className="bg-blue-500/10 border border-blue-500/30 rounded-[1.5rem] p-6 flex flex-col items-center justify-center shadow-inner text-center animate-in zoom-in-95 duration-300">
-                  <div className="w-12 h-12 bg-blue-500/20 rounded-full flex items-center justify-center mb-3">
-                    <MessageSquare className="w-6 h-6 text-blue-400" />
-                  </div>
-                  <h4 className="font-black text-white text-lg mb-1">Active Conversation Exists</h4>
-                  <p className="text-sm font-medium text-slate-400 leading-relaxed mb-6">
-                    You have already contacted {messageRecipient.name}. Sending this will instantly append to your existing chat thread.
-                  </p>
-                  <div className="flex w-full gap-3">
-                    <button type="button" onClick={() => setShowDuplicateWarning(false)} className="flex-1 bg-white/5 hover:bg-white/10 text-white font-bold py-3 rounded-xl transition-colors border border-white/10">
-                      Cancel
-                    </button>
-                    <button onClick={() => handleSendMessage()} disabled={isSending} className="flex-1 bg-blue-600 hover:bg-blue-50 text-white font-black py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2">
-                      {isSending ? 'Sending...' : 'Confirm & Send'}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <form onSubmit={handleSendMessage} className="space-y-6 animate-in fade-in duration-300">
-                  {!isUpperclassman && messageRecipient.role === 'coach' && (
-                     <div className="bg-amber-500/10 border border-amber-500/30 rounded-[1.5rem] p-5 flex items-start gap-4 shadow-inner">
-                         <AlertTriangle className="w-6 h-6 text-amber-500 shrink-0 mt-0.5" />
-                         <div>
-                             <h4 className="font-black text-amber-400 text-sm mb-1">NCAA Underclassman Alert</h4>
-                             <p className="text-[11px] font-medium text-amber-200/70 leading-relaxed">
-                                 Because you are a Freshman or Sophomore, NCAA rules prohibit coaches from replying to your direct messages until June 15th after your Sophomore year. <strong className="text-amber-400 font-black">They will still receive this message</strong>, but cannot respond yet.
-                             </p>
-                         </div>
-                     </div>
-                  )}
-
-                  <textarea 
-                    required value={messageContent} onChange={e => setMessageContent(e.target.value)} placeholder="Write your secure message..."
-                    className="w-full bg-black/40 border border-white/10 text-white rounded-[1.5rem] p-5 h-40 resize-none focus:outline-none focus:border-blue-500/50 font-medium text-sm placeholder:text-slate-600 transition-all"
-                  />
-                  <button type="submit" disabled={isSending || !messageContent.trim()} className="w-full bg-white hover:bg-slate-200 text-slate-900 font-black py-3.5 rounded-xl transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2 text-sm shadow-[0_0_20px_rgba(255,255,255,0.1)]">
-                    {isSending ? 'Encrypting & Sending...' : <><Send className="w-4 h-4" /> Send Secure Message</>}
-                  </button>
-                </form>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
       <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-16 md:pt-20 relative z-30">
-        
-        {/* 🚨 HEADER 🚨 */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
-            <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <div>
                 <h1 className="text-4xl md:text-6xl font-black tracking-tight mb-2 text-white flex items-center gap-3">
                   The <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300">Network</span>
                 </h1>
                 <p className="text-slate-400 font-medium text-sm md:text-base flex items-center gap-2">
-                  <Activity className="w-4 h-4 text-blue-500" /> Multi-Sport Hub & Recruiting Directory
+                    Multi-Sport Hub & Recruiting Directory
                 </p>
             </div>
-            
-            {profileIncomplete && (
-              <div className="animate-in fade-in slide-in-from-right-8 duration-700">
-                <button onClick={handleEditToggle} className="flex items-center justify-center gap-2 bg-rose-500 hover:bg-rose-400 text-white px-5 py-2.5 rounded-2xl font-black transition-all shadow-lg hover:-translate-y-0.5">
-                  <AlertTriangle className="w-4 h-4" /> Complete Profile
-                </button>
-              </div>
-            )}
         </div>
 
-        {/* 🚨 MAIN TAB BAR 🚨 */}
         <div className="flex gap-4 mb-8 overflow-x-auto custom-scrollbar pb-1 border-b border-white/5 relative">
-          <button onClick={() => setFeedTab('feed')} className={`pb-4 text-sm font-bold transition-all relative flex items-center gap-2 ${feedTab === 'feed' ? 'text-white' : 'text-slate-500 hover:text-slate-300'}`}>
-            <Flame className="w-4 h-4" /> Trending Discussions 
-            {feedTab === 'feed' && <><div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" /><div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500 rounded-t-full" /></>}
-          </button>
-          <button onClick={() => setFeedTab('network')} className={`pb-4 text-sm font-bold transition-all relative flex items-center gap-2 ${feedTab === 'network' ? 'text-white' : 'text-slate-500 hover:text-slate-300'}`}>
-            <Users className="w-4 h-4" /> {viewerRole === 'coach' ? 'Athlete Finder' : 'Coach Finder'}
-            {feedTab === 'network' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500 rounded-t-full" />}
-          </button>
+          <Link href="/feed" className={`pb-4 text-sm font-bold transition-all relative flex items-center gap-2 ${pathname === '/feed' ? 'text-white' : 'text-slate-500 hover:text-slate-300'}`}>
+            <Star className="w-4 h-4" /> Featured Athletes 
+            {pathname === '/feed' && <><div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" /><div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500 rounded-t-full" /></>}
+          </Link>
+          <Link href="/feed/discussions" className={`pb-4 text-sm font-bold transition-all relative flex items-center gap-2 ${pathname === '/feed/discussions' ? 'text-white' : 'text-slate-500 hover:text-slate-300'}`}>
+            <Flame className="w-4 h-4" /> Trending Discussions
+          </Link>
+          <Link href="/feed/network" className={`pb-4 text-sm font-bold transition-all relative flex items-center gap-2 ${pathname === '/feed/network' ? 'text-white' : 'text-slate-500 hover:text-slate-300'}`}>
+            <Users className="w-4 h-4" /> Directory
+          </Link>
         </div>
 
-        {/* ======================= TAB: TRENDING DISCUSSIONS ======================= */}
-        {feedTab === 'feed' && (
-            <div className="animate-in fade-in slide-in-from-bottom-6 duration-500">
+        <div className="animate-in fade-in slide-in-from-bottom-6 duration-500 space-y-8">
+            
+            {viewerRole === 'athlete' && currentUserProfile && (
+              <div className="bg-[#0B101A]/80 backdrop-blur-2xl border border-white/10 hover:border-white/20 rounded-[2rem] p-5 sm:p-6 shadow-2xl relative overflow-hidden transition-all duration-500 group/container">
+                <div className="absolute -inset-20 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none group-hover/container:bg-indigo-500/10 transition-colors"></div>
                 
-                {/* 🚨 THE COMMUNITY HUB / DISCUSSION CREATOR 🚨 */}
-                {viewerRole === 'athlete' && currentUserId && (
-                  <div className="mb-10 bg-gradient-to-br from-white/[0.05] to-transparent backdrop-blur-xl border border-white/10 rounded-[2rem] p-6 shadow-[0_8px_30px_rgb(0,0,0,0.3)] relative overflow-hidden group">
-                     {/* 🚨 TRUST LEVEL OVERLAY 🚨 */}
-                     {currentUserProfile?.trust_level === 0 && (
-                        <div className="absolute inset-0 z-20 bg-black/60 backdrop-blur-md flex flex-col items-center justify-center rounded-[2rem]">
-                           <ShieldCheck className="w-10 h-10 text-rose-500 mb-3" />
-                           <h4 className="text-white font-black text-lg">Verification Required</h4>
-                           <p className="text-slate-300 text-sm mt-1 max-w-sm text-center">You must be verified (Trust Level 1) to join the global discussion.</p>
-                        </div>
-                     )}
-                     
-                     <div className="absolute inset-0 bg-blue-500/5 opacity-0 group-focus-within:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
-                     <div className="flex gap-4">
-                        <AvatarWithBorder avatarUrl={currentUserProfile?.avatar_url || ''} sizeClasses="w-12 h-12 shadow-md hidden sm:block" borderId={currentUserProfile?.equipped_border || 'none'} />
-                        <div className="flex-1">
-                          <form onSubmit={handleCreateDiscussion} className="flex flex-col gap-3">
-                             <textarea 
-                               value={newDiscussionContent} 
-                               onChange={(e) => setNewDiscussionContent(e.target.value)} 
-                               placeholder="What's on your mind? Ask the community..." 
-                               className="w-full bg-black/40 border border-white/5 hover:border-white/10 text-white rounded-[1.5rem] p-4 min-h-[100px] resize-none focus:outline-none focus:border-blue-500/50 focus:bg-black/60 font-medium text-sm placeholder:text-slate-500 transition-all shadow-inner"
-                             />
-                             <div className="flex justify-between items-center">
-                               {currentUserProfile?.is_looking_for_college ? (
-                                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-400 text-[10px] font-black uppercase tracking-widest">
-                                     <Radio className="w-3 h-3 animate-pulse" /> Beacon Active
-                                  </div>
-                               ) : (
-                                  <div></div>
-                               )}
-                               <button type="submit" disabled={isSubmittingDiscussion || !newDiscussionContent.trim() || currentUserProfile?.trust_level === 0} className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2.5 rounded-xl font-black text-sm transition-all shadow-lg disabled:opacity-50 disabled:hover:scale-100 hover:-translate-y-0.5 active:translate-y-0 flex items-center gap-2">
-                                  {isSubmittingDiscussion ? 'Posting...' : <><Send className="w-4 h-4" /> Share</>}
-                               </button>
-                             </div>
-                          </form>
-                        </div>
-                     </div>
-                  </div>
-                )}
-
-                <div className="space-y-8">
-                    {loading ? (
-                        <FeedSkeleton />
-                    ) : posts.length === 0 ? (
-                        <div className="text-center py-20 bg-white/[0.01] rounded-[2rem] border border-white/5 border-dashed relative overflow-hidden">
-                            <MessageSquare className="w-12 h-12 text-slate-700 mx-auto mb-4" />
-                            <h3 className="text-xl font-bold text-white mb-2 tracking-tight">The arena is quiet...</h3>
-                            <p className="text-slate-500 text-sm">Be the first to ignite the feed with an update.</p>
-                        </div>
-                    ) : (
-                        posts.map(post => {
-                            if (!post.athletes) return null;
-
-                            const isPRAlert = !!(post.linked_pr_event || (post.linked_prs && post.linked_prs.length > 0));
-                            // Ensure backward compatibility if there are old versions of the post
-                            const isVerificationPost = post.content?.toLowerCase().includes("a new athlete has verified!");
-                            const likesCount = post.likes ? post.likes.length : 0;
-                            const iLikedThis = post.likes ? post.likes.includes(currentUserId || '') : false;
-                            
-                            const allComments = post.comments || [];
-                            const isCommentsOpen = expandedComments[post.id];
-                            const commentsCount = allComments.length;
-
-                            const prEvent = post.linked_pr_event || post.linked_prs?.[0]?.event;
-                            const prMark = post.linked_pr_mark || post.linked_prs?.[0]?.mark;
-                            
-                            // Visuals
-                            const cardStyles = getCardStyles(post.athletes.equipped_card, 'post');
-                            const isMyPost = post.athlete_id === currentUserId;
-                            const isEditingThisPost = editingPostId === post.id;
-                            const showBeacon = post.athletes.is_looking_for_college;
-                            
-                            // 🚨 Verification Lock States 🚨
-                            const isUnverifiedAthlete = viewerRole === 'athlete' && (currentUserProfile?.trust_level || 0) === 0;
-
-                            // Calculate dynamic verification post stats if necessary
-                            let verifTargetScore = 0;
-                            let verifTargetSportStr = "Athletics";
-                            let verifTargetMetrics: { name: string; value: string }[] | null = null;
-                            let verifTierLabel = 'Unranked';
-
-                            if (isVerificationPost && post.athletes.athlete_sports) {
-                                const msHigh = post.athletes.athlete_sports.length > 0
-                                    ? Math.max(...post.athletes.athlete_sports.map(s => s.custom_fit_score))
-                                    : 0;
-                                verifTargetScore = msHigh;
-                                const activeTopSport = post.athletes.athlete_sports.find(s => s.custom_fit_score === msHigh);
-                                if (activeTopSport) {
-                                    verifTargetSportStr = `${activeTopSport.sport_name} ${activeTopSport.position ? `• ${activeTopSport.position}` : ''}`;
-                                    verifTargetMetrics = activeTopSport.metrics;
-                                }
-                                verifTierLabel = getScoreTier(verifTargetScore);
-                            }
-
-                            return (
-                                <div key={post.id} className="relative z-0">
-                                    {isPRAlert ? (
-                                        // 🚨 SUPER DUPER HOLOGRAPHIC PR ALERT CARD 🚨
-                                        <div className="relative group hover:-translate-y-1 transition-transform duration-500 z-10 hover:z-20">
-                                            {cardStyles.isAnimated && <div className="absolute inset-0 bg-gradient-to-r from-fuchsia-600 via-blue-600 to-cyan-500 rounded-[2rem] blur-2xl opacity-20 group-hover:opacity-40 transition-opacity duration-700"></div>}
-                                            <div className={`${cardStyles.bgClass} ${cardStyles.isAnimated ? 'animate-foil border-white/20 shadow-2xl' : 'border-white/10 shadow-lg'} rounded-[2rem] p-6 sm:p-8 text-white relative overflow-hidden border`}>
-                                                
-                                                {cardStyles.hasGlare && <div className="holo-glare rounded-[2rem]"></div>}
-                                                {cardStyles.isAnimated && <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-[0.03] mix-blend-overlay pointer-events-none"></div>}
-                                                
-                                                <div className="absolute top-4 right-4 z-50 more-dropdown">
-                                                  <button onClick={() => setActiveDropdown(activeDropdown === post.id ? null : post.id)} className="p-1.5 bg-black/20 hover:bg-black/40 rounded-lg text-white/70 hover:text-white transition-colors border border-white/10 backdrop-blur-md">
-                                                    <MoreHorizontal className="w-5 h-5" />
-                                                  </button>
-                                                  {activeDropdown === post.id && (
-                                                    <div className="absolute right-0 mt-2 w-36 bg-slate-900 border border-white/10 rounded-xl shadow-xl overflow-hidden py-1">
-                                                      {isMyPost ? (
-                                                        <>
-                                                          <button onClick={() => { setEditingPostId(post.id); setEditPostContent(post.content || ""); setActiveDropdown(null); }} className="w-full text-left px-4 py-2 text-sm font-bold text-slate-300 hover:bg-white/5 hover:text-white flex items-center gap-2">
-                                                            <Edit2 className="w-4 h-4" /> Edit
-                                                          </button>
-                                                          <button onClick={() => { setPostToDelete(post.id); setActiveDropdown(null); }} className="w-full text-left px-4 py-2 text-sm font-bold text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 flex items-center gap-2 border-t border-white/5">
-                                                            <Trash2 className="w-4 h-4" /> Delete
-                                                          </button>
-                                                        </>
-                                                      ) : (
-                                                        <button onClick={() => { setReportModal({ type: 'post', id: post.id, targetId: post.athlete_id, content: post.content }); setActiveDropdown(null); }} className="w-full text-left px-4 py-2 text-sm font-bold text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 flex items-center gap-2">
-                                                          <Flag className="w-4 h-4" /> Report
-                                                        </button>
-                                                      )}
-                                                    </div>
-                                                  )}
-                                                </div>
-
-                                                <div className="relative z-20 flex flex-col md:flex-row items-center md:items-stretch justify-between gap-6 pt-4">
-                                                    <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-5 flex-1 w-full min-w-0">
-                                                        <div className="relative shrink-0">
-                                                            <Link href={`/athlete/${post.athlete_id}`} className="relative shrink-0 transition-transform shadow-xl rounded-full border-2 border-white/40 bg-slate-900 block group-hover:scale-105 duration-300">
-                                                                <AvatarWithBorder avatarUrl={post.athletes.avatar_url || ''} sizeClasses="w-16 h-16 sm:w-20 sm:h-20" borderId={post.athletes.equipped_border || 'none'} />
-                                                            </Link>
-                                                        </div>
-
-                                                        <div className="flex-1 text-center sm:text-left flex flex-col items-center sm:items-start w-full min-w-0">
-                                                            <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mb-2">
-                                                              <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-widest shadow-sm ${cardStyles.isCustom ? 'bg-white/10 border border-white/20 text-white backdrop-blur-md' : 'bg-slate-700/50 border border-slate-600 text-slate-300'}`}>
-                                                                  <Zap className={`w-3 h-3 ${cardStyles.isCustom ? 'text-yellow-300 animate-pulse' : 'text-slate-400'}`}/> New Stat / PR
-                                                              </div>
-                                                              {showBeacon && (
-                                                                 <div className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-widest bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 backdrop-blur-md">
-                                                                    <Target className="w-3 h-3 animate-pulse" /> Actively Recruiting
-                                                                 </div>
-                                                              )}
-                                                            </div>
-                                                            <Link href={`/athlete/${post.athlete_id}`} className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight hover:text-white/80 transition-colors drop-shadow-md leading-none mb-2 flex items-center justify-center sm:justify-start gap-2 flex-wrap w-full">
-                                                                <span>{post.athletes.first_name} {post.athletes.last_name}</span>
-                                                                {post.athletes.is_premium && <Crown className="w-5 h-5 text-yellow-400 drop-shadow-sm shrink-0" />}
-                                                            </Link>
-                                                            <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mt-1">
-                                                                <span className="bg-black/20 px-2.5 py-1 rounded-md text-white/80 font-bold text-[9px] tracking-widest uppercase flex items-center gap-1 border border-white/5 backdrop-blur-sm">
-                                                                    <MapPin className="w-3 h-3 opacity-80 shrink-0" /> <span className="truncate max-w-[150px]">{post.athletes.high_school}</span> <span className="hidden sm:inline">•</span> <span className="hidden sm:inline">{post.athletes.state}</span>
-                                                                </span>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-
-                                                    <div className={`${cardStyles.isCustom ? 'bg-black/20 border-white/20' : 'bg-black/40 border-slate-700/50'} backdrop-blur-md border p-6 rounded-[1.5rem] flex flex-col items-center justify-center shadow-inner w-full md:w-auto shrink-0 min-w-[180px]`}>
-                                                        <span className={`text-[10px] sm:text-xs font-black uppercase tracking-widest mb-1 text-center ${cardStyles.isCustom ? 'text-white/70' : 'text-slate-400'}`}>{prEvent}</span>
-                                                        <span className="text-[clamp(2.5rem,6vw,4.5rem)] leading-none font-black tracking-tighter text-white drop-shadow-md text-center whitespace-nowrap w-full">
-                                                            {prMark}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                                
-                                                {(post.content || isEditingThisPost) && (
-                                                    <div className="relative z-20 mt-6 bg-black/30 backdrop-blur-md p-4 md:p-5 rounded-2xl border border-white/10 shadow-inner">
-                                                        {isEditingThisPost ? (
-                                                          <div className="flex flex-col gap-3">
-                                                            <textarea value={editPostContent} onChange={(e) => setEditPostContent(e.target.value)} className="w-full bg-black/40 text-white rounded-xl p-3 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-white/50 resize-none h-24 border border-white/5" />
-                                                            <div className="flex gap-2 justify-end">
-                                                              <button onClick={() => setEditingPostId(null)} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-bold text-white transition-colors">Cancel</button>
-                                                              <button onClick={() => handleSavePostEdit(post.id)} className="px-4 py-2 bg-blue-600 hover:bg-blue-50 rounded-lg text-xs font-bold text-white transition-colors shadow-sm">Save</button>
-                                                            </div>
-                                                          </div>
-                                                        ) : (
-                                                          <p className="text-sm md:text-base font-medium italic text-white/90 whitespace-pre-wrap">"{post.content}"</p>
-                                                        )}
-                                                    </div>
-                                                )}
-
-                                                <div className="relative z-20 mt-6 pt-5 border-t border-white/10 flex flex-col sm:flex-row justify-between items-center gap-3">
-                                                    <div className="flex items-center gap-2 w-full sm:w-auto">
-                                                        <div className="relative flex-1 sm:flex-none">
-                                                            {coinPopId === post.id && <span className="coin-float">+5 💸</span>}
-                                                            <button onClick={() => handleToggleFire(post.id, post.athlete_id)} className={`w-full flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl font-black text-sm transition-all duration-300 shadow-sm backdrop-blur-md ${iLikedThis ? 'bg-white text-slate-900 shadow-[0_0_20px_rgba(255,255,255,0.3)]' : 'bg-black/20 hover:bg-black/40 text-white border border-white/5 hover:border-white/10'} ${animatingHype === post.id ? 'hype-pop' : ''}`}>
-                                                                <Flame className={`w-3.5 h-3.5 ${iLikedThis ? 'fill-current text-orange-500 animate-pulse' : 'text-white'}`} /> {likesCount > 0 ? likesCount : 'Hype'}
-                                                            </button>
-                                                        </div>
-                                                        <button onClick={() => toggleComments(post.id)} className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl font-black text-sm transition-all shadow-sm backdrop-blur-md ${isCommentsOpen ? 'bg-blue-600 text-white' : 'bg-black/20 hover:bg-black/40 text-white border border-white/5 hover:border-white/10'}`}>
-                                                            <MessageSquare className="w-4 h-4" /> {commentsCount > 0 ? commentsCount : 'Comment'}
-                                                        </button>
-                                                    </div>
-                                                    {viewerRole !== 'guest' && post.athlete_id !== currentUserId && (
-                                                        <button onClick={() => openMessageModal(post.athlete_id, post.athletes.first_name, post.athletes.high_school, 'athlete')} className="w-full sm:w-auto flex items-center justify-center gap-1.5 text-xs font-black text-slate-900 bg-white hover:bg-slate-200 px-5 py-2.5 rounded-xl transition-all shadow-lg hover:-translate-y-0.5">
-                                                            <Mail className="w-4 h-4" /> Connect
-                                                        </button>
-                                                    )}
-                                                </div>
-                                                
-                                                {/* COMMENTS */}
-                                                {isCommentsOpen && (
-                                                    <div className="mt-5 pt-5 border-t border-white/10 relative z-20 animate-in fade-in slide-in-from-top-2 duration-200">
-                                                        <div className="space-y-4 mb-4 max-h-60 overflow-y-auto px-4 py-3 -mx-4 custom-scrollbar">
-                                                            {allComments.map(comment => (
-                                                                <div key={comment.id} className="flex items-start gap-3 group/comment">
-                                                                    <div className="shrink-0 pt-1">
-                                                                        <AvatarWithBorder avatarUrl={comment.avatar_url || ''} borderId={comment.border || 'none'} sizeClasses="w-8 h-8 shadow-sm" />
-                                                                    </div>
-                                                                    <div className="bg-black/30 backdrop-blur-md border border-white/10 p-3 rounded-2xl rounded-tl-none text-white w-full max-w-[85%] shadow-inner relative">
-                                                                        <div className="absolute top-2 right-2 z-50 more-dropdown opacity-0 group-hover/comment:opacity-100 transition-opacity">
-                                                                          <button onClick={() => setActiveDropdown(activeDropdown === comment.id ? null : comment.id)} className="p-1 hover:bg-white/10 rounded text-white/50 hover:text-white transition-colors">
-                                                                            <MoreHorizontal className="w-4 h-4" />
-                                                                          </button>
-                                                                          {activeDropdown === comment.id && (
-                                                                            <div className="absolute right-0 mt-1 w-32 bg-slate-800 border border-white/10 rounded-lg shadow-xl overflow-hidden py-1 z-50">
-                                                                              {comment.athlete_id === currentUserId ? (
-                                                                                <>
-                                                                                  <button onClick={() => { setEditingCommentId(comment.id); setEditCommentContent(comment.text); setActiveDropdown(null); }} className="w-full text-left px-3 py-1.5 text-xs font-bold text-slate-300 hover:bg-white/5 hover:text-white flex items-center gap-2">
-                                                                                    <Edit2 className="w-3 h-3" /> Edit
-                                                                                  </button>
-                                                                                  <button onClick={() => { setCommentToDelete({postId: post.id, commentId: comment.id}); setActiveDropdown(null); }} className="w-full text-left px-3 py-1.5 text-xs font-bold text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 flex items-center gap-2 border-t border-white/5">
-                                                                                    <Trash2 className="w-3 h-3" /> Delete
-                                                                                  </button>
-                                                                                </>
-                                                                              ) : (
-                                                                                <button onClick={() => { setReportModal({ type: 'comment', id: comment.id, targetId: comment.athlete_id, content: comment.text }); setActiveDropdown(null); }} className="w-full text-left px-3 py-1.5 text-xs font-bold text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 flex items-center gap-2">
-                                                                                  <Flag className="w-3 h-3" /> Report
-                                                                                </button>
-                                                                              )}
-                                                                            </div>
-                                                                          )}
-                                                                        </div>
-                                                                        <div className="flex items-center justify-between mb-1.5 pr-6">
-                                                                            <p className="text-[10px] font-black opacity-80 flex items-center gap-2 uppercase tracking-widest text-white">
-                                                                                {comment.name}
-                                                                                {comment.athlete_id === post.athlete_id && <span className="bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[8px] px-2 py-0.5 rounded shadow-sm">Author</span>}
-                                                                            </p>
-                                                                            <span className="text-[9px] text-white/40 font-bold">{formatDate(comment.created_at)}</span>
-                                                                        </div>
-                                                                        {editingCommentId === comment.id ? (
-                                                                           <div className="flex flex-col gap-2 mt-2">
-                                                                             <input type="text" value={editCommentContent} onChange={(e) => setEditCommentContent(e.target.value)} className="bg-black/40 text-white text-sm rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 w-full border border-white/5" />
-                                                                             <div className="flex gap-2 justify-end">
-                                                                               <button onClick={() => setEditingCommentId(null)} className="px-3 py-1 bg-white/10 hover:bg-white/20 rounded text-[10px] font-bold text-white transition-colors">Cancel</button>
-                                                                               <button onClick={() => handleSaveCommentEdit(post.id, comment.id)} className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 rounded text-[10px] font-bold text-white transition-colors shadow-sm">Save</button>
-                                                                             </div>
-                                                                           </div>
-                                                                        ) : (
-                                                                           <p className="text-sm font-medium leading-relaxed pr-6">{comment.text}</p>
-                                                                        )}
-                                                                    </div>
-                                                                </div>
-                                                            ))}
-                                                            {allComments.length === 0 && <p className="text-xs text-white/50 font-bold italic text-center py-4">Be the first to hype this up!</p>}
-                                                        </div>
-                                                        <form onSubmit={(e) => handleAddComment(e, post.id)} className={`flex gap-3 items-center bg-black/20 p-2 rounded-full border border-white/10 backdrop-blur-md w-full transition-opacity ${isUnverifiedAthlete ? 'opacity-60' : ''}`}>
-                                                            <input 
-                                                              type="text" 
-                                                              value={commentInputs[post.id] || ''} 
-                                                              onChange={(e) => setCommentInputs({...commentInputs, [post.id]: e.target.value})} 
-                                                              placeholder={isUnverifiedAthlete ? "Verification required to comment..." : "Reply to the thread..."} 
-                                                              disabled={isUnverifiedAthlete}
-                                                              className={`flex-1 bg-transparent px-4 py-1.5 text-sm font-bold text-white focus:outline-none w-full ${isUnverifiedAthlete ? 'cursor-not-allowed placeholder:text-slate-400' : 'placeholder:text-slate-500'}`} 
-                                                            />
-                                                            <button type="submit" disabled={isUnverifiedAthlete || isSubmittingComment[post.id] || !commentInputs[post.id]?.trim()} className="bg-white/10 hover:bg-white/20 text-white w-8 h-8 flex items-center justify-center rounded-full disabled:opacity-50 transition-transform hover:scale-105 active:scale-95 shrink-0">
-                                                              {isUnverifiedAthlete ? <ShieldCheck className="w-3.5 h-3.5" /> : <Send className="w-3.5 h-3.5 ml-0.5" />}
-                                                            </button>
-                                                        </form>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        // 📝 STANDARD DISCUSSION THREAD POST 📝
-                                        <div className="bg-white/[0.03] backdrop-blur-md rounded-[2rem] p-6 sm:p-8 transition-all duration-300 relative group overflow-hidden border border-white/10 hover:border-indigo-500/30 hover:shadow-[0_8px_30px_rgba(99,102,241,0.1)]">
-                                            
-                                            <div className="absolute top-4 right-4 z-50 more-dropdown opacity-0 group-hover:opacity-100 transition-opacity">
-                                              <button onClick={() => setActiveDropdown(activeDropdown === post.id ? null : post.id)} className="p-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-colors border border-transparent hover:border-white/10">
-                                                <MoreHorizontal className="w-5 h-5" />
-                                              </button>
-                                              {activeDropdown === post.id && (
-                                                <div className="absolute right-0 mt-2 w-36 bg-slate-900 border border-white/10 rounded-xl shadow-xl overflow-hidden py-1">
-                                                  {isMyPost ? (
-                                                    <>
-                                                      <button onClick={() => { setEditingPostId(post.id); setEditPostContent(post.content || ""); setActiveDropdown(null); }} className="w-full text-left px-4 py-2 text-sm font-bold text-slate-300 hover:bg-white/5 hover:text-white flex items-center gap-2">
-                                                        <Edit2 className="w-4 h-4" /> Edit
-                                                      </button>
-                                                      <button onClick={() => { setPostToDelete(post.id); setActiveDropdown(null); }} className="w-full text-left px-4 py-2 text-sm font-bold text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 flex items-center gap-2 border-t border-white/5">
-                                                        <Trash2 className="w-4 h-4" /> Delete
-                                                      </button>
-                                                    </>
-                                                  ) : (
-                                                    <button onClick={() => { setReportModal({ type: 'post', id: post.id, targetId: post.athlete_id, content: post.content }); setActiveDropdown(null); }} className="w-full text-left px-4 py-2 text-sm font-bold text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 flex items-center gap-2">
-                                                      <Flag className="w-4 h-4" /> Report
-                                                    </button>
-                                                  )}
-                                                </div>
-                                              )}
-                                            </div>
-                                            
-                                            <div className="relative z-20 flex justify-between items-start mb-4">
-                                                <div className="flex items-center gap-4">
-                                                    <Link href={`/athlete/${post.athlete_id}`} className="shrink-0 hover:scale-105 transition-transform shadow-md rounded-full border border-white/5">
-                                                        <AvatarWithBorder avatarUrl={post.athletes.avatar_url || ''} sizeClasses="w-12 h-12" borderId={post.athletes.equipped_border || 'none'} />
-                                                    </Link>
-                                                    <div>
-                                                        <div className="flex items-center gap-2 mb-0.5">
-                                                          <Link href={`/athlete/${post.athlete_id}`} className={`font-black text-lg transition-colors tracking-tight leading-none flex items-center gap-1.5 ${post.athletes.is_premium ? 'text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300 hover:to-blue-500' : 'text-white hover:text-blue-400'}`}>
-                                                              {post.athletes.first_name} {post.athletes.last_name}
-                                                              {post.athletes.is_premium && <Crown className="w-3.5 h-3.5 text-yellow-500" />}
-                                                          </Link>
-                                                          {showBeacon && (
-                                                             <div className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
-                                                                <Radio className="w-2.5 h-2.5" /> Recruiting
-                                                             </div>
-                                                          )}
-                                                        </div>
-                                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1 mt-1">
-                                                            <span className="truncate max-w-[120px]">{post.athletes.high_school}</span> <span className="hidden sm:inline">•</span> <span>{formatDate(post.created_at)}</span>
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            
-                                            {isEditingThisPost ? (
-                                              <div className="flex flex-col gap-3 mb-5">
-                                                <textarea value={editPostContent} onChange={(e) => setEditPostContent(e.target.value)} className="w-full bg-black/40 text-white rounded-xl p-4 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500/50 resize-none h-24 border border-white/5" />
-                                                <div className="flex gap-2 justify-end">
-                                                  <button onClick={() => setEditingPostId(null)} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-bold text-white transition-colors">Cancel</button>
-                                                  <button onClick={() => handleSavePostEdit(post.id)} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-xs font-bold text-white transition-colors shadow-sm">Save</button>
-                                                </div>
-                                              </div>
-                                            ) : isVerificationPost ? (
-                                              <div className="relative z-20 bg-blue-950/20 backdrop-blur-xl border border-blue-500/30 p-6 sm:p-8 rounded-[2rem] shadow-[0_0_40px_rgba(59,130,246,0.15)] flex flex-col items-center gap-6 overflow-hidden mb-5">
-                                                  <div className="absolute top-0 right-0 w-48 h-48 bg-blue-500/10 rounded-bl-full blur-2xl pointer-events-none"></div>
-                                                  <div className="absolute bottom-0 left-0 w-48 h-48 bg-cyan-500/10 rounded-tr-full blur-2xl pointer-events-none"></div>
-                                        
-                                                  <div className="flex flex-col items-center text-center gap-2 relative z-10">
-                                                      <ShieldCheck className="w-12 h-12 text-blue-400 drop-shadow-[0_0_15px_rgba(59,130,246,0.5)] mb-2" />
-                                                      <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight">A New Athlete Has Verified!</h3>
-                                                      <p className="text-xs font-bold text-blue-400/80 uppercase tracking-widest flex items-center gap-1.5"><Sparkles className="w-3 h-3" /> Scouting unlocked</p>
-                                                  </div>
-                                        
-                                                  <div className="w-full grid grid-cols-2 sm:grid-cols-4 gap-3 relative z-10">
-                                                      <div className="bg-black/40 border border-white/5 rounded-2xl p-4 flex flex-col items-center justify-center backdrop-blur-md shadow-inner">
-                                                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Class</span>
-                                                          <span className="text-lg font-black text-white">'{post.athletes.grad_year ? post.athletes.grad_year.toString().slice(-2) : 'XX'}</span>
-                                                      </div>
-                                                      <div className="bg-black/40 border border-white/5 rounded-2xl p-4 flex flex-col items-center justify-center backdrop-blur-md shadow-inner text-center">
-                                                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Sport</span>
-                                                          <span className="text-xs font-black text-white truncate w-full px-2">{verifTargetSportStr.split('•')[0]}</span>
-                                                      </div>
-                                                      {verifTargetScore > 0 ? (
-                                                          <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4 flex flex-col items-center justify-center backdrop-blur-md shadow-inner col-span-2 sm:col-span-2 relative overflow-hidden group">
-                                                              <div className="absolute inset-0 bg-gradient-to-r from-blue-500/0 via-blue-500/10 to-blue-500/0 animate-[shimmerGlare_3s_infinite_linear] pointer-events-none"></div>
-                                                              <span className="text-[10px] font-black text-blue-400/80 uppercase tracking-widest mb-1">Ovr Rating</span>
-                                                              <div className="flex items-end gap-2">
-                                                                  <span className="text-3xl font-black text-blue-400 leading-none drop-shadow-[0_0_10px_rgba(59,130,246,0.4)]">{verifTargetScore}</span>
-                                                                  <span className="text-[10px] font-bold text-blue-300/70 mb-0.5">{verifTierLabel}</span>
-                                                              </div>
-                                                          </div>
-                                                      ) : (
-                                                          <div className="bg-black/40 border border-white/5 rounded-2xl p-4 flex flex-col items-center justify-center backdrop-blur-md shadow-inner col-span-2 sm:col-span-2">
-                                                              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Status</span>
-                                                              <span className="text-sm font-black text-slate-300">Evaluating Profile...</span>
-                                                          </div>
-                                                      )}
-                                                  </div>
-                                        
-                                                  {verifTargetMetrics && verifTargetMetrics.length > 0 && (
-                                                      <div className="w-full flex flex-wrap justify-center gap-2 relative z-10">
-                                                          {verifTargetMetrics.slice(0, 4).map((m, i) => (
-                                                              <div key={i} className="px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 flex items-center gap-2 backdrop-blur-md">
-                                                                  <span className="text-[10px] uppercase font-bold text-slate-400">{m.name}</span>
-                                                                  <span className="text-xs font-black text-white">{m.value}</span>
-                                                              </div>
-                                                          ))}
-                                                      </div>
-                                                  )}
-                                              </div>
-                                            ) : (
-                                              <p className="relative z-20 text-slate-200 font-medium whitespace-pre-wrap mb-5 leading-relaxed text-sm sm:text-base pr-8">
-                                                  {post.content}
-                                              </p>
-                                            )}
-                                            
-                                            {post.image_url && (
-                                                <div className="relative z-20 rounded-2xl overflow-hidden border border-white/5 shadow-md mb-6 group-hover:shadow-lg transition-shadow">
-                                                    <img src={post.image_url} alt="" className="max-h-[400px] w-full object-cover transform hover:scale-105 transition-transform duration-700" />
-                                                </div>
-                                            )}
-
-                                            <div className="relative z-20 border-t border-white/10 pt-5 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3">
-                                                <div className="flex items-center gap-3 w-full sm:w-auto">
-                                                    <div className="relative flex-1 sm:flex-none">
-                                                        {coinPopId === post.id && <span className="coin-float">+5 💸</span>}
-                                                        <button onClick={() => handleToggleFire(post.id, post.athlete_id)} className={`w-full flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-black transition-all duration-300 shadow-sm ${iLikedThis ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shadow-[0_0_15px_rgba(99,102,241,0.2)]' : (isVerificationPost ? 'bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 border border-blue-500/50 shadow-[0_0_15px_rgba(59,130,246,0.2)]' : 'bg-black/20 hover:bg-black/40 text-slate-300 border border-white/5 hover:border-white/10')} ${animatingHype === post.id ? 'hype-pop' : ''}`}>
-                                                            <Flame className={`w-3.5 h-3.5 ${iLikedThis ? 'fill-current text-indigo-400 animate-pulse' : (isVerificationPost ? 'text-blue-400' : 'text-slate-400')}`} /> {likesCount > 0 ? likesCount : (isVerificationPost ? 'Hype (+5 Cash)' : 'Hype')}
-                                                        </button>
-                                                    </div>
-                                                    <button onClick={() => toggleComments(post.id)} className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-black transition-all shadow-sm ${isCommentsOpen ? 'bg-white/10 text-white' : 'bg-black/20 hover:bg-black/40 text-slate-300 border border-white/5 hover:border-white/10'}`}>
-                                                        <MessageSquare className="w-3.5 h-3.5 text-slate-400" /> {commentsCount > 0 ? commentsCount : 'Reply'}
-                                                    </button>
-                                                </div>
-                                                {viewerRole !== 'guest' && post.athlete_id !== currentUserId && (
-                                                    <button onClick={() => openMessageModal(post.athlete_id, post.athletes.first_name, post.athletes.high_school, 'athlete')} className="w-full sm:w-auto flex items-center justify-center gap-1.5 text-xs font-black bg-white/5 text-slate-300 hover:bg-white/10 px-5 py-2.5 rounded-xl transition-colors hover:text-white border border-white/5">
-                                                        <Mail className="w-3.5 h-3.5" /> Connect
-                                                    </button>
-                                                )}
-                                            </div>
-                                            
-                                            {/* COMMENTS */}
-                                            {isCommentsOpen && (
-                                                <div className="mt-5 pt-5 border-t border-white/10 relative z-20 animate-in fade-in slide-in-from-top-2 duration-200">
-                                                    <div className="space-y-4 mb-4 max-h-60 overflow-y-auto px-4 py-3 -mx-4 custom-scrollbar">
-                                                        {allComments.map(comment => (
-                                                            <div key={comment.id} className="flex items-start gap-3 group/comment">
-                                                                <div className="shrink-0 pt-1">
-                                                                    <AvatarWithBorder avatarUrl={comment.avatar_url || ''} borderId={comment.border || 'none'} sizeClasses="w-8 h-8 shadow-sm" />
-                                                                </div>
-                                                                <div className="bg-black/20 border border-white/5 p-3 rounded-2xl rounded-tl-none text-slate-200 w-full max-w-[85%] shadow-inner relative">
-                                                                    <div className="absolute top-2 right-2 z-50 more-dropdown opacity-0 group-hover/comment:opacity-100 transition-opacity">
-                                                                      <button onClick={() => setActiveDropdown(activeDropdown === comment.id ? null : comment.id)} className="p-1 hover:bg-white/10 rounded text-white/50 hover:text-white transition-colors">
-                                                                        <MoreHorizontal className="w-4 h-4" />
-                                                                      </button>
-                                                                      {activeDropdown === comment.id && (
-                                                                        <div className="absolute right-0 mt-1 w-32 bg-slate-800 border border-white/10 rounded-lg shadow-xl overflow-hidden py-1 z-50">
-                                                                          {comment.athlete_id === currentUserId ? (
-                                                                            <>
-                                                                              <button onClick={() => { setEditingCommentId(comment.id); setEditCommentContent(comment.text); setActiveDropdown(null); }} className="w-full text-left px-3 py-1.5 text-xs font-bold text-slate-300 hover:bg-white/5 hover:text-white flex items-center gap-2">
-                                                                                <Edit2 className="w-3 h-3" /> Edit
-                                                                              </button>
-                                                                              <button onClick={() => { setCommentToDelete({postId: post.id, commentId: comment.id}); setActiveDropdown(null); }} className="w-full text-left px-3 py-1.5 text-xs font-bold text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 flex items-center gap-2 border-t border-white/5">
-                                                                                <Trash2 className="w-3 h-3" /> Delete
-                                                                              </button>
-                                                                            </>
-                                                                          ) : (
-                                                                            <button onClick={() => { setReportModal({ type: 'comment', id: comment.id, targetId: comment.athlete_id, content: comment.text }); setActiveDropdown(null); }} className="w-full text-left px-3 py-1.5 text-xs font-bold text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 flex items-center gap-2">
-                                                                              <Flag className="w-3 h-3" /> Report
-                                                                            </button>
-                                                                          )}
-                                                                        </div>
-                                                                      )}
-                                                                    </div>
-                                                                    <div className="flex items-center justify-between mb-1.5 pr-6">
-                                                                        <p className="text-[10px] font-black opacity-80 flex items-center gap-2 uppercase tracking-widest text-white">
-                                                                            {comment.name}
-                                                                            {comment.athlete_id === post.athlete_id && <span className="bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[8px] px-2 py-0.5 rounded shadow-sm">Author</span>}
-                                                                        </p>
-                                                                        <span className="text-[9px] text-slate-500 font-bold">{formatDate(comment.created_at)}</span>
-                                                                    </div>
-                                                                    {editingCommentId === comment.id ? (
-                                                                       <div className="flex flex-col gap-2 mt-2">
-                                                                         <input type="text" value={editCommentContent} onChange={(e) => setEditCommentContent(e.target.value)} className="bg-black/40 text-white text-sm rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 w-full border border-white/5" />
-                                                                         <div className="flex gap-2 justify-end">
-                                                                           <button onClick={() => setEditingCommentId(null)} className="px-3 py-1 bg-white/10 hover:bg-white/20 rounded text-[10px] font-bold text-white transition-colors">Cancel</button>
-                                                                           <button onClick={() => handleSaveCommentEdit(post.id, comment.id)} className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 rounded text-[10px] font-bold text-white transition-colors shadow-sm">Save</button>
-                                                                         </div>
-                                                                       </div>
-                                                                    ) : (
-                                                                       <p className="text-sm font-medium leading-relaxed pr-6">{comment.text}</p>
-                                                                    )}
-                                                                </div>
-                                                            </div>
-                                                        ))}
-                                                        {allComments.length === 0 && <p className="text-xs text-slate-500 font-bold italic text-center py-4">Be the first to join the conversation!</p>}
-                                                    </div>
-                                                    <form onSubmit={(e) => handleAddComment(e, post.id)} className={`flex gap-3 items-center bg-black/20 p-2 rounded-full border border-white/10 backdrop-blur-md w-full transition-opacity ${isUnverifiedAthlete ? 'opacity-60' : ''}`}>
-                                                        <input 
-                                                          type="text" 
-                                                          value={commentInputs[post.id] || ''} 
-                                                          onChange={(e) => setCommentInputs({...commentInputs, [post.id]: e.target.value})} 
-                                                          placeholder={isUnverifiedAthlete ? "Verification required to comment..." : "Reply to the thread..."} 
-                                                          disabled={isUnverifiedAthlete}
-                                                          className={`flex-1 bg-transparent px-4 py-1.5 text-sm font-bold text-white focus:outline-none w-full ${isUnverifiedAthlete ? 'cursor-not-allowed placeholder:text-slate-400' : 'placeholder:text-slate-500'}`} 
-                                                        />
-                                                        <button type="submit" disabled={isUnverifiedAthlete || isSubmittingComment[post.id] || !commentInputs[post.id]?.trim()} className="bg-white/10 hover:bg-white/20 text-white w-8 h-8 flex items-center justify-center rounded-full disabled:opacity-50 transition-transform hover:scale-105 active:scale-95 shrink-0">
-                                                          {isUnverifiedAthlete ? <ShieldCheck className="w-3.5 h-3.5" /> : <Send className="w-3.5 h-3.5 ml-0.5" />}
-                                                        </button>
-                                                    </form>
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })
-                    )}
-                </div>
-            </div>
-        )}
-
-        {/* ======================= TAB: NETWORK DIRECTORY ======================= */}
-        {feedTab === 'network' && (
-            <div className="animate-in fade-in slide-in-from-bottom-6 duration-500">
-                
-                {/* 🚨 ULTRA-GLASSY ENHANCED SEARCH FILTERS 🚨 */}
-                <div className="bg-white/[0.03] backdrop-blur-3xl rounded-[2.5rem] p-5 md:p-8 border border-white/10 shadow-[0_8px_30px_rgb(0,0,0,0.5)] mb-10 z-20 relative overflow-visible">
-                    <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 via-transparent to-purple-500/5 rounded-[2.5rem] pointer-events-none"></div>
-                    <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
-
-                    <div className="flex flex-col sm:flex-row gap-4 mb-5 items-center justify-between">
-                      <div className="relative group flex-1 w-full flex gap-3">
-                          <div className="relative flex-1">
-                            <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500 group-focus-within:text-indigo-400 transition-colors pointer-events-none" />
-                            <input 
-                                type="text" 
-                                placeholder={viewerRole === 'coach' ? "Search athletes..." : "Search coaches..."}
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="w-full bg-black/20 border border-white/5 hover:border-white/10 rounded-[1.5rem] pl-14 pr-6 py-4 text-white font-bold focus:outline-none focus:bg-black/40 focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all text-sm md:text-base placeholder:text-slate-500 shadow-inner backdrop-blur-md"
-                            />
-                          </div>
-                          {/* Mobile Filter Toggle Button */}
-                          <button onClick={() => setShowMobileFilters(!showMobileFilters)} className="sm:hidden flex items-center justify-center w-14 h-14 bg-black/20 border border-white/10 rounded-2xl text-slate-300 hover:text-white transition-colors shrink-0">
-                             <SlidersHorizontal className="w-5 h-5" />
-                          </button>
-                      </div>
-                      {viewerRole === 'coach' && (
-                        <button onClick={() => setShowScoringModal(true)} className="hidden sm:flex items-center justify-center gap-1.5 text-[10px] uppercase tracking-widest font-black text-indigo-400 hover:text-indigo-300 transition-colors bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 px-4 py-2.5 rounded-xl shrink-0 h-full min-h-[54px]">
-                          <Info className="w-4 h-4" /> Scoring Guide
-                        </button>
-                      )}
-                    </div>
-
-                    <div className={`grid grid-cols-1 md:grid-cols-3 gap-4 ${showMobileFilters ? 'block' : 'hidden sm:grid'}`}>
-                      {viewerRole !== 'coach' ? (
-                        <>
-                          <div className="relative group">
-                            <select value={filterDivision} onChange={e => setFilterDivision(e.target.value)} className="w-full bg-black/20 border border-white/5 hover:border-white/10 text-white text-sm font-bold rounded-xl pl-4 pr-10 py-3.5 focus:outline-none focus:bg-black/40 focus:border-indigo-500/50 appearance-none cursor-pointer transition-all shadow-inner backdrop-blur-md">
-                              <option value="" className="bg-slate-900">All Divisions</option>
-                              <option value="NCAA D1" className="bg-slate-900">NCAA D1</option>
-                              <option value="NCAA D2" className="bg-slate-900">NCAA D2</option>
-                              <option value="NCAA D3" className="bg-slate-900">NCAA D3</option>
-                              <option value="NAIA" className="bg-slate-900">NAIA</option>
-                              <option value="NJCAA" className="bg-slate-900">NJCAA / JUCO</option>
-                            </select>
-                            <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
-                          </div>
-
-                          <div className="relative group">
-                            <select value={filterCoachSport} onChange={e => setFilterCoachSport(e.target.value)} className="w-full bg-black/20 border border-white/5 hover:border-white/10 text-white text-sm font-bold rounded-xl pl-4 pr-10 py-3.5 focus:outline-none focus:bg-black/40 focus:border-indigo-500/50 appearance-none cursor-pointer transition-all shadow-inner backdrop-blur-md">
-                              <option value="" className="bg-slate-900">All Sports</option>
-                              {SPORT_OPTIONS.map(s => <option key={s} value={s} className="bg-slate-900">{s}</option>)}
-                            </select>
-                            <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
-                          </div>
-
-                          <div className="relative group">
-                            <select value={filterTitle} onChange={e => setFilterTitle(e.target.value)} className="w-full bg-black/20 border border-white/5 hover:border-white/10 text-white text-sm font-bold rounded-xl pl-4 pr-10 py-3.5 focus:outline-none focus:bg-black/40 focus:border-indigo-500/50 appearance-none cursor-pointer transition-all shadow-inner backdrop-blur-md">
-                              <option value="" className="bg-slate-900">All Titles / Jobs</option>
-                              {COACH_TITLES.map(t => <option key={t} value={t} className="bg-slate-900">{t}</option>)}
-                            </select>
-                            <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
-                          </div>
-                        </>
-                      ) : (
-                        // 🏃‍♂️ MULTI-SPORT ATHLETE FILTERS FOR COACHES 🏃‍♂️
-                        <div className="col-span-1 md:col-span-3 grid grid-cols-2 md:grid-cols-5 gap-4">
-                          <div className="relative group">
-                            <select value={filterAthleteState} onChange={e => setFilterAthleteState(e.target.value)} className="w-full bg-black/20 border border-white/5 hover:border-white/10 text-white text-sm font-bold rounded-xl pl-4 pr-10 py-3.5 focus:outline-none focus:bg-black/40 focus:border-indigo-500/50 appearance-none cursor-pointer transition-all shadow-inner backdrop-blur-md">
-                              <option value="" className="bg-slate-900">State</option>
-                              {Array.from(new Set(recruitsList.map(r => r.state).filter(Boolean))).sort().map(s => (
-                                <option key={s} value={s} className="bg-slate-900">{s}</option>
-                              ))}
-                            </select>
-                            <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
-                          </div>
-
-                          <div className="relative group">
-                            <select value={filterGradYear} onChange={e => setFilterGradYear(e.target.value)} className="w-full bg-black/20 border border-white/5 hover:border-white/10 text-white text-sm font-bold rounded-xl pl-4 pr-10 py-3.5 focus:outline-none focus:bg-black/40 focus:border-indigo-500/50 appearance-none cursor-pointer transition-all shadow-inner backdrop-blur-md">
-                              <option value="" className="bg-slate-900">Class</option>
-                              {validGradYears.map(y => (
-                                <option key={y} value={y.toString()} className="bg-slate-900">{y}</option>
-                              ))}
-                            </select>
-                            <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
-                          </div>
-
-                          <div className="relative group">
-                            <select value={filterSport} onChange={e => { setFilterSport(e.target.value); setFilterPosition(''); }} className="w-full bg-black/20 border border-white/5 hover:border-white/10 text-white text-sm font-bold rounded-xl pl-4 pr-10 py-3.5 focus:outline-none focus:bg-black/40 focus:border-indigo-500/50 appearance-none cursor-pointer transition-all shadow-inner backdrop-blur-md">
-                              <option value="" className="bg-slate-900">Sport</option>
-                              {SPORT_OPTIONS.map(s => (
-                                <option key={s} value={s} className="bg-slate-900">{s}</option>
-                              ))}
-                            </select>
-                            <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
-                          </div>
-                          
-                          <div className="relative group">
-                            <select disabled={!filterSport} value={filterPosition} onChange={e => setFilterPosition(e.target.value)} className="w-full bg-black/20 border border-white/5 hover:border-white/10 text-white text-sm font-bold rounded-xl pl-4 pr-10 py-3.5 focus:outline-none focus:bg-black/40 focus:border-indigo-500/50 appearance-none cursor-pointer transition-all shadow-inner backdrop-blur-md disabled:opacity-50">
-                              <option value="" className="bg-slate-900">{filterSport === 'Track & Field' ? 'Event...' : 'Position...'}</option>
-                              {positionOptions.map(p => (
-                                <option key={p} value={p} className="bg-slate-900">{p}</option>
-                              ))}
-                            </select>
-                            <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
-                          </div>
-
-                          <div className="relative group col-span-2 md:col-span-1">
-                            <Target className={`absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none transition-colors ${!filterSport ? 'text-slate-600' : 'text-indigo-400'}`} />
-                            <input 
-                              type="number" 
-                              placeholder="Min Score..."
-                              value={filterTargetScore}
-                              onChange={e => setFilterTargetScore(e.target.value)}
-                              disabled={!filterSport}
-                              className="w-full bg-black/20 border border-white/5 hover:border-white/10 text-white text-sm font-bold rounded-xl pl-10 pr-4 py-3.5 focus:outline-none focus:bg-black/40 focus:border-indigo-500/50 transition-all placeholder:text-slate-500 disabled:opacity-50 disabled:cursor-not-allowed shadow-inner backdrop-blur-md [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none"
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                    {viewerRole !== 'coach' ? (
-                        // 🎓 COACHES DIRECTORY 🎓
-                        filteredDirectory.length > 0 ? (
-                            (filteredDirectory as CoachData[]).map(coach => (
-                                <div key={coach.id} className="bg-gradient-to-b from-white/[0.05] to-transparent backdrop-blur-xl border border-white/10 rounded-[2rem] p-6 hover:border-indigo-500/40 hover:shadow-[0_0_30px_rgba(99,102,241,0.15)] transition-all duration-500 flex flex-col justify-between h-full group hover:-translate-y-1 relative overflow-hidden">
-                                    <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-blue-500/10 to-transparent rounded-bl-full z-0 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                                    <div className="flex items-start gap-4 mb-6 relative z-10">
-                                        <AvatarWithBorder avatarUrl={coach.avatar_url || ''} sizeClasses="w-16 h-16 shadow-md border border-white/5" borderId="none" />
-                                        <div className="pt-1 w-full min-w-0">
-                                            <h3 className="font-bold text-lg text-white group-hover:text-blue-400 transition-colors leading-tight truncate">Coach {coach.last_name}</h3>
-                                            <div className="flex flex-col gap-1.5 mt-1.5">
-                                              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5 truncate">
-                                                <School className="w-3 h-3 shrink-0" /> <span className="truncate">{coach.school_name}</span>
-                                              </p>
-                                              {(coach.coach_title || coach.sport) && (
-                                                <p className="text-[10px] font-bold text-slate-500 flex items-center gap-1.5 truncate">
-                                                  <Briefcase className="w-3 h-3 shrink-0" /> 
-                                                  <span className="truncate">{coach.coach_title || 'Coach'} • {coach.sport || 'Athletics'}</span>
-                                                </p>
-                                              )}
-                                              {coach.division && (
-                                                <div className="mt-1">
-                                                  <span className="text-[9px] font-black text-blue-300 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20 uppercase tracking-widest backdrop-blur-md">
-                                                    {coach.division}
-                                                  </span>
-                                                </div>
-                                              )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <button 
-                                      onClick={() => openMessageModal(coach.id, `Coach ${coach.last_name}`, coach.school_name || 'Coach', 'coach')} 
-                                      className={`w-full font-black py-3.5 rounded-xl transition-all flex items-center justify-center gap-2 text-sm relative z-10 backdrop-blur-md shadow-inner ${currentUserProfile?.trust_level === 0 ? 'bg-slate-800/50 text-slate-500 cursor-not-allowed border border-white/5 hover:border-rose-500/50 hover:text-rose-400' : 'bg-white/10 hover:bg-blue-600 text-white border border-transparent'}`}
-                                    >
-                                        {currentUserProfile?.trust_level === 0 ? (
-                                          <><ShieldCheck className="w-4 h-4" /> Message Coach (Locked)</>
-                                        ) : (
-                                          <><Mail className="w-4 h-4" /> Message Coach</>
-                                        )}
-                                    </button>
-                                </div>
-                            ))
-                        ) : (
-                            <div className="col-span-1 sm:col-span-2 text-center py-20 bg-white/[0.03] backdrop-blur-xl rounded-[2rem] border border-white/5 border-dashed shadow-inner">
-                                <Search className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-                                <h3 className="text-xl font-bold text-white mb-2">No coaches found</h3>
-                                <p className="text-slate-500 text-sm">Try adjusting your filters or searching for a different school.</p>
+                <div 
+                    onClick={() => setIsFeatureFormOpen(!isFeatureFormOpen)}
+                    className="cursor-pointer flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10"
+                >
+                    <div className="flex items-center gap-4">
+                        <div className="bg-gradient-to-b from-amber-400 to-amber-600 p-0.5 rounded-2xl shadow-[0_0_20px_rgba(251,191,36,0.3)] group-hover/container:shadow-[0_0_30px_rgba(251,191,36,0.5)] transition-shadow duration-500 shrink-0">
+                            <div className="bg-[#0B101A] p-3 rounded-[14px]">
+                                <Star className="w-6 h-6 text-amber-400 fill-amber-400/20" />
                             </div>
-                        )
-                    ) : (
-                        // 🏃‍♂️ NEW MULTI-SPORT ATHLETES DIRECTORY (COACH VIEW) 🏃‍♂️
-                        filteredDirectory.length > 0 ? (
-                            (filteredDirectory as AthleteData[]).map(athlete => {
-                                const cardStyles = getCardStyles(athlete.equipped_card, 'dir');
-                                const lastSeen = formatLastSeen(athlete.last_login_date);
-                                
-                                // Determine primary stat block to show based on filter
-                                let targetScore = 0;
-                                let targetSportStr = "Athletics";
-                                let targetMetrics = null;
+                        </div>
+                        <div>
+                            <h3 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
+                                Feature Yourself
+                            </h3>
+                            <p className="text-slate-400 text-sm font-medium mt-0.5">Pin your profile to the top of the directory.</p>
+                        </div>
+                    </div>
+                    
+                    <div className="flex flex-wrap sm:flex-nowrap items-center gap-3">
+                        <Link href="/dashboard?view=performance&tab=analytics" onClick={(e) => e.stopPropagation()} className="flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 px-4 py-2.5 rounded-2xl transition-colors shrink-0">
+                            <BarChart3 className="w-4 h-4 text-blue-400" />
+                            <span className="text-xs font-bold text-white uppercase tracking-widest">Analytics</span>
+                        </Link>
+                        
+                        {lastPostStats !== null && (
+                            <div className="flex items-center gap-2 bg-rose-500/10 border border-rose-500/20 px-4 py-2.5 rounded-2xl shrink-0">
+                                <Heart className="w-4 h-4 text-rose-500" />
+                                <div className="flex items-baseline gap-1.5">
+                                    <span className="text-sm font-black text-rose-100">{lastPostStats.likes}</span>
+                                    <span className="text-[10px] font-black text-rose-500/80 uppercase tracking-widest hidden sm:inline">Likes</span>
+                                </div>
+                            </div>
+                        )}
 
-                                if (filterSport) {
-                                   const activeSport = athlete.athlete_sports?.find(s => s.sport_name === filterSport && s.is_active);
-                                   if (activeSport) {
-                                      targetScore = activeSport.custom_fit_score;
-                                      targetSportStr = `${activeSport.sport_name} ${activeSport.position ? `• ${activeSport.position}` : ''}`;
-                                      targetMetrics = activeSport.metrics;
-                                   }
-                                } else {
-                                   // Highest sport score
-                                   const msHigh = athlete.athlete_sports && athlete.athlete_sports.length > 0 
-                                      ? Math.max(...athlete.athlete_sports.map(s => s.custom_fit_score)) 
-                                      : 0;
-                                   
-                                   targetScore = msHigh;
-                                   const activeTopSport = athlete.athlete_sports?.find(s => s.custom_fit_score === targetScore);
-                                   if (activeTopSport) {
-                                      targetSportStr = `${activeTopSport.sport_name} ${activeTopSport.position ? `• ${activeTopSport.position}` : ''}`;
-                                      targetMetrics = activeTopSport.metrics;
-                                   }
-                                }
+                        <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 px-4 py-2.5 rounded-2xl shrink-0 ml-auto sm:ml-0">
+                            <Points className="w-5 h-5 text-emerald-400" />
+                            <span className="text-sm font-black text-emerald-400">{currentUserProfile.coins}</span>
+                        </div>
 
-                                const tierLabel = getScoreTier(targetScore);
+                        <div className={`ml-1 p-2 rounded-full bg-white/5 border border-white/10 transition-transform duration-300 ${isFeatureFormOpen ? 'rotate-180 bg-white/10' : ''}`}>
+                            <ChevronDown className="w-5 h-5 text-slate-400" />
+                        </div>
+                    </div>
+                </div>
 
-                                return (
-                                  <div key={athlete.id} className={`${cardStyles.bgClass} ${cardStyles.isFoil ? 'animate-foil shadow-lg' : ''} ${cardStyles.borderClass} backdrop-blur-xl rounded-[2rem] p-6 hover:shadow-[0_0_30px_rgba(99,102,241,0.15)] transition-all duration-500 flex flex-col justify-between h-full group hover:-translate-y-1 relative overflow-hidden border`}>
-                                      <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-indigo-500/10 to-transparent rounded-bl-full z-0 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                                      
-                                      {cardStyles.hasGlare && <div className="holo-glare rounded-[2rem]"></div>}
-                                      {cardStyles.isFoil && <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-[0.03] mix-blend-overlay pointer-events-none"></div>}
+                {isFeatureFormOpen && (
+                    <div className="animate-in slide-in-from-top-4 fade-in duration-300 pt-6 mt-6 border-t border-white/10 space-y-6 relative z-10">
+                        
+                        {activePost && (
+                           <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex items-start gap-3 mb-6 shadow-inner">
+                              <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5 animate-pulse" />
+                              <div>
+                                 <h4 className="text-sm font-black text-amber-300">Active Feature Detected</h4>
+                                 <p className="text-xs font-medium text-amber-400/80 mt-1">You currently have a post active in the feed. Publishing a new feature will automatically overwrite and replace your existing post.</p>
+                              </div>
+                           </div>
+                        )}
 
-                                      <div className="flex items-start gap-4 mb-5 relative z-10">
-                                          <Link href={`/athlete/${athlete.id}`} className="shrink-0 hover:scale-105 transition-transform block shadow-xl rounded-full bg-slate-900 border-2 border-white/20">
-                                              <AvatarWithBorder avatarUrl={athlete.avatar_url || ''} sizeClasses="w-16 h-16 shadow-md" borderId={athlete.equipped_border || 'none'} />
-                                          </Link>
-                                          
-                                          <div className="min-w-0 pt-1 w-full flex justify-between gap-2">
-                                              <div className="flex-1 overflow-hidden">
-                                                <div className="flex items-center gap-2">
-                                                  <Link href={`/athlete/${athlete.id}`} className="text-left font-bold text-lg text-white group-hover:text-indigo-400 transition-colors leading-tight truncate flex items-center gap-1.5">
-                                                      {athlete.first_name} {athlete.last_name}
-                                                      {athlete.is_premium && <Crown className="w-3.5 h-3.5 text-yellow-400 drop-shadow-sm shrink-0" />}
-                                                  </Link>
-                                                </div>
+                        <form onSubmit={handleCreateFeatured} className="space-y-6">
+                          
+                          <div>
+                            <div className="flex items-center justify-between mb-2">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
+                                    <Target className="w-3 h-3" /> Step 1: Select Sport to Promote
+                                </label>
+                                <Link href="/dashboard?view=performance" className="text-[10px] font-bold text-indigo-400 hover:text-indigo-300 uppercase tracking-widest flex items-center gap-1 transition-colors bg-indigo-500/10 px-2 py-1 rounded-lg border border-indigo-500/20">
+                                    <Activity className="w-3 h-3" /> Edit PRs & Stats
+                                </Link>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                {activeUserSports.length === 0 ? (
+                                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-rose-500/10 border border-rose-500/20 px-4 py-3 rounded-xl gap-4 w-full">
+                                        <p className="text-sm font-bold text-rose-400 flex items-center gap-2">
+                                            <AlertCircle className="w-4 h-4 shrink-0" /> You have no active sports. Please update your profile to feature yourself.
+                                        </p>
+                                        <Link href="/dashboard?view=performance" className="shrink-0 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 px-4 py-2 rounded-lg text-xs font-bold transition-colors border border-rose-500/30">
+                                            Add Sports & Stats
+                                        </Link>
+                                    </div>
+                                ) : (
+                                    activeUserSports.map((sport: string) => (
+                                        <button
+                                            key={sport}
+                                            type="button"
+                                            onClick={() => {
+                                                setFeaturedSport(sport);
+                                                setSelectedOtherSports([]); 
+                                            }}
+                                            className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all border ${
+                                                featuredSport === sport
+                                                    ? 'bg-indigo-600 text-white border-indigo-400 shadow-[0_0_15px_rgba(79,70,229,0.5)]'
+                                                    : 'bg-black/40 text-slate-300 border-white/10 hover:bg-white/10 hover:border-white/30'
+                                            }`}
+                                        >
+                                            {sport}
+                                        </button>
+                                    ))
+                                )}
+                            </div>
+                          </div>
 
-                                                <div className="flex flex-col gap-1 mt-1">
-                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest truncate">
-                                                        {athlete.high_school} • {athlete.state}
-                                                    </p>
-                                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest truncate mt-0.5">
-                                                        {targetSportStr}
-                                                    </p>
-                                                    <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                                                      <p className="text-[9px] font-black text-indigo-300 bg-indigo-500/20 px-2.5 py-1 rounded-lg border border-indigo-500/30 uppercase tracking-widest backdrop-blur-md">
-                                                          CO {athlete.grad_year || 'N/A'}
-                                                      </p>
-                                                      {athlete.is_looking_for_college && (
-                                                        <p className="text-[9px] font-black text-emerald-300 bg-emerald-500/20 px-2.5 py-1 rounded-lg border border-emerald-500/30 uppercase tracking-widest flex items-center gap-1 backdrop-blur-md">
-                                                            <Target className="w-2.5 h-2.5" /> Recruiting
-                                                        </p>
-                                                      )}
-                                                    </div>
-                                                </div>
-                                              </div>
-                                              
-                                              {/* 🚨 DYNAMIC ALGORITHM SCORE BADGE 🚨 */}
-                                              {targetScore > 0 && (
-                                                <div className="flex flex-col items-center shrink-0 bg-black/40 border border-white/10 rounded-2xl p-3 shadow-inner">
-                                                  <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Ovr Score</span>
-                                                  <span className={`text-2xl font-black leading-none ${
-                                                    targetScore >= 85 ? 'text-amber-400 drop-shadow-[0_0_10px_rgba(251,191,36,0.5)]' :
-                                                    targetScore >= 65 ? 'text-emerald-400' :
-                                                    'text-blue-400'
-                                                  }`}>
-                                                    {targetScore}
-                                                  </span>
-                                                  <span className="text-[8px] font-bold text-slate-500 mt-1 max-w-[50px] text-center leading-tight truncate">{tierLabel}</span>
-                                                </div>
-                                              )}
-                                          </div>
+                          {featuredSport && (
+                              <div className="animate-in fade-in slide-in-from-top-4 duration-300 space-y-6 border-t border-white/10 pt-6">
+                                  
+                                  <div>
+                                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1 flex items-center gap-2">
+                                          <Send className="w-3 h-3" /> Step 2: Recruiting Message <span className="text-rose-400">*</span>
+                                      </label>
+                                      <textarea 
+                                          value={featuredMsg} 
+                                          onChange={e => setFeaturedMsg(e.target.value)} 
+                                          placeholder={`Write a short pitch to ${featuredSport} coaches...`} 
+                                          required
+                                          className="w-full bg-black/40 border border-white/10 text-white rounded-xl px-4 py-3 h-24 resize-none focus:outline-none focus:border-indigo-500/50 font-medium text-sm placeholder:text-slate-600" 
+                                      />
+                                  </div>
+
+                                  <div>
+                                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-2 flex items-center gap-2">
+                                          <Video className="w-3 h-3" /> Step 3: Add Highlight Video (Max 60s)
+                                      </label>
+                                      <div className="bg-black/20 border border-white/10 rounded-xl p-4">
+                                          <input 
+                                              type="file" 
+                                              accept="video/mp4,video/quicktime,video/webm" 
+                                              onChange={handleVideoSelect}
+                                              className="w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-bold file:bg-indigo-600 file:text-white hover:file:bg-indigo-500 cursor-pointer"
+                                          />
                                       </div>
+                                  </div>
 
-                                      {/* METRICS RENDERER */}
-                                      {targetMetrics && targetMetrics.length > 0 && (
-                                          <div className="flex flex-wrap gap-1.5 mt-2 mb-5 relative z-10">
-                                              {targetMetrics.slice(0, 3).map((m, i) => (
-                                                  <div key={i} className="px-2 py-1.5 rounded-lg flex items-center gap-1.5 shadow-inner border backdrop-blur-md bg-black/20 border-white/10">
-                                                      <span className="text-[8px] uppercase font-bold text-slate-400 truncate max-w-[80px]">{m.name}</span>
-                                                      <span className="text-[10px] font-black text-white shrink-0">{m.value}</span>
-                                                  </div>
-                                              ))}
+                                  <div className="flex flex-col md:flex-row gap-6">
+                                      {availableOtherSports.length > 0 && (
+                                          <div className="flex-1">
+                                              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-2 flex items-center gap-2">
+                                                  <Dumbbell className="w-3 h-3" /> Include Other Active Sports?
+                                              </label>
+                                              <div className="flex flex-wrap gap-2">
+                                                  {availableOtherSports.map((sport: string) => {
+                                                      const isSelected = selectedOtherSports.includes(sport);
+                                                      return (
+                                                          <button
+                                                              key={sport}
+                                                              type="button"
+                                                              onClick={() => toggleOtherSport(sport)}
+                                                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                                                                  isSelected
+                                                                      ? 'bg-blue-600/20 text-blue-300 border-blue-500/50'
+                                                                      : 'bg-black/40 text-slate-400 border-white/10 hover:border-white/30'
+                                                              }`}
+                                                          >
+                                                              {isSelected ? <CheckCircle2 className="w-3 h-3 inline mr-1" /> : '+'} {sport}
+                                                          </button>
+                                                      );
+                                                  })}
+                                              </div>
                                           </div>
                                       )}
-                                      
-                                      <div className="mt-auto relative z-10 space-y-3">
-                                          {/* 🚨 THE LAST SEEN INDICATOR 🚨 */}
-                                          <div className={`flex items-center justify-center gap-1.5 w-full border border-white/5 rounded-xl py-1.5 backdrop-blur-md ${lastSeen.color}`}>
-                                             <div className={`w-1.5 h-1.5 rounded-full ${lastSeen.dot}`}></div>
-                                             <span className="text-[9px] font-black uppercase tracking-widest">{lastSeen.text}</span>
+
+                                      {parsedGpa && (
+                                          <div className="shrink-0">
+                                              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-2 flex items-center gap-2">
+                                                  <Award className="w-3 h-3" /> Bonus Features
+                                              </label>
+                                              <button 
+                                                  type="button" 
+                                                  onClick={() => setIncludeGpa(!includeGpa)}
+                                                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-black transition-all ${
+                                                      includeGpa 
+                                                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.3)]' 
+                                                          : 'bg-black/40 text-slate-400 border border-white/10 hover:border-white/30 hover:bg-white/5'
+                                                  }`}
+                                              >
+                                                  <GraduationCap className="w-4 h-4" />
+                                                  {includeGpa ? 'GPA Included!' : 'Add GPA Bonus'} {parsedGpa && `(${parsedGpa})`}
+                                              </button>
                                           </div>
-                                          
-                                          <div className="grid grid-cols-2 gap-3">
-                                            <Link href={`/athlete/${athlete.id}`} className="bg-black/20 hover:bg-black/40 text-white border border-white/10 font-black py-3 rounded-xl transition-colors flex items-center justify-center gap-1.5 text-xs backdrop-blur-md shadow-inner">
-                                                <UserCircle2 className="w-4 h-4" /> Profile
-                                            </Link>
-                                            <button onClick={() => openMessageModal(athlete.id, athlete.first_name, athlete.high_school, 'athlete')} className="bg-indigo-600 hover:bg-indigo-500 text-white font-black py-3 rounded-xl transition-colors flex items-center justify-center gap-1.5 text-xs shadow-lg border border-indigo-500">
-                                                <Mail className="w-4 h-4" /> Message
-                                            </button>
+                                      )}
+                                  </div>
+
+                                  <div className="mt-8 pt-6 border-t border-white/10 relative">
+                                      <span className="absolute -top-3 left-6 bg-[#0B0F19] px-3 text-[10px] font-black text-indigo-400 uppercase tracking-widest flex items-center gap-1.5 border border-indigo-500/20 rounded-full">
+                                          <Eye className="w-3 h-3" /> Live Preview
+                                      </span>
+                                      
+                                      <div className="opacity-90 pointer-events-none scale-[0.95] origin-top">
+                                          <div className="relative group">
+                                              {previewTheme.isDark && previewTheme.cardType !== 'base' && <div className="absolute inset-0 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 rounded-[2rem] blur-2xl opacity-20 transition-opacity duration-700"></div>}
+                                              <div className={`${previewTheme.heroCard} rounded-[2rem] p-6 sm:p-8 text-white relative overflow-hidden border`}>
+
+                                                  {previewTheme.isDark && (
+                                                      <>
+                                                          {['hype', 'premium', 'mythic-flare'].includes(previewTheme.cardType) && <div className="holo-glare rounded-[2rem] z-10"></div>}
+                                                          {['hype', 'premium', 'crimson', 'sapphire', 'amethyst', 'cyber', 'mythic-flare'].includes(previewTheme.cardType) && <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-[0.03] mix-blend-overlay pointer-events-none z-10 rounded-[2rem]"></div>}
+                                                      </>
+                                                  )}
+                                                  
+                                                  <div className="relative z-20 flex flex-col md:flex-row items-start gap-6">
+                                                     <div className="shrink-0 mx-auto sm:mx-0">
+                                                        <div className="block shadow-2xl rounded-full border-2 border-white/40 bg-slate-900">
+                                                            <AvatarWithBorder avatarUrl={currentUserProfile.avatar_url || ''} sizeClasses="w-20 h-20 sm:w-24 sm:h-24" borderId={currentUserProfile.equipped_border || 'none'} />
+                                                        </div>
+                                                     </div>
+                                                     <div className="flex-1 w-full text-center sm:text-left">
+                                                        
+                                                        <div className="flex flex-wrap items-center justify-between sm:justify-start w-full gap-2 mb-2">
+                                                            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-yellow-500/20 border border-yellow-500/40 text-yellow-300 backdrop-blur-md shadow-sm">
+                                                                <Star className="w-3 h-3 animate-pulse" /> Featured Prospect
+                                                            </div>
+                                                            
+                                                            <div className="flex items-center gap-2 mx-auto sm:mx-0">
+                                                                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-black/40 border border-white/10 text-white/80 backdrop-blur-md shadow-sm">
+                                                                    <Clock className="w-3 h-3 text-indigo-400" /> Ends in {currentUserProfile.is_premium ? '6d 0h' : '3d 0h'}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="flex flex-wrap justify-center sm:justify-start items-center gap-3 mb-1 mt-2">
+                                                            <div className={`text-3xl sm:text-4xl font-black tracking-tight drop-shadow-md leading-none flex items-center gap-2 ${previewTheme.heroName}`}>
+                                                                <span>{currentUserProfile.first_name} {currentUserProfile.last_name}</span>
+                                                                {currentUserProfile.is_premium && <Crown className="w-5 h-5 text-yellow-400 drop-shadow-sm shrink-0" />}
+                                                            </div>
+                                                        </div>
+                                                        
+                                                        <p className={`text-[11px] font-bold uppercase tracking-widest mb-4 ${previewTheme.heroMeta}`}>
+                                                            '{currentUserProfile.grad_year?.toString().slice(-2) || 'XX'} • {currentUserProfile.state}
+                                                        </p>
+
+                                                        {videoPreviewUrl && (
+                                                            <div className="relative w-full aspect-video rounded-xl overflow-hidden border border-white/10 mb-4 bg-black/50">
+                                                                <video src={videoPreviewUrl} controls className="w-full h-full object-contain" />
+                                                            </div>
+                                                        )}
+
+                                                        <div className="flex flex-wrap gap-3 mb-4">
+                                                           <div className="bg-black/30 border border-white/10 rounded-xl p-3 backdrop-blur-md shadow-inner flex flex-col justify-center items-center sm:items-start grow sm:grow-0 min-w-[130px]">
+                                                              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1 mb-1"><Target className="w-3 h-3" /> Target Sport</span>
+                                                              <span className="font-bold text-sm text-white truncate w-full text-center sm:text-left">{featuredSport}</span>
+                                                           </div>
+
+                                                           {liveStats.slice(0, 3).map((stat: any, i: number) => {
+                                                               const label = stat.label || stat.name || stat.event || 'Stat';
+                                                               const val = stat.value || stat.mark || stat.time || '--';
+                                                               return (
+                                                                  <div key={`stat-${i}`} className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-3 backdrop-blur-md shadow-inner flex flex-col justify-center items-center sm:items-start grow sm:grow-0 min-w-[130px] relative overflow-hidden">
+                                                                      <div className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-blue-500/20 to-transparent pointer-events-none"></div>
+                                                                      <span className="text-[9px] font-black text-blue-300 uppercase tracking-widest flex items-center gap-1 mb-0.5 relative z-10">
+                                                                          <Activity className="w-3 h-3" /> {label}
+                                                                      </span>
+                                                                      <span className="font-black text-2xl text-blue-400 leading-none drop-shadow-[0_0_10px_rgba(59,130,246,0.5)] relative z-10">{val}</span>
+                                                                  </div>
+                                                               )
+                                                           })}
+
+                                                           {includeGpa && parsedGpa && (
+                                                               <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3 backdrop-blur-md shadow-inner flex flex-col justify-center items-center sm:items-start grow sm:grow-0 min-w-[100px] relative overflow-hidden">
+                                                                  <div className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-emerald-500/20 to-transparent pointer-events-none"></div>
+                                                                  <span className="text-[9px] font-black text-emerald-400 uppercase tracking-widest flex items-center gap-1 mb-1 relative z-10"><GraduationCap className="w-3 h-3" /> GPA</span>
+                                                                  <span className="font-black text-xl text-emerald-300 leading-none drop-shadow-sm relative z-10">{parsedGpa}</span>
+                                                               </div>
+                                                           )}
+
+                                                           {liveScore && (
+                                                               <div className="bg-black/30 border border-white/10 rounded-xl p-3 backdrop-blur-md shadow-inner flex flex-col justify-center items-center sm:items-start grow sm:grow-0 min-w-[100px]">
+                                                                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1 mb-1"><Activity className="w-3 h-3" /> Ovr Score</span>
+                                                                  <span className="font-bold text-sm text-white truncate block w-full text-center sm:text-left">{liveScore}</span>
+                                                               </div>
+                                                           )}
+                                                        </div>
+
+                                                        <div className="flex flex-wrap gap-2 mb-4">
+                                                            {liveHonorsArray.map((honor: string, i: number) => (
+                                                                <div key={`honor-${i}`} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 border border-amber-500/30 text-amber-200 rounded-full text-xs font-bold shadow-sm backdrop-blur-md">
+                                                                    <Award className="w-3 h-3 text-amber-400 shrink-0" />
+                                                                    <span className="truncate max-w-[200px]" title={honor}>{honor}</span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+
+                                                        {selectedOtherSports.length > 0 && (
+                                                            <div className="mb-4 flex flex-wrap items-center justify-center sm:justify-start gap-3 bg-black/40 p-3 rounded-2xl border border-white/5 shadow-inner">
+                                                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5 pl-1">
+                                                                    <Dumbbell className="w-4 h-4 text-indigo-400" /> Multi-Sport Athlete:
+                                                                </span>
+                                                                <div className="flex flex-wrap gap-2">
+                                                                    {selectedOtherSports.map((s: string, i: number) => (
+                                                                        <span key={i} className="px-3 py-1.5 bg-indigo-950/50 border border-indigo-500/30 rounded-xl text-[11px] font-bold text-indigo-100 shadow-sm">
+                                                                            {s}
+                                                                        </span>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        <p className="text-sm md:text-base font-medium italic text-white/90 whitespace-pre-wrap leading-relaxed bg-black/20 p-4 rounded-xl border border-white/5 text-left">
+                                                            "{featuredMsg || 'Write a short pitch to coaches...'}"
+                                                        </p>
+                                                     </div>
+                                                  </div>
+                                              </div>
                                           </div>
                                       </div>
                                   </div>
-                                );
-                            })
-                        ) : (
-                            <div className="col-span-1 sm:col-span-2 text-center py-20 bg-white/[0.03] backdrop-blur-xl rounded-[2rem] border border-white/5 border-dashed shadow-inner">
-                                <Search className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-                                <h3 className="text-xl font-bold text-white mb-2">No athletes found</h3>
-                                <p className="text-slate-500 text-sm">Try adjusting your filters or searching for a different sport.</p>
-                            </div>
-                        )
-                    )}
-                </div>
-            </div>
-        )}
+                                  
+                                  <div className="flex flex-col sm:flex-row items-center justify-between pt-4 border-t border-white/10 mt-4 gap-4">
+                                     <div className="flex flex-col w-full sm:w-auto text-center sm:text-left">
+                                        <span className="text-sm font-bold text-white flex items-center justify-center sm:justify-start gap-2">
+                                           <Clock className="w-4 h-4 text-indigo-400" /> 
+                                           Duration: {currentUserProfile.is_premium ? '6 Days (Premium Boost)' : '3 Days'}
+                                        </span>
+                                        {!currentUserProfile.is_premium && (
+                                           <Link href="/pro" className="mt-2.5 sm:mt-2 inline-flex items-center justify-center gap-1.5 text-[10px] font-black text-amber-950 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 px-4 py-2 rounded-xl transition-all shadow-[0_0_15px_rgba(251,191,36,0.3)] hover:-translate-y-0.5 active:scale-95 w-full sm:w-auto uppercase tracking-widest border border-amber-300/50">
+                                              <Crown className="w-3.5 h-3.5" /> Upgrade to Premium for 6 Days
+                                           </Link>
+                                        )}
+                                     </div>
+                                     <button type="submit" disabled={isSubmitting || currentUserProfile.coins < 100 || !featuredSport || !featuredMsg.trim()} className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-3.5 rounded-xl font-black text-base transition-all shadow-[0_0_20px_rgba(79,70,229,0.4)] disabled:opacity-50 disabled:hover:scale-100 hover:-translate-y-0.5 flex items-center justify-center gap-2">
+                                        {isSubmitting ? (
+                                            <span className="flex items-center justify-center gap-2">
+                                                <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
+                                                {submitStatus || 'Posting...'}
+                                            </span>
+                                        ) : <><Points className="w-5 h-5 text-yellow-400" /> Post for 100 Points</>}
+                                     </button>
+                                  </div>
+                              </div>
+                          )}
+                        </form>
+                    </div>
+                )}
+              </div>
+            )}
 
+            {!loading && posts.length > 0 && availableFilters.length > 1 && (
+                <div className="flex flex-wrap items-center gap-2 mb-2">
+                    <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-slate-500 mr-2">
+                        <Filter className="w-3 h-3" /> Filter:
+                    </div>
+                    {availableFilters.map(filterOption => (
+                        <button
+                            key={filterOption}
+                            onClick={() => setActiveFilter(filterOption)}
+                            className={`px-4 py-1.5 rounded-full text-[11px] font-bold transition-all border ${
+                                activeFilter === filterOption
+                                    ? 'bg-blue-600 text-white border-blue-400 shadow-[0_0_10px_rgba(59,130,246,0.5)]'
+                                    : 'bg-black/40 text-slate-400 border-white/10 hover:border-white/30 hover:bg-white/5'
+                            }`}
+                        >
+                            {filterOption}
+                        </button>
+                    ))}
+                </div>
+            )}
+
+            {loading ? (
+               <div className="text-center py-20 animate-pulse"><Star className="w-8 h-8 text-white/20 mx-auto" /></div>
+            ) : filteredPosts.length === 0 ? (
+               <div className="text-center py-20 bg-white/[0.01] rounded-[2rem] border border-white/5 border-dashed">
+                  <Star className="w-12 h-12 text-slate-700 mx-auto mb-4" />
+                  <h3 className="text-xl font-bold text-white mb-2">No active featured athletes found</h3>
+                  <p className="text-slate-500 text-sm">Adjust your filters or be the first to feature yourself.</p>
+               </div>
+            ) : (
+               filteredPosts.map(post => {
+                  if (!post.athletes) return null;
+                  const feedTheme = getThemeConfig(post.athletes.equipped_card);
+                  
+                  let payload = { text: '', sport: '', honors: '', score: null, gpa: null, otherSports: [], stats: [], cloudflareUid: null };
+                  try { 
+                    const parsed = JSON.parse(post.content); 
+                    payload = { ...payload, ...parsed };
+                  } catch (e) { 
+                    payload.text = post.content; 
+                  }
+
+                  const payloadHonorsArray = parseHonors(payload.honors);
+                  const likesArray = post.likes || [];
+                  const hasLiked = currentUserId ? likesArray.includes(currentUserId) : false;
+                  
+                  return (
+                    <div 
+                      key={post.id} 
+                      data-post-id={post.id} 
+                      data-athlete-id={post.athlete_id}
+                      className="feed-post-card relative group hover:-translate-y-1 transition-transform duration-500 animate-in fade-in slide-in-from-bottom-2"
+                    >
+                        {feedTheme.isDark && feedTheme.cardType !== 'base' && <div className="absolute inset-0 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 rounded-[2rem] blur-2xl opacity-20 group-hover:opacity-40 transition-opacity duration-700"></div>}
+                        
+                        <div className="absolute top-6 right-6 z-50 flex flex-col items-center">
+                            <button 
+                                onClick={() => handleLike(post.id, likesArray)} 
+                                className={`group/like relative p-3 rounded-full backdrop-blur-xl border transition-all duration-300 ease-out active:scale-90 ${hasLiked ? 'bg-rose-500/20 border-rose-500/50 shadow-[0_0_15px_rgba(244,63,94,0.4)]' : 'bg-black/40 border-white/10 hover:bg-white/10 hover:border-white/30'} ${animatingLikeId === post.id ? 'animate-heart-explode' : ''}`}
+                                aria-label="Like Post"
+                            >
+                                <Heart className={`w-5 h-5 transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${hasLiked ? 'fill-rose-500 text-rose-500 scale-110' : 'text-white group-hover/like:scale-110'}`} />
+                                
+                                {animatingLikeId === post.id && (
+                                   <>
+                                     <span className="absolute pointer-events-none drop-shadow-md left-0 -top-2" style={{ animation: 'floatFire1 1s ease-out forwards', animationDelay: '0s', opacity: 0, fontSize: '1.5rem', zIndex: 100 }}>🔥</span>
+                                     <span className="absolute pointer-events-none drop-shadow-md right-0 -top-4" style={{ animation: 'floatFire2 1s ease-out forwards', animationDelay: '0.1s', opacity: 0, fontSize: '1.2rem', zIndex: 100 }}>🔥</span>
+                                     <span className="absolute pointer-events-none drop-shadow-md left-2 -top-6" style={{ animation: 'floatFire3 1.2s ease-out forwards', animationDelay: '0.2s', opacity: 0, fontSize: '1.8rem', zIndex: 100 }}>🔥</span>
+                                   </>
+                                )}
+                            </button>
+                            {likesArray.length > 0 && (
+                                <span className="mt-1.5 text-[10px] font-black text-white/80 bg-black/40 px-2.5 py-0.5 rounded-full border border-white/10 backdrop-blur-md">
+                                    {likesArray.length} {likesArray.length === 1 ? 'Like' : 'Likes'}
+                                </span>
+                            )}
+                        </div>
+
+                        <div className={`${feedTheme.heroCard} rounded-[2rem] p-6 sm:p-8 text-white relative overflow-hidden border`}>
+
+                            {feedTheme.isDark && (
+                                <>
+                                    {['hype', 'premium', 'mythic-flare'].includes(feedTheme.cardType) && <div className="holo-glare rounded-[2rem] z-10"></div>}
+                                    {['hype', 'premium', 'crimson', 'sapphire', 'amethyst', 'cyber', 'mythic-flare'].includes(feedTheme.cardType) && <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-[0.03] mix-blend-overlay pointer-events-none rounded-[2rem] z-10"></div>}
+                                </>
+                            )}
+                            
+                            <div className="relative z-20 flex flex-col md:flex-row items-start gap-6">
+                               <div className="shrink-0 mx-auto sm:mx-0">
+                                  <Link href={`/athlete/${post.athlete_id}`} className="block shadow-2xl rounded-full border-2 border-white/40 bg-slate-900 group-hover:scale-105 transition-transform duration-300">
+                                      <AvatarWithBorder avatarUrl={post.athletes.avatar_url || ''} sizeClasses="w-20 h-20 sm:w-24 sm:h-24" borderId={post.athletes.equipped_border || 'none'} />
+                                  </Link>
+                               </div>
+                               <div className="flex-1 w-full text-center sm:text-left pr-12 sm:pr-20">
+                                  
+                                  <div className="flex flex-wrap items-center justify-between sm:justify-start w-full gap-2 mb-2">
+                                      <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-yellow-500/20 border border-yellow-500/40 text-yellow-300 backdrop-blur-md shadow-sm">
+                                          <Star className="w-3 h-3 animate-pulse" /> Featured Prospect
+                                      </div>
+                                      
+                                      <div className="flex items-center gap-2 mx-auto sm:mx-0">
+                                          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-black/40 border border-white/10 text-white/80 backdrop-blur-md shadow-sm">
+                                              <Clock className="w-3 h-3 text-indigo-400" /> Ends in {getTimeRemaining(post.boosted_until)}
+                                          </div>
+
+                                          {currentUserId === post.athlete_id && (
+                                              <button 
+                                                  onClick={() => handleDeletePost(post.id)}
+                                                  disabled={isDeleting === post.id}
+                                                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-rose-500/20 hover:bg-rose-500/40 border border-rose-500/30 text-rose-300 transition-colors backdrop-blur-md shadow-sm"
+                                              >
+                                                  <Trash2 className="w-3 h-3" /> {isDeleting === post.id ? '...' : 'Delete'}
+                                              </button>
+                                          )}
+                                      </div>
+                                  </div>
+
+                                  <div className="flex flex-wrap justify-center sm:justify-start items-center gap-3 mb-1 mt-2">
+                                      <Link href={`/athlete/${post.athlete_id}`} className={`text-3xl sm:text-4xl font-black tracking-tight drop-shadow-md leading-none flex items-center gap-2 ${feedTheme.heroName} hover:opacity-80 transition-opacity`}>
+                                          <span>{post.athletes.first_name} {post.athletes.last_name}</span>
+                                          {post.athletes.is_premium && <Crown className="w-5 h-5 text-yellow-400 drop-shadow-sm shrink-0" />}
+                                      </Link>
+
+                                      {currentUserId !== post.athlete_id && (
+                                          <Link href={`/athlete/${post.athlete_id}`} className="bg-indigo-600/20 text-indigo-300 hover:bg-indigo-500 hover:text-white border border-indigo-500/30 px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition-all text-xs font-black shadow-sm tracking-widest uppercase ml-1">
+                                              <Send className="w-3.5 h-3.5" /> Contact
+                                          </Link>
+                                      )}
+                                  </div>
+
+                                  <p className={`text-[11px] font-bold uppercase tracking-widest mb-4 ${feedTheme.heroMeta}`}>
+                                      '{post.athletes.grad_year?.toString().slice(-2) || 'XX'} • {post.athletes.state}
+                                  </p>
+
+                                  {/* 🚨 THE NEW TIKTOK-STYLE CLOUDFLARE VIDEO COMPONENT WITH AUTO-PAUSE 🚨 */}
+                                  {payload.cloudflareUid && (
+                                      <CloudflareStreamVideo uid={payload.cloudflareUid} />
+                                  )}
+
+                                  <div className="flex flex-wrap gap-3 mb-4">
+                                     <div className="bg-black/30 border border-white/10 rounded-xl p-3 backdrop-blur-md shadow-inner flex flex-col justify-center items-center sm:items-start grow sm:grow-0 min-w-[130px]">
+                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1 mb-1"><Target className="w-3 h-3" /> Target Sport</span>
+                                        <span className="font-bold text-sm text-white truncate w-full text-center sm:text-left">{payload.sport || 'Undecided'}</span>
+                                     </div>
+                                     
+                                     {payload.stats && Array.isArray(payload.stats) && payload.stats.slice(0, 3).map((stat: any, i: number) => {
+                                         const label = stat.label || stat.name || stat.event || 'Stat';
+                                         const val = stat.value || stat.mark || stat.time || '--';
+                                         return (
+                                            <div key={`stat-${i}`} className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-3 backdrop-blur-md shadow-inner flex flex-col justify-center items-center sm:items-start grow sm:grow-0 min-w-[130px] relative overflow-hidden">
+                                                <div className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-blue-500/20 to-transparent pointer-events-none"></div>
+                                                <span className="text-[9px] font-black text-blue-300 uppercase tracking-widest flex items-center gap-1 mb-0.5 relative z-10">
+                                                    <Activity className="w-3 h-3" /> {label}
+                                                </span>
+                                                <span className="font-black text-2xl text-blue-400 leading-none drop-shadow-[0_0_10px_rgba(59,130,246,0.5)] relative z-10">{val}</span>
+                                            </div>
+                                         )
+                                     })}
+
+                                     {payload.gpa && (
+                                         <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3 backdrop-blur-md shadow-inner flex flex-col justify-center items-center sm:items-start grow sm:grow-0 min-w-[100px] relative overflow-hidden">
+                                            <div className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-emerald-500/20 to-transparent pointer-events-none"></div>
+                                            <span className="text-[9px] font-black text-emerald-400 uppercase tracking-widest flex items-center gap-1 mb-1 relative z-10"><GraduationCap className="w-3 h-3" /> GPA</span>
+                                            <span className="font-black text-xl text-emerald-300 leading-none drop-shadow-sm relative z-10">{payload.gpa}</span>
+                                         </div>
+                                     )}
+
+                                     {payload.score && (
+                                         <div className="bg-black/30 border border-white/10 rounded-xl p-3 backdrop-blur-md shadow-inner flex flex-col justify-center items-center sm:items-start grow sm:grow-0 min-w-[100px]">
+                                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1 mb-1"><Activity className="w-3 h-3" /> Ovr Score</span>
+                                            <span className="font-bold text-sm text-white truncate block w-full text-center sm:text-left">{payload.score}</span>
+                                         </div>
+                                     )}
+                                  </div>
+
+                                  <div className="flex flex-wrap gap-2 mb-4">
+                                      {payloadHonorsArray.map((honor: string, i: number) => (
+                                          <div key={`honor-${i}`} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 border border-amber-500/30 text-amber-200 rounded-full text-xs font-bold shadow-sm backdrop-blur-md">
+                                              <Award className="w-3 h-3 text-amber-400 shrink-0" />
+                                              <span className="truncate max-w-[200px]" title={honor}>{honor}</span>
+                                          </div>
+                                      ))}
+                                  </div>
+
+                                  {payload.otherSports && payload.otherSports.length > 0 && (
+                                      <div className="mb-4 flex flex-wrap items-center justify-center sm:justify-start gap-3 bg-black/40 p-3 rounded-2xl border border-white/5 shadow-inner">
+                                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5 pl-1">
+                                              <Dumbbell className="w-4 h-4 text-indigo-400" /> Multi-Sport Athlete:
+                                          </span>
+                                          <div className="flex flex-wrap gap-2">
+                                              {payload.otherSports.map((s: string, i: number) => (
+                                                  <span key={i} className="px-3 py-1.5 bg-indigo-950/50 border border-indigo-500/30 rounded-xl text-[11px] font-bold text-indigo-100 shadow-sm">
+                                                      {s}
+                                                  </span>
+                                              ))}
+                                          </div>
+                                      </div>
+                                  )}
+
+                                  <p className="text-sm md:text-base font-medium italic text-white/90 whitespace-pre-wrap leading-relaxed bg-black/20 p-4 rounded-xl border border-white/5 text-left">
+                                      "{payload.text}"
+                                  </p>
+                               </div>
+                            </div>
+                        </div>
+                    </div>
+                  );
+               })
+            )}
+        </div>
       </div>
     </main>
   );

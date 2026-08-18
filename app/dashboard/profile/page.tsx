@@ -13,7 +13,28 @@ import {
 import { AvatarWithBorder } from '@/components/AnimatedBorders';
 import EmailVerification from '@/components/EmailVerification';
 import { Points } from '@/components/Points';
-import { SUGGESTED_MAJORS, US_STATES, evaluateMetric, SPORT_CONFIGS_META } from '@/utils/constants/RecruitingStandards';
+import { SUGGESTED_MAJORS, evaluateMetric, SPORT_CONFIGS_META } from '@/utils/constants/RecruitingStandards';
+
+// --- STRICT US STATE MAPPING ---
+const US_STATES_MAP = [
+  { abbr: 'AL', name: 'Alabama' }, { abbr: 'AK', name: 'Alaska' }, { abbr: 'AZ', name: 'Arizona' },
+  { abbr: 'AR', name: 'Arkansas' }, { abbr: 'CA', name: 'California' }, { abbr: 'CO', name: 'Colorado' },
+  { abbr: 'CT', name: 'Connecticut' }, { abbr: 'DE', name: 'Delaware' }, { abbr: 'FL', name: 'Florida' },
+  { abbr: 'GA', name: 'Georgia' }, { abbr: 'HI', name: 'Hawaii' }, { abbr: 'ID', name: 'Idaho' },
+  { abbr: 'IL', name: 'Illinois' }, { abbr: 'IN', name: 'Indiana' }, { abbr: 'IA', name: 'Iowa' },
+  { abbr: 'KS', name: 'Kansas' }, { abbr: 'KY', name: 'Kentucky' }, { abbr: 'LA', name: 'Louisiana' },
+  { abbr: 'ME', name: 'Maine' }, { abbr: 'MD', name: 'Maryland' }, { abbr: 'MA', name: 'Massachusetts' },
+  { abbr: 'MI', name: 'Michigan' }, { abbr: 'MN', name: 'Minnesota' }, { abbr: 'MS', name: 'Mississippi' },
+  { abbr: 'MO', name: 'Missouri' }, { abbr: 'MT', name: 'Montana' }, { abbr: 'NE', name: 'Nebraska' },
+  { abbr: 'NV', name: 'Nevada' }, { abbr: 'NH', name: 'New Hampshire' }, { abbr: 'NJ', name: 'New Jersey' },
+  { abbr: 'NM', name: 'New Mexico' }, { abbr: 'NY', name: 'New York' }, { abbr: 'NC', name: 'North Carolina' },
+  { abbr: 'ND', name: 'North Dakota' }, { abbr: 'OH', name: 'Ohio' }, { abbr: 'OK', name: 'Oklahoma' },
+  { abbr: 'OR', name: 'Oregon' }, { abbr: 'PA', name: 'Pennsylvania' }, { abbr: 'RI', name: 'Rhode Island' },
+  { abbr: 'SC', name: 'South Carolina' }, { abbr: 'SD', name: 'South Dakota' }, { abbr: 'TN', name: 'Tennessee' },
+  { abbr: 'TX', name: 'Texas' }, { abbr: 'UT', name: 'Utah' }, { abbr: 'VT', name: 'Vermont' },
+  { abbr: 'VA', name: 'Virginia' }, { abbr: 'WA', name: 'Washington' }, { abbr: 'WV', name: 'West Virginia' },
+  { abbr: 'WI', name: 'Wisconsin' }, { abbr: 'WY', name: 'Wyoming' }
+];
 
 // --- CORE RECRUITING DATA STRUCTURES FOR LOCAL CALCULATIONS ---
 const RECRUITING_STANDARDS_DASHBOARD: Record<string, Record<string, { t1: number, t2: number, t3: number, t4: number, t5: number, t6: number, t7: number, isField?: boolean, isMulti?: boolean }>> = {
@@ -135,6 +156,14 @@ export const getTierStyles = (score: number) => {
 
 type AccoladeObj = { text: string; category: string };
 
+const getBaseUsername = (first: string, last: string) => {
+  if (!first || !last) return '';
+  let base = `${first}-${last}`.toLowerCase();
+  base = base.replace(/[^a-z0-9-]/g, ''); 
+  base = base.replace(/-+/g, '-'); 
+  return base;
+};
+
 export default function ProfilePage() {
   const [supabase] = useState(() => createClient());
   const router = useRouter();
@@ -152,10 +181,12 @@ export default function ProfilePage() {
     last_name: '', 
     email: '', 
     gender: '', 
-    grad_year: '',
+    grad_year: '20', // Default initial state guarantees the '20'
     city: '',
-    state: ''
+    state: '',
+    custom_slug: ''
   });
+  
   const [gpa, setGpa] = useState('');
   const [intendedMajor, setIntendedMajor] = useState('');
   const [showMajorDropdown, setShowMajorDropdown] = useState(false);
@@ -163,6 +194,12 @@ export default function ProfilePage() {
   const [accolades, setAccolades] = useState<AccoladeObj[]>([]);
   const [newAccolade, setNewAccolade] = useState('');
   
+  // Validation States
+  const [slugStatus, setSlugStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle');
+  const [isSlugManuallyEdited, setIsSlugManuallyEdited] = useState(false);
+  const [slugCooldown, setSlugCooldown] = useState(0);
+  const cooldownRef = useRef(0);
+
   // Email Change & Verification States
   const [isChangeEmailModalOpen, setIsChangeEmailModalOpen] = useState(false);
   const [newEmailInput, setNewEmailInput] = useState('');
@@ -184,7 +221,7 @@ export default function ProfilePage() {
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
+    setTimeout(() => setToast(null), 3500);
   };
 
   useEffect(() => {
@@ -197,6 +234,38 @@ export default function ProfilePage() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // --- SLUG COOLDOWN & VERIFICATION EFFECT ---
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    if (slugCooldown > 0) {
+      cooldownRef.current = slugCooldown;
+      timer = setTimeout(() => setSlugCooldown((c) => c - 1), 1000);
+    } else if (slugCooldown === 0 && cooldownRef.current > 0) {
+      cooldownRef.current = 0;
+      verifySlugSync();
+    }
+    return () => clearTimeout(timer);
+  }, [slugCooldown]);
+
+  const verifySlugSync = async () => {
+    if (!athleteProfile?.id) return;
+    try {
+      const { data, error } = await supabase
+        .from('athletes')
+        .select('custom_slug')
+        .eq('id', athleteProfile.id)
+        .maybeSingle();
+
+      if (data && !error) {
+        setAthleteProfile((prev: any) => ({ ...prev, custom_slug: data.custom_slug }));
+        setProfileForm((prev: any) => ({ ...prev, custom_slug: data.custom_slug || '' }));
+        showToast("Routing synchronized and live!", "success");
+      }
+    } catch (e) {
+      console.error("Slug sync verification failed", e);
+    }
+  };
+
   // --- INITIAL DATA LOAD ---
   useEffect(() => {
     let isMounted = true; 
@@ -206,6 +275,7 @@ export default function ProfilePage() {
       if (!isMounted) return; 
 
       if (!session) { router.push('/login'); return; }
+      const authEmail = session?.user?.email || '';
 
       const { data: athleteData } = await supabase.from('athletes').select('*').eq('id', session.user.id).maybeSingle();
       if (!isMounted) return;
@@ -215,12 +285,17 @@ export default function ProfilePage() {
         setProfileForm({
           first_name: athleteData.first_name || '',
           last_name: athleteData.last_name || '',
-          email: athleteData.email || session.user.email || '',
+          email: athleteData.email || authEmail, // Sync the fallback email
           gender: athleteData.gender || '',
-          grad_year: athleteData.grad_year?.toString() || '',
+          grad_year: athleteData.grad_year?.toString() || '20', // Pre-fill with '20' if missing
           city: athleteData.city || '',
-          state: athleteData.state || ''
+          state: athleteData.state || '',
+          custom_slug: athleteData.custom_slug || ''
         });
+
+        if (athleteData.custom_slug) {
+            setSlugStatus('available');
+        }
 
         // Hydrate Academic Portfolio
         let parsedResume: any = {};
@@ -394,18 +469,138 @@ export default function ProfilePage() {
     let score = 0;
     let nextQuest = "Profile complete! You are fully optimized for the Matchmaker.";
     
-    if (athleteProfile?.first_name && athleteProfile?.last_name) score += 10;
+    if (profileForm.first_name && profileForm.last_name) score += 10;
     if (athleteProfile?.trust_level === 1) score += 10; else if (score >= 10) nextQuest = "Verify your account identity to unlock the Team HQ.";
-    if (athleteProfile?.high_school && athleteProfile?.state) score += 10; else if (score >= 20) nextQuest = "Search and join your High School team roster.";
+    if (profileForm.city && profileForm.state) score += 10; else if (score >= 20) nextQuest = "Search and join your High School team roster.";
     if (gpa) score += 15; else if (score >= 30) nextQuest = "Add your Unweighted GPA below to boost your Matchmaker visibility.";
     if (intendedMajor) score += 15; else if (score >= 45) nextQuest = "Define an Intended Major below to unlock academic matching.";
     if (accolades.length > 0) score += 15; else if (score >= 60) nextQuest = "Log your first Season Accolade to prove your leadership.";
     if (allAvailableMetrics.length > 0) score += 25; else if (score >= 75) nextQuest = "Sync a sport metric to activate the Recruit Engine.";
 
     return { score: Math.min(100, score), nextQuest };
-  }, [athleteProfile, gpa, intendedMajor, accolades, allAvailableMetrics]);
+  }, [athleteProfile, profileForm, gpa, intendedMajor, accolades, allAvailableMetrics]);
+
+  // --- USERNAME BASE NAME SYNC LOGIC ---
+  useEffect(() => {
+    if (profileForm.first_name && profileForm.last_name) {
+      const baseName = getBaseUsername(profileForm.first_name, profileForm.last_name);
+      
+      // Keep username synchronized if base name changes structurally
+      if (profileForm.custom_slug && !profileForm.custom_slug.startsWith(baseName)) {
+          setProfileForm(prev => ({ ...prev, custom_slug: baseName }));
+          setSlugStatus(baseName === athleteProfile?.custom_slug ? 'available' : 'checking');
+      } else if (!profileForm.custom_slug && !isSlugManuallyEdited) {
+          setProfileForm(prev => ({ ...prev, custom_slug: baseName }));
+          setSlugStatus(baseName === athleteProfile?.custom_slug ? 'available' : 'checking');
+      }
+    }
+  }, [profileForm.first_name, profileForm.last_name]);
+
+  // --- USERNAME DEBOUNCE VERIFICATION ---
+  useEffect(() => {
+    if (!profileForm.custom_slug) {
+      setSlugStatus('idle');
+      return;
+    }
+    
+    // If it instantly matches their saved DB username, we already set it to 'available' in onChange
+    if (profileForm.custom_slug === athleteProfile?.custom_slug) {
+      return;
+    }
+
+    const checkSlug = async () => {
+      const { data } = await supabase
+        .from('athletes')
+        .select('id')
+        .eq('custom_slug', profileForm.custom_slug)
+        .neq('id', athleteProfile?.id || '')
+        .maybeSingle();
+
+      if (data) {
+        setSlugStatus('taken');
+      } else {
+        setSlugStatus('available');
+      }
+    };
+
+    // Only run the DB check if it's currently flagged as 'checking'
+    if (slugStatus === 'checking') {
+      const timeoutId = setTimeout(checkSlug, 600);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [profileForm.custom_slug, athleteProfile?.id, athleteProfile?.custom_slug, supabase, slugStatus]);
+
+  // --- PAGE LEAVE VALIDATION (Passive Banner Check) ---
+  const isProfileComplete = Boolean(
+      profileForm.first_name && 
+      profileForm.last_name && 
+      profileForm.grad_year && profileForm.grad_year.length === 4 &&
+      profileForm.city && 
+      profileForm.state && 
+      profileForm.gender && 
+      profileForm.custom_slug && 
+      slugStatus === 'available'
+  );
+
+  // Dynamic Validation Styling Helper
+  const getValidationClass = (value: string | number | null) => {
+    return value ? 'border-emerald-500 focus-within:border-emerald-600 bg-emerald-50/20' : 'border-red-500 focus-within:border-red-600 bg-red-50/20';
+  };
+
+  const isNameComplete = Boolean(profileForm.first_name && profileForm.last_name);
+  const slugValidationClass = !isNameComplete
+    ? 'border-slate-200 bg-slate-100 cursor-not-allowed opacity-60' 
+    : (profileForm.custom_slug && slugStatus === 'available')
+      ? 'border-emerald-500 focus-within:border-emerald-600 bg-emerald-50/20'
+      : 'border-red-500 focus-within:border-red-600 bg-red-50/20';
 
   // --- ACTION HANDLERS ---
+  const publicPortfolioUrl = `/athlete/${athleteProfile?.custom_slug || athleteProfile?.id}`;
+
+  const handlePreviewCooldownClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (slugStatus === 'checking') {
+      showToast("Please wait for username availability check to complete.", "error");
+      return;
+    }
+    if (slugCooldown > 0) {
+      showToast(`Please wait ${slugCooldown}s for the URL to propagate on the network.`, "error");
+      return;
+    }
+    // Instant execution with no synthetic delay
+    window.open(publicPortfolioUrl, '_blank');
+  };
+
+  const handleUsernameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let val = e.target.value.toLowerCase();
+    
+    // Auto-convert spaces to hyphens and strip bad characters immediately
+    val = val.replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').replace(/-+/g, '-');
+
+    const baseName = getBaseUsername(profileForm.first_name, profileForm.last_name);
+    
+    // LOCK THE BASE NAME: Reject the keystroke completely if they try to backspace into the base name
+    if (baseName && !val.startsWith(baseName)) {
+      val = baseName;
+    }
+
+    // Prevents UI hesitation/flicker if they typed an invalid character that got stripped, 
+    // or if they tried to backspace the base name (meaning the actual state string didn't change).
+    if (val === profileForm.custom_slug) {
+      return; 
+    }
+
+    setProfileForm({ ...profileForm, custom_slug: val });
+    setIsSlugManuallyEdited(true);
+
+    // Bypass 'checking' delay if they reverted to their already-saved DB username
+    if (athleteProfile?.custom_slug && val === athleteProfile.custom_slug) {
+      setSlugStatus('available');
+    } else {
+      setSlugStatus('checking');
+    }
+  };
+
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     const userId = athleteProfile?.id;
@@ -435,20 +630,31 @@ export default function ProfilePage() {
   };
 
   const handleSaveBasicProfile = async () => {
-    if (!profileForm.first_name || !profileForm.last_name || !profileForm.gender || !profileForm.grad_year) {
-      showToast("First name, last name, gender, and grad year are required.", "error");
+    // Failing silently on auto-save without showing a toast notification prevents annoying popup spam for users typing around
+    if (!profileForm.first_name || !profileForm.last_name || !profileForm.gender || profileForm.grad_year.length !== 4) {
+      return; 
+    }
+    if (slugStatus === 'taken' || slugStatus === 'checking') {
       return;
     }
+
     const parsedYear = parseInt(profileForm.grad_year, 10);
     try {
-      await supabase.from('athletes').update({
+      const isSlugChanged = profileForm.custom_slug !== athleteProfile?.custom_slug && profileForm.custom_slug !== '';
+
+      const { error } = await supabase.from('athletes').update({
         first_name: profileForm.first_name,
         last_name: profileForm.last_name,
         gender: profileForm.gender,
         grad_year: isNaN(parsedYear) ? null : parsedYear,
         city: profileForm.city,
-        state: profileForm.state
+        state: profileForm.state, // Strictly saves the full state name
+        custom_slug: profileForm.custom_slug || null,
+        email: profileForm.email // Sync email to DB if missing
       }).eq('id', athleteProfile.id);
+
+      // Catch silent failures from RLS or schema issues
+      if (error) throw error; 
 
       setAthleteProfile((prev: any) => ({ 
         ...prev, 
@@ -457,11 +663,18 @@ export default function ProfilePage() {
         gender: profileForm.gender,
         grad_year: isNaN(parsedYear) ? null : parsedYear,
         city: profileForm.city,
-        state: profileForm.state
+        state: profileForm.state,
+        custom_slug: profileForm.custom_slug
       }));
-      showToast("Profile identity & location updated.", "success");
+
+      if (isSlugChanged) {
+         setSlugCooldown(15);
+         showToast("Username updated. Synchronizing public URL...", "success");
+      } else {
+         showToast("Profile details updated.", "success");
+      }
     } catch (err: any) {
-      showToast("Failed to save profile.", "error");
+      showToast(err.message || "Failed to save profile.", "error");
     }
   };
 
@@ -482,6 +695,21 @@ export default function ProfilePage() {
     }
   };
 
+  const handleResendVerification = async () => {
+    if (!profileForm.email) return showToast("No email found to verify.", "error");
+    
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email: profileForm.email,
+    });
+
+    if (error) {
+      showToast(error.message, "error");
+    } else {
+      showToast("Verification link sent! Please check your inbox.", "success");
+    }
+  };
+
   const autoSavePortfolio = async (overrides?: Partial<{ gpa: string, intendedMajor: string, accolades: string[], schoolPrefs: string }>) => {
     if (!athleteProfile?.id) return;
     try {
@@ -496,10 +724,12 @@ export default function ProfilePage() {
         schoolPrefs: overrides?.schoolPrefs ?? schoolPrefs
       };
 
-      await supabase.from('athletes').update({ saved_resume: payload }).eq('id', athleteProfile.id);
+      const { error } = await supabase.from('athletes').update({ saved_resume: payload }).eq('id', athleteProfile.id);
+      if (error) throw error; // Catch silent errors
+
       setAthleteProfile((prev: any) => ({ ...prev, saved_resume: payload }));
     } catch (err: any) { 
-      showToast("Failed to save portfolio preferences.", "error");
+      showToast(err.message || "Failed to save portfolio preferences.", "error");
     }
   };
 
@@ -575,8 +805,6 @@ export default function ProfilePage() {
     );
   }
 
-  const publicPortfolioUrl = `/athlete/${athleteProfile?.custom_slug || athleteProfile?.id}`;
-
   return (
     <main className="min-h-screen bg-slate-50 font-sans pb-24 md:pb-12 text-slate-900 relative overflow-x-hidden pt-6">
       
@@ -598,9 +826,19 @@ export default function ProfilePage() {
         </div>
       )}
 
+      {/* 🚨 INCOMPLETE PROFILE BANNER 🚨 */}
+      {!loading && athleteProfile && !isProfileComplete && (
+        <div className="w-full bg-red-600 text-white px-4 py-3 flex items-center justify-center gap-4 relative z-40 mb-6 shadow-md rounded-2xl max-w-6xl mx-auto">
+          <AlertCircle className="w-5 h-5 shrink-0" />
+          <p className="text-sm font-medium">
+            <strong className="font-black">Profile Incomplete:</strong> Please fill out all red highlighted boxes below to unlock dashboard navigation.
+          </p>
+        </div>
+      )}
+
       {/* Toast System */}
       {toast && (
-        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[300] animate-in slide-in-from-top-5 fade-in duration-300">
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[9999] animate-in slide-in-from-top-5 fade-in duration-300">
           <div className={`rounded-full px-6 py-3 shadow-2xl flex items-center gap-3 font-bold text-sm border ${toast.type === 'error' ? 'bg-red-900 text-white border-red-700' : 'bg-slate-900 text-white border-slate-700'}`}>
             {toast.type === 'error' ? <X className="w-4 h-4 text-red-400" /> : <Check className="w-4 h-4 text-emerald-400" />} {toast.message}
           </div>
@@ -625,11 +863,11 @@ export default function ProfilePage() {
           </button>
         </div>
 
-        {/* VIEW 1: MY PROFILE (Tightly Packed, Bold.org style) */}
+        {/* VIEW 1: MY PROFILE */}
         {activeTab === 'basics' && (
           <div className="flex flex-col md:flex-row gap-8 items-start animate-in fade-in duration-300">
              
-             {/* LEFT SIDEBAR (Avatar, Public Portfolio Link & Interactive Demographics) */}
+             {/* LEFT SIDEBAR */}
              <div className="w-full md:w-[320px] shrink-0 space-y-5">
                 
                 {/* Avatar & Quick Action Card */}
@@ -657,13 +895,14 @@ export default function ProfilePage() {
 
                    {/* Primary Public Portfolio Action */}
                    <div className="space-y-2">
-                     <Link 
-                        href={publicPortfolioUrl} 
-                        target="_blank"
-                        className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-md active:scale-[0.98] text-xs"
+                     <button 
+                        onClick={handlePreviewCooldownClick}
+                        disabled={slugCooldown > 0 || slugStatus === 'checking'}
+                        className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-md active:scale-[0.98] text-xs disabled:opacity-75 disabled:cursor-wait"
                      >
-                        <ExternalLink className="w-4 h-4" /> View Public Portfolio
-                     </Link>
+                        {slugCooldown > 0 || slugStatus === 'checking' ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ExternalLink className="w-4 h-4" />}
+                        {slugStatus === 'checking' ? 'Verifying URL...' : slugCooldown > 0 ? `Syncing Route (${slugCooldown}s)` : 'View Public Portfolio'}
+                     </button>
                      
                      <div className="flex items-center justify-between pt-2 border-t border-slate-100 px-1">
                        <Link href="/customize" className="text-xs font-bold text-slate-500 hover:text-slate-800 flex items-center gap-1.5 transition-colors">
@@ -684,7 +923,7 @@ export default function ProfilePage() {
                    </div>
                 </div>
 
-                {/* Demographics Card (Directly Clickable & Editable) */}
+                {/* Demographics Card (Interactive & Validated) */}
                 <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-200 space-y-4">
                    <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Interactive Bio Stats</h3>
                    
@@ -700,7 +939,7 @@ export default function ProfilePage() {
                          onChange={(e) => setProfileForm({ ...profileForm, city: e.target.value })}
                          onBlur={handleSaveBasicProfile}
                          placeholder="City"
-                         className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                         className={`w-full border-2 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none transition-colors ${getValidationClass(profileForm.city)}`}
                        />
                        <select
                          value={profileForm.state}
@@ -708,10 +947,10 @@ export default function ProfilePage() {
                            setProfileForm({ ...profileForm, state: e.target.value });
                            setTimeout(handleSaveBasicProfile, 100);
                          }}
-                         className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2 py-2 text-xs font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                         className={`w-full border-2 rounded-xl px-2 py-2 text-xs font-bold text-slate-800 outline-none transition-colors ${getValidationClass(profileForm.state)}`}
                        >
                          <option value="">State...</option>
-                         {US_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+                         {US_STATES_MAP.map(s => <option key={s.abbr} value={s.name}>{s.abbr} - {s.name}</option>)}
                        </select>
                      </div>
                    </div>
@@ -722,12 +961,22 @@ export default function ProfilePage() {
                        <Calendar className="w-3.5 h-3.5 text-blue-500" /> Graduation Year
                      </label>
                      <input 
-                       type="number"
+                       type="text"
+                       inputMode="numeric"
+                       maxLength={4}
                        value={profileForm.grad_year}
-                       onChange={(e) => setProfileForm({ ...profileForm, grad_year: e.target.value })}
+                       onChange={(e) => {
+                         let val = e.target.value.replace(/\D/g, ''); // strip out non-digits
+                         if (!val.startsWith('20')) {
+                           val = '20' + val.replace(/^20/, ''); // ensure it always begins with '20'
+                         }
+                         if (val.length < 2) val = '20'; // block backspacing past '20'
+                         if (val.length > 4) val = val.substring(0, 4); // cap length
+                         setProfileForm({ ...profileForm, grad_year: val });
+                       }}
                        onBlur={handleSaveBasicProfile}
-                       placeholder="e.g. 2027"
-                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                       placeholder="2027"
+                       className={`w-full border-2 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none transition-colors ${profileForm.grad_year.length === 4 ? 'border-emerald-500 focus-within:border-emerald-600 bg-emerald-50/20' : 'border-red-500 focus-within:border-red-600 bg-red-50/20'}`}
                      />
                    </div>
 
@@ -736,14 +985,14 @@ export default function ProfilePage() {
                      <label className="text-[10px] font-bold text-slate-500 flex items-center gap-1.5">
                        <User className="w-3.5 h-3.5 text-blue-500" /> Athletic Division
                      </label>
-                     <div className="flex gap-2">
+                     <div className={`flex gap-2 p-1 rounded-xl border-2 transition-colors ${getValidationClass(profileForm.gender)}`}>
                        <button
                          type="button"
                          onClick={() => {
                            setProfileForm({ ...profileForm, gender: 'Boys' });
                            setTimeout(handleSaveBasicProfile, 100);
                          }}
-                         className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-colors border ${profileForm.gender === 'Boys' ? 'bg-blue-50 border-blue-500 text-blue-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}
+                         className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-colors border ${profileForm.gender === 'Boys' ? 'bg-blue-500 border-blue-500 text-white' : 'bg-transparent border-transparent text-slate-500 hover:bg-slate-100'}`}
                        >
                          Boys
                        </button>
@@ -753,7 +1002,7 @@ export default function ProfilePage() {
                            setProfileForm({ ...profileForm, gender: 'Girls' });
                            setTimeout(handleSaveBasicProfile, 100);
                          }}
-                         className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-colors border ${profileForm.gender === 'Girls' ? 'bg-fuchsia-50 border-fuchsia-500 text-fuchsia-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}
+                         className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-colors border ${profileForm.gender === 'Girls' ? 'bg-fuchsia-500 border-fuchsia-500 text-white' : 'bg-transparent border-transparent text-slate-500 hover:bg-slate-100'}`}
                        >
                          Girls
                        </button>
@@ -801,18 +1050,19 @@ export default function ProfilePage() {
                       {profileForm.first_name || 'New'} {profileForm.last_name || 'Athlete'}
                     </h1>
                     <p className="text-xs font-bold text-slate-400 mt-1">
-                      {profileForm.city && profileForm.state ? `${profileForm.city}, ${profileForm.state}` : 'Location unknown'} • Class of {profileForm.grad_year || '2027'}
+                      {profileForm.city && profileForm.state ? `${profileForm.city}, ${profileForm.state}` : 'Location unknown'} • Class of {profileForm.grad_year && profileForm.grad_year.length === 4 ? profileForm.grad_year : '20xx'}
                     </p>
                   </div>
 
                   <div className="flex items-center gap-3">
-                    <Link 
-                      href={publicPortfolioUrl} 
-                      target="_blank" 
-                      className="hidden sm:flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold px-3 py-2 rounded-xl transition-colors border border-slate-200"
+                    <button 
+                      onClick={handlePreviewCooldownClick}
+                      disabled={slugCooldown > 0 || slugStatus === 'checking'}
+                      className="hidden sm:flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold px-3 py-2 rounded-xl transition-colors border border-slate-200 disabled:opacity-75 disabled:cursor-wait"
                     >
-                      <Globe className="w-3.5 h-3.5 text-blue-600" /> Preview Portfolio
-                    </Link>
+                      {slugCooldown > 0 || slugStatus === 'checking' ? <RefreshCw className="w-3.5 h-3.5 text-blue-600 animate-spin" /> : <Globe className="w-3.5 h-3.5 text-blue-600" />}
+                      {slugStatus === 'checking' ? 'Verifying...' : slugCooldown > 0 ? `Syncing (${slugCooldown}s)` : 'Preview Portfolio'}
+                    </button>
 
                     <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-2.5 flex items-center gap-3 shrink-0">
                       <div className="w-9 h-9 bg-indigo-100 rounded-xl flex items-center justify-center border border-indigo-200">
@@ -842,11 +1092,12 @@ export default function ProfilePage() {
                    </div>
                 </div>
 
-                {/* Identity Form Tightly Packed */}
+                {/* Identity Form (Strictly Validated) */}
                 <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
                    <h3 className="text-lg font-black text-slate-900 mb-5">Identity Details</h3>
                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                     <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                     
+                     <div className={`border-2 rounded-xl p-3 transition-colors ${getValidationClass(profileForm.first_name)}`}>
                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">First Name</label>
                        <input 
                          type="text" value={profileForm.first_name} 
@@ -855,7 +1106,8 @@ export default function ProfilePage() {
                          className="w-full bg-transparent text-sm font-bold text-slate-900 outline-none placeholder-slate-400" placeholder="Required"
                        />
                      </div>
-                     <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                     
+                     <div className={`border-2 rounded-xl p-3 transition-colors ${getValidationClass(profileForm.last_name)}`}>
                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Last Name</label>
                        <input 
                          type="text" value={profileForm.last_name} 
@@ -864,12 +1116,61 @@ export default function ProfilePage() {
                          className="w-full bg-transparent text-sm font-bold text-slate-900 outline-none placeholder-slate-400" placeholder="Required"
                        />
                      </div>
+
+                     {/* Profile Username Block */}
+                     <div className={`border-2 rounded-xl p-3 sm:col-span-2 transition-colors ${slugValidationClass}`}>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">
+                            Profile Username
+                          </label>
+                          {isNameComplete && (
+                            <span className={`text-[10px] font-black uppercase tracking-widest ${
+                              slugStatus === 'checking' ? 'text-blue-500 animate-pulse' :
+                              slugStatus === 'available' ? 'text-emerald-500' :
+                              slugStatus === 'taken' ? 'text-red-500' : 'text-slate-400'
+                            }`}>
+                              {slugStatus === 'checking' ? 'Checking...' :
+                               slugStatus === 'available' ? 'Owned' :
+                               slugStatus === 'taken' ? 'Already Taken' : ''}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center">
+                          <span className="text-slate-400 font-bold text-sm mr-1 hidden sm:inline">chasedsports.com/athlete/</span>
+                          <span className="text-slate-400 font-bold text-sm mr-1 sm:hidden">.../</span>
+                          <input 
+                            type="text" 
+                            value={profileForm.custom_slug}
+                            disabled={!isNameComplete}
+                            onChange={handleUsernameChange}
+                            onBlur={handleSaveBasicProfile}
+                            className="flex-1 bg-transparent text-sm font-bold text-slate-900 outline-none placeholder-slate-400 disabled:text-slate-500" 
+                            placeholder={isNameComplete ? "e.g. chase-fulleton" : "Complete first and last name first"}
+                          />
+                        </div>
+                        {isNameComplete && (
+                            <p className="text-[10px] text-slate-400 mt-2 font-medium">
+                              Your first and last name are locked in. You may add numbers or words at the end to make it unique.
+                            </p>
+                        )}
+                     </div>
                      
-                     {/* Locked Email Block */}
+                     {/* Locked Email Block (Updated with direct Fallback and Verify Option) */}
                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 sm:col-span-2 flex items-center justify-between gap-4 group">
-                       <div className="min-w-0">
+                       <div className="min-w-0 flex-1">
                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Contact Email</label>
-                         <p className="text-sm font-bold text-slate-900 truncate">{profileForm.email}</p>
+                         <div className="flex flex-wrap items-center gap-2">
+                           <p className="text-sm font-bold text-slate-900 truncate">{profileForm.email || 'No email attached'}</p>
+                           {athleteProfile?.trust_level !== 1 && (
+                             <button
+                               onClick={handleResendVerification}
+                               className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 border border-amber-500/20 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-md transition-colors"
+                               title="Resend Verification Email"
+                             >
+                               Verify Email
+                             </button>
+                           )}
+                         </div>
                        </div>
                        <button 
                          onClick={() => setIsChangeEmailModalOpen(true)}

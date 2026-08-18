@@ -10,9 +10,8 @@ import {
   Lock, Crown, Activity, Edit3, Wand2, Video, VideoOff, Type, X, RefreshCcw
 } from 'lucide-react';
 import { getTemplatesForSport, EmailTemplate } from '@/utils/email-templates';
-
-// Centralized Launch Date for Founder Status Threshold
-const PRO_LAUNCH_DATE = new Date('2026-08-08T00:00:00Z');
+import { Points } from '@/components/Points';
+import PointUnlockOverlay from '@/components/PointUnlockOverlay';
 
 interface SavedCollege {
   id: string;
@@ -37,6 +36,8 @@ interface AthleteSportContext {
   is_active: boolean;
 }
 
+const PREMIUM_TEMPLATE_COST = 2500;
+
 export default function EmailBuilder() {
   const supabase = createClient();
   const router = useRouter();
@@ -46,6 +47,7 @@ export default function EmailBuilder() {
   const [athleteSports, setAthleteSports] = useState<AthleteSportContext[]>([]);
   const [savedColleges, setSavedColleges] = useState<SavedCollege[]>([]);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [isUnlocking, setIsUnlocking] = useState(false);
 
   // Auto-Generator Form States
   const [selectedCollege, setSelectedCollege] = useState('');
@@ -75,22 +77,10 @@ export default function EmailBuilder() {
   const [isCopiedBody, setIsCopiedBody] = useState(false);
   const [isCopiedSubject, setIsCopiedSubject] = useState(false);
 
-  // 🚨 NEW: DYNAMIC TIME-GATE ACCESS EVALUATION 🚨
-  const gatingMode = useMemo(() => {
-    const isPreLaunch = new Date() < PRO_LAUNCH_DATE;
-    
-    let hasAccess = false;
-    if (isPreLaunch) {
-      hasAccess = athlete?.is_founder === true;
-    } else {
-      hasAccess = athlete?.is_premium === true;
-    }
-
-    return {
-      isPreLaunch,
-      hasAccess,
-      label: isPreLaunch ? "Early Access" : "Premium Feature"
-    };
+  // 🚨 STRICT POINTS ACCESS EVALUATION (Even Premium users must buy via points)
+  const hasUnlockedPremium = useMemo(() => {
+    if (!athlete) return false;
+    return Boolean(athlete.unlocked_features?.includes('premium_templates'));
   }, [athlete]);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
@@ -101,6 +91,9 @@ export default function EmailBuilder() {
   const currentSportContext = athleteSports.find(s => s.sport_name.toLowerCase() === selectedSport.toLowerCase());
 
   const availableTemplates = getTemplatesForSport(selectedSport || 'Track & Field');
+  const freeTemplates = availableTemplates.filter(t => !t.isPremium);
+  const premiumTemplates = availableTemplates.filter(t => t.isPremium);
+  
   const currentTemplate = availableTemplates.find(t => t.id === selectedTemplateId) || availableTemplates[0];
 
   useEffect(() => {
@@ -126,14 +119,19 @@ export default function EmailBuilder() {
         .single();
 
       if (athleteData && !athleteError) {
-        // Auto-assign founder status if pre-launch (matches Dashboard behavior)
-        if (!athleteData.is_founder && new Date() < PRO_LAUNCH_DATE) {
-           await supabase.from('athletes').update({ is_founder: true }).eq('id', athleteData.id);
-           athleteData.is_founder = true; 
-        }
-
         setAthlete(athleteData);
         
+        // Auto-revert locked template if they have not unlocked premium_templates with points
+        if (typeof window !== 'undefined') {
+            const st = sessionStorage.getItem('eb_template');
+            const templateDetails = availableTemplates.find(t => t.id === st);
+            const userHasUnlocked = athleteData.unlocked_features?.includes('premium_templates');
+            
+            if (templateDetails?.isPremium && !userHasUnlocked) {
+                setSelectedTemplateId(freeTemplates[0]?.id || '');
+            }
+        }
+
         let parsedResume: any = {};
         try { if (athleteData.saved_resume) parsedResume = JSON.parse(athleteData.saved_resume); } catch (e) {}
         setLocalGpa(parsedResume.gpa || '');
@@ -144,7 +142,6 @@ export default function EmailBuilder() {
         const activeSports: AthleteSportContext[] = (athleteData.athlete_sports || [])
           .filter((sport: any) => sport.is_active === true)
           .map((sport: any) => {
-            // Safely map metrics whether they were saved as {name, value} or legacy {event, mark}
             let parsedMetrics = Array.isArray(sport.metrics) ? sport.metrics : [];
             parsedMetrics = parsedMetrics.map((m: any) => ({
               name: m.name || m.event || 'Unknown',
@@ -234,7 +231,6 @@ export default function EmailBuilder() {
     setSelectedTemplateId('');
     const newSportContext = athleteSports.find(s => s.sport_name === newSport);
     
-    // Auto-update the position field to the new sport's default position
     setLocalPosition(newSportContext?.position || '');
     
     if (newSportContext && newSportContext.metrics.length > 0) setSelectedMetrics(newSportContext.metrics.slice(0, 2));
@@ -242,12 +238,39 @@ export default function EmailBuilder() {
   };
 
   const handleTemplateSelect = (t: EmailTemplate) => {
-    // 🚨 GATING LOGIC APPLIED HERE 🚨
-    if (t.isPremium && !gatingMode.hasAccess) {
-      showToast(`This template requires ${gatingMode.label}.`, "error");
+    if (t.isPremium && !hasUnlockedPremium) {
+      showToast(`This template requires unlocking with points.`, "error");
       return;
     }
     setSelectedTemplateId(t.id);
+  };
+
+  const handleUnlockPremium = async () => {
+    if (!athlete || isUnlocking) return;
+    
+    const currentCoins = athlete.coins || 0;
+    
+    if (currentCoins < PREMIUM_TEMPLATE_COST) {
+        showToast(`Not enough points! You need ${PREMIUM_TEMPLATE_COST.toLocaleString()} points.`, "error");
+        return;
+    }
+
+    setIsUnlocking(true);
+    const newCoins = currentCoins - PREMIUM_TEMPLATE_COST;
+    const newFeatures = [...(athlete.unlocked_features || []), 'premium_templates'];
+
+    const { error } = await supabase
+        .from('athletes')
+        .update({ coins: newCoins, unlocked_features: newFeatures })
+        .eq('id', athlete.id);
+
+    if (error) {
+        showToast("Failed to process transaction. Please try again.", "error");
+    } else {
+        setAthlete({ ...athlete, coins: newCoins, unlocked_features: newFeatures });
+        showToast("Premium templates unlocked successfully!", "success");
+    }
+    setIsUnlocking(false);
   };
 
   const toggleManualEditModal = () => {
@@ -478,18 +501,21 @@ export default function EmailBuilder() {
           <Link href="/dashboard" className="inline-flex items-center text-sm font-bold text-slate-400 hover:text-white transition-colors mb-6">
             <ChevronLeft className="w-4 h-4 mr-1" /> Back to Dashboard
           </Link>
-          <div className="flex items-center gap-3 mb-2">
+          <div className="flex items-center gap-3 mb-2 flex-wrap">
             <div className="w-10 h-10 bg-blue-500/20 border border-blue-500/30 rounded-xl flex items-center justify-center">
               <Mail className="w-5 h-5 text-blue-400" />
             </div>
             <h1 className="text-3xl md:text-4xl font-black text-white tracking-tight">Recruiting Email Studio</h1>
-            {gatingMode.hasAccess && (
-               <div className="bg-amber-500/20 border border-amber-500/50 text-amber-400 px-3 py-1 rounded-full text-xs font-black tracking-widest uppercase flex items-center gap-1 shadow-[0_0_15px_rgba(245,158,11,0.2)]">
-                  <Crown className="w-3 h-3" /> {gatingMode.isPreLaunch ? 'Founder' : 'Pro'}
+            
+            {/* Dynamic Coin/Points Balance Display */}
+            {athlete && (
+               <div className="ml-auto bg-slate-800/80 backdrop-blur-md border border-slate-700/50 text-slate-300 px-4 py-2 rounded-2xl text-sm font-black flex items-center gap-2 shadow-inner">
+                  <span className="flex items-center justify-center w-4 h-4"><Points /></span>
+                  {athlete.coins?.toLocaleString() || 0} pts
                </div>
             )}
           </div>
-          <p className="text-slate-400 font-medium max-w-xl">Generate highly personalized, human-sounding emails to college coaches tailored exactly to your sport and metrics.</p>
+          <p className="text-slate-400 font-medium max-w-xl mt-2">Generate highly personalized, human-sounding emails to college coaches tailored exactly to your sport and metrics.</p>
         </div>
       </div>
 
@@ -587,15 +613,14 @@ export default function EmailBuilder() {
                   </div>
                 </div>
 
-                {/* Template Selection */}
+                {/* Template Selection - Split into Free and Premium */}
                 <div>
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2 pl-1">Email Strategy</label>
+                  
+                  {/* Free Templates */}
                   <div className="grid grid-cols-2 gap-2">
-                    {availableTemplates.map(t => {
-                      // 🚨 GATING UI LOGIC 🚨
-                      const isLocked = t.isPremium && !gatingMode.hasAccess;
+                    {freeTemplates.map(t => {
                       const isSelected = currentTemplate?.id === t.id;
-
                       return (
                         <button
                           key={t.id}
@@ -603,24 +628,51 @@ export default function EmailBuilder() {
                           className={`
                             p-3 rounded-xl text-xs font-black border transition-all text-center flex flex-col items-center justify-center gap-1 relative overflow-hidden
                             ${isSelected ? 'bg-blue-50 border-blue-400 text-blue-700 shadow-sm ring-1 ring-blue-400/50' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'}
-                            ${isLocked ? 'opacity-90' : ''}
                           `}
                         >
-                          {isLocked && (
-                             <div className="absolute inset-0 bg-slate-900/5 backdrop-blur-[1px] flex items-center justify-center z-10">
-                                <Lock className="w-4 h-4 text-slate-500/80" />
-                             </div>
-                          )}
-                          <span className={isLocked ? 'text-slate-400 blur-[0.5px]' : ''}>{t.name}</span>
-                          {t.isPremium && (
-                             <span className={`text-[9px] uppercase tracking-widest ${isSelected ? 'text-amber-500' : 'text-amber-400'} flex items-center gap-1`}>
-                               <Crown className="w-3 h-3" /> {gatingMode.isPreLaunch ? 'Early Access' : 'Premium'}
-                             </span>
-                          )}
+                          <span>{t.name}</span>
                         </button>
                       );
                     })}
                   </div>
+
+                  {/* Premium Templates Container */}
+                  {premiumTemplates.length > 0 && (
+                     <div className="mt-4">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-amber-500 block mb-2 pl-1 flex items-center gap-1.5">
+                           <Crown className="w-3 h-3" /> Premium Templates
+                        </label>
+                        <div className="relative rounded-[1.25rem] overflow-hidden p-[2px] bg-gradient-to-br from-amber-200 via-orange-300 to-amber-200 shadow-sm min-h-[100px]">
+                           <div className={`grid grid-cols-2 gap-2 bg-white rounded-[1.15rem] p-2 transition-all duration-300 ${!hasUnlockedPremium ? 'blur-[6px] opacity-60 pointer-events-none select-none h-full' : ''}`}>
+                              {premiumTemplates.map(t => {
+                                const isSelected = currentTemplate?.id === t.id;
+                                return (
+                                  <button
+                                    key={t.id}
+                                    onClick={() => handleTemplateSelect(t)}
+                                    className={`
+                                      p-3 rounded-xl text-xs font-black border transition-all text-center flex flex-col items-center justify-center gap-1 relative overflow-hidden
+                                      ${isSelected ? 'bg-amber-50 border-amber-400 text-amber-700 shadow-sm ring-1 ring-amber-400/50' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'}
+                                    `}
+                                  >
+                                    <span>{t.name}</span>
+                                  </button>
+                                );
+                              })}
+                           </div>
+                           
+                           {/* 🚨 DEDICATED UNLOCK OVERLAY COMPONENT 🚨 */}
+                           {!hasUnlockedPremium && (
+                              <PointUnlockOverlay 
+                                cost={PREMIUM_TEMPLATE_COST}
+                                balance={athlete?.coins || 0}
+                                isUnlocking={isUnlocking}
+                                onUnlock={handleUnlockPremium}
+                              />
+                           )}
+                        </div>
+                     </div>
+                  )}
                 </div>
 
                 {/* Selective Metrics Picker */}
@@ -719,13 +771,16 @@ export default function EmailBuilder() {
               <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
                 <Mail className="w-5 h-5 text-blue-600" /> Live Preview
               </h2>
+              
               <a
                 href={searchUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="bg-indigo-50 hover:bg-indigo-100 text-indigo-600 border border-indigo-200 text-[10px] font-black uppercase tracking-widest py-1.5 px-3 rounded-lg flex items-center gap-1.5 transition-colors shadow-sm"
+                className="bg-gradient-to-r from-indigo-600 via-blue-600 to-indigo-700 hover:from-indigo-500 hover:to-blue-500 text-white font-black text-xs uppercase tracking-wider py-2.5 px-5 rounded-xl flex items-center gap-2 transition-all shadow-md shadow-indigo-600/25 active:scale-[0.98] border border-indigo-400/30"
               >
-                <Search className="w-3 h-3" /> Find Coach Email
+                <Search className="w-4 h-4 text-indigo-100" /> 
+                <span>Find Coach Email</span> 
+                <ArrowUpRight className="w-4 h-4 text-indigo-200" />
               </a>
             </div>
 

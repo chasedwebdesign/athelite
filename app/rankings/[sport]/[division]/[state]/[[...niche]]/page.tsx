@@ -148,6 +148,7 @@ const NICHES: Record<NicheKey, NicheConfig> = {
 // ==========================================
 type RankedCollege = {
   id: string;
+  slug: string;
   name: string;
   city: string;
   state: string;
@@ -226,7 +227,7 @@ export default async function RankingsPage({
   // 1. Fetch Universities using flexible multi-variant matching (.in)
   const { data: universities } = await supabase
     .from('universities')
-    .select('id, name, city, state, division, tuition_in_state, tuition_out_of_state, acceptance_rate, median_earnings, student_population')
+    .select('id, slug, name, city, state, division, tuition_in_state, tuition_out_of_state, acceptance_rate, median_earnings, student_population')
     .in('state', stateVariants)
     .in('division', divisionVariants);
 
@@ -278,7 +279,7 @@ export default async function RankingsPage({
           "item": {
             "@type": "CollegeOrUniversity",
             "name": college.name,
-            "url": `https://www.chasedsports.com/college/${college.id}`,
+            "url": `https://www.chasedsports.com/college/${college.slug}`,
             "address": {
               "@type": "PostalAddress",
               "addressLocality": college.city,
@@ -398,7 +399,7 @@ export default async function RankingsPage({
                 const flexOrderClass = index === 0 ? 'order-1 md:order-2' : index === 1 ? 'order-2 md:order-1' : 'order-3 md:order-3';
 
                 return (
-                  <Link href={`/college/${college.id}?sport=${resolvedParams.sport}`} key={college.id} className={`group ${flexOrderClass} flex flex-col justify-end transition-all duration-500 hover:-translate-y-3`}>
+                  <Link href={`/college/${college.slug}?sport=${resolvedParams.sport}`} key={college.id} className={`group ${flexOrderClass} flex flex-col justify-end transition-all duration-500 hover:-translate-y-3`}>
                     <div className={`relative w-full rounded-[2.5rem] p-8 backdrop-blur-2xl border ${tier.bg} ${tier.border} ${tier.shadow} ${tier.hoverGlow} transition-all duration-500 ${tier.height} flex flex-col justify-between overflow-hidden`}>
                       
                       {/* Giant Background Number */}
@@ -456,7 +457,7 @@ export default async function RankingsPage({
 
                 {theRest.map((college, index) => (
                   <Link 
-                    href={`/college/${college.id}?sport=${resolvedParams.sport}`} 
+                    href={`/college/${college.slug}?sport=${resolvedParams.sport}`} 
                     key={college.id}
                     className="group block bg-slate-900/50 backdrop-blur-lg p-6 rounded-3xl border border-slate-800 shadow-lg hover:shadow-[0_0_30px_rgba(59,130,246,0.15)] hover:border-blue-500/50 hover:bg-slate-800/80 transition-all duration-300"
                   >
