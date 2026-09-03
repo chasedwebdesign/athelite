@@ -69,17 +69,17 @@ const getThemeConfig = (cardType: string | null | undefined) => {
       heroName: 'text-slate-900',
       heroMeta: 'text-slate-600 font-bold',
       heroDivider: 'text-slate-300',
-      btnPrimary: 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/30 border-transparent',
+      btnPrimary: 'bg-slate-900 hover:bg-slate-800 text-white shadow-md shadow-slate-900/20 border-transparent',
       btnSecondary: 'bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 shadow-sm',
       sectionBg: 'bg-white/80 backdrop-blur-xl',
       sectionBorder: 'border-slate-200',
-      sectionShadow: 'shadow-xl',
+      sectionShadow: 'shadow-xl shadow-slate-200/50',
       subCardBg: 'bg-slate-50',
       subCardBorder: 'border-slate-100',
       textHeader: 'text-slate-900',
       textSub: 'text-slate-500',
       textMuted: 'text-slate-400',
-      iconColor: 'text-blue-500',
+      iconColor: 'text-blue-600',
     };
   }
 
@@ -246,7 +246,7 @@ function DashboardContent() {
   const [isTimerLoaded, setIsTimerLoaded] = useState(false);
   const [hasInitializedParams, setHasInitializedParams] = useState(false);
 
-  // 🚨 INTERCEPT URL PARAMS ON MOUNT (AND CLEAN THEM SO THEY DON'T GET STUCK) 🚨
+  // 🚨 INTERCEPT URL PARAMS ON MOUNT
   useEffect(() => {
     if (hasInitializedParams) return;
 
@@ -270,7 +270,6 @@ function DashboardContent() {
     }
 
     if (shouldCleanUrl) {
-      // Remove the parameters from the URL gracefully so the user isn't locked to this tab
       router.replace('/dashboard', { scroll: false });
     }
 
@@ -953,10 +952,10 @@ function DashboardContent() {
   const hasUnclaimedReferrals = (athleteProfile?.verified_referrals || 0) > (athleteProfile?.claimed_referrals || 0);
 
   const RenderHomeTab = useMemo(() => (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300 relative z-10">
+    <div className="space-y-4 sm:space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300 relative z-10">
       
       {!athleteProfile?.referred_by && !isOfferExpired && isTimerLoaded && (
-        <div className={`rounded-[2rem] p-6 sm:p-8 border border-fuchsia-500/50 flex flex-col lg:flex-row items-center justify-between gap-6 transition-all duration-500 relative overflow-hidden group shadow-[0_0_40px_rgba(217,70,239,0.15)] bg-gradient-to-br from-slate-900 via-slate-900 to-fuchsia-950/40`}>
+        <div className={`rounded-2xl sm:rounded-[2rem] p-5 sm:p-8 border border-fuchsia-500/50 flex flex-col lg:flex-row items-center justify-between gap-5 sm:gap-6 transition-all duration-500 relative overflow-hidden group shadow-[0_0_40px_rgba(217,70,239,0.15)] bg-gradient-to-br from-slate-900 via-slate-900 to-fuchsia-950/40`}>
             
             <div className="absolute top-0 right-0 w-64 h-64 bg-fuchsia-500/10 blur-[60px] rounded-full pointer-events-none group-hover:bg-fuchsia-500/20 transition-all duration-700"></div>
             <div className="absolute bottom-0 left-0 w-48 h-48 bg-blue-500/10 blur-[50px] rounded-full pointer-events-none"></div>
@@ -995,7 +994,7 @@ function DashboardContent() {
                     value={homeReferralCode}
                     onChange={(e) => setHomeReferralCode(e.target.value)}
                     placeholder="Enter invite code..."
-                    className={`w-full lg:w-64 bg-slate-950/80 border border-fuchsia-500/30 text-white focus:border-fuchsia-400 focus:ring-fuchsia-500 rounded-xl px-5 py-3.5 text-sm font-black uppercase tracking-widest outline-none focus:ring-2 transition-all placeholder:normal-case placeholder:tracking-normal placeholder:font-medium placeholder:text-slate-500 shadow-inner`}
+                    className={`w-full lg:w-64 bg-slate-950/80 border border-fuchsia-500/30 text-white focus:border-fuchsia-400 focus:ring-fuchsia-500 rounded-xl px-4 py-3 sm:px-5 sm:py-3.5 text-sm font-black uppercase tracking-widest outline-none focus:ring-2 transition-all placeholder:normal-case placeholder:tracking-normal placeholder:font-medium placeholder:text-slate-500 shadow-inner`}
                 />
                 <button
                     onClick={async () => {
@@ -1005,7 +1004,7 @@ function DashboardContent() {
                         if (res.success) setHomeReferralCode('');
                     }}
                     disabled={isSubmittingHomeRef || !homeReferralCode.trim()}
-                    className={`w-full bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 text-white px-6 py-3.5 rounded-xl text-sm font-black transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100 shadow-[0_0_20px_rgba(217,70,239,0.4)] flex items-center justify-center gap-2 border border-fuchsia-400/50`}
+                    className={`w-full bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 text-white px-6 py-3 sm:py-3.5 rounded-xl text-sm font-black transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100 shadow-[0_0_20px_rgba(217,70,239,0.4)] flex items-center justify-center gap-2 border border-fuchsia-400/50`}
                 >
                     {isSubmittingHomeRef ? <RefreshCw className="w-5 h-5 animate-spin" /> : <>Claim Starter Pack <Sparkles className="w-4 h-4" /></>}
                 </button>
@@ -1013,20 +1012,77 @@ function DashboardContent() {
         </div>
       )}
 
-      <div className={`${theme.sectionBg} rounded-[2rem] p-4 sm:p-5 ${theme.sectionShadow} border ${theme.sectionBorder} mb-8 flex flex-col md:flex-row items-center justify-between gap-4 transition-all duration-500 mt-6`}>
-         <div className="flex flex-wrap sm:flex-nowrap w-full md:w-auto items-center gap-2 md:gap-3 flex-1">
-            <Link href="/dashboard/email-builder" className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-bold text-xs sm:text-sm transition-colors ${theme.btnPrimary}`}>
+      {/* 🚀 INLINE WEEKLY STREAK WIDGET 🚀 */}
+      <div className={`${theme.sectionBg} rounded-2xl sm:rounded-[2rem] p-5 sm:p-6 ${theme.sectionShadow} border ${theme.sectionBorder} transition-all duration-500 relative overflow-hidden group`}>
+         <div className={`absolute top-0 right-0 w-32 h-32 ${theme.isDark ? 'bg-amber-500/5' : 'bg-amber-500/10'} blur-[40px] rounded-full pointer-events-none`}></div>
+         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5 relative z-10">
+           <div>
+             <h3 className={`text-xl font-black tracking-tight flex items-center gap-2 ${theme.textHeader}`}>
+               <Flame className="w-5 h-5 text-amber-500" /> Current Login Streak
+             </h3>
+             <p className={`text-sm font-medium ${theme.textMuted} mt-1`}>
+               Cycle {Math.floor(Math.max(0, streak - 1) / 28) + 1} • { (1 + (Math.floor(Math.max(0, streak - 1) / 28) * 0.5)).toFixed(1) }x Multiplier
+             </p>
+           </div>
+           <div className="bg-amber-500/10 border border-amber-500/20 px-4 py-2 rounded-xl flex items-center gap-2 shrink-0 self-start sm:self-auto">
+             <span className="text-[10px] font-black uppercase tracking-widest text-amber-500/80">Day</span>
+             <span className="text-xl font-black text-amber-400 leading-none">{streak}</span>
+           </div>
+         </div>
+
+         <div className="flex gap-2 sm:gap-3 overflow-x-auto hide-scrollbar snap-x snap-mandatory pb-2 relative z-10 overscroll-x-contain touch-pan-x scroll-pl-4">
+           {[...Array(7)].map((_, i) => {
+              const dayNumInCycle = (Math.max(0, streak - 1) % 28) + 1;
+              const currentWeek = Math.floor((dayNumInCycle - 1) / 7);
+              const weekStartDay = currentWeek * 7 + 1;
+              const dayNum = weekStartDay + i;
+
+              const isPast = dayNum < dayNumInCycle;
+              const isToday = dayNum === dayNumInCycle;
+
+              const rewardData = getRewardForDay(dayNum);
+              const cycleMultiplier = 1 + (Math.floor(Math.max(0, streak - 1) / 28) * 0.5);
+              const totalReward = Math.round(rewardData.baseCoins * cycleMultiplier);
+
+              return (
+                 <div key={dayNum} className={`relative snap-start scroll-ml-4 p-3 rounded-2xl border-2 flex flex-col items-center justify-between gap-2 text-center transition-all min-w-[80px] flex-1 ${isPast ? 'bg-slate-900 border-slate-800/50 opacity-60' : isToday ? 'bg-amber-900/20 border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.15)] scale-[1.02] z-10' : theme.isDark ? 'bg-slate-900/50 border-white/5' : 'bg-white border-slate-200'}`}>
+                     {isPast && <div className="absolute top-1.5 right-1.5"><CheckCircle2 className="w-3 h-3 text-emerald-500"/></div>}
+                     <span className={`text-[9px] font-black uppercase tracking-widest shrink-0 ${isToday ? 'text-amber-400' : theme.textMuted}`}>Day {dayNum}</span>
+
+                     <div className={`w-8 h-8 rounded-full ${theme.isDark ? 'bg-slate-800/80 border-slate-700/50' : 'bg-slate-100 border-slate-200'} flex items-center justify-center shrink-0 border ${rewardData.glow && !isPast ? rewardData.glow : ''}`}>
+                         {rewardData.tier && !isPast ? (
+                             <LootBoxVisual tier={rewardData.tier} size="sm" />
+                         ) : (
+                            <div className={`w-4 h-4 shrink-0 ${isPast ? 'text-slate-500' : rewardData.iconColor}`}>
+                                <rewardData.Icon className="w-full h-full" />
+                            </div>
+                         )}
+                     </div>
+
+                     <span className={`font-black mt-auto text-xs ${isToday ? 'text-amber-400 drop-shadow-md' : theme.isDark ? 'text-slate-400' : 'text-slate-500'}`}>+{totalReward}</span>
+                 </div>
+              )
+           })}
+         </div>
+      </div>
+
+      <div className={`${theme.sectionBg} rounded-2xl sm:rounded-[2rem] p-4 sm:p-5 ${theme.sectionShadow} border ${theme.sectionBorder} flex flex-col md:flex-row items-center justify-between gap-5 transition-all duration-500`}>
+         <div className="grid grid-cols-2 lg:flex lg:flex-nowrap w-full items-center gap-2 sm:gap-3 flex-1">
+            <Link href="/feed" className={`col-span-2 lg:col-span-1 flex items-center justify-center gap-2 px-4 py-3 sm:py-3.5 rounded-xl font-black text-sm transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)] bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:scale-[1.02] active:scale-95 border border-emerald-400/50`}>
+              <TrendingUp className="w-4 h-4 shrink-0" /> <span className="truncate">Get Recruited</span>
+            </Link>
+            <Link href="/dashboard/email-builder" className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 sm:py-3.5 rounded-xl font-bold text-xs sm:text-sm transition-colors ${theme.btnPrimary}`}>
               <Mail className="w-4 h-4 shrink-0" /> <span className="truncate">Email Studio</span>
             </Link>
-            <Link href={`/athlete/${athleteProfile?.custom_slug || athleteProfile?.id}`} target="_blank" className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-bold text-xs sm:text-sm transition-colors ${theme.btnPrimary}`}>
+            <Link href={`/athlete/${athleteProfile?.custom_slug || athleteProfile?.id}`} target="_blank" className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 sm:py-3.5 rounded-xl font-bold text-xs sm:text-sm transition-colors ${theme.btnPrimary}`}>
               <Globe className="w-4 h-4 shrink-0" /> <span className="truncate">Public Profile</span>
             </Link>
-            <button onClick={() => { if (athleteProfile?.trust_level !== 1) setIsEmailVerificationModalOpen(true); else if (!athleteProfile?.high_school) setIsTeamJoinModalOpen(true); else router.push('/dashboard/team'); }} className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-bold text-xs sm:text-sm transition-colors ${theme.btnPrimary}`}>
+            <button onClick={() => { if (athleteProfile?.trust_level !== 1) setIsEmailVerificationModalOpen(true); else if (!athleteProfile?.high_school) setIsTeamJoinModalOpen(true); else router.push('/dashboard/team'); }} className={`col-span-2 lg:col-span-1 flex items-center justify-center gap-2 px-4 py-3 sm:py-3.5 rounded-xl font-bold text-xs sm:text-sm transition-colors ${theme.btnPrimary}`}>
               <Users className="w-4 h-4 shrink-0" /> <span className="truncate">Team HQ</span>
             </button>
          </div>
          <div className={`w-px h-10 ${theme.isDark ? 'bg-white/10' : 'bg-slate-200'} hidden md:block`}></div>
-         <div className="flex items-center justify-center gap-6 sm:gap-8 w-full md:w-auto px-4">
+         <div className="flex items-center justify-center gap-6 sm:gap-8 w-full md:w-auto px-4 mt-2 md:mt-0">
             <div className="flex flex-col items-center text-center"><span className={`text-xl font-black leading-none ${theme.textHeader}`}>{athleteProfile?.search_appearances || 0}</span><span className={`text-[9px] font-bold ${theme.textMuted} uppercase tracking-widest mt-1`}>Impressions</span></div>
             <div className="flex flex-col items-center text-center"><span className={`text-xl font-black leading-none ${theme.textHeader}`}>{athleteProfile?.profile_views || 0}</span><span className={`text-[9px] font-bold ${theme.textMuted} uppercase tracking-widest mt-1`}>Views</span></div>
             <button onClick={() => { goToTab('social'); setSocialSubTab('analytics'); }} className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors shrink-0 ${theme.btnSecondary}`}><BarChart3 className={`w-5 h-5 ${theme.iconColor}`} /></button>
@@ -1034,7 +1090,7 @@ function DashboardContent() {
       </div>
 
       {hasUnclaimedReferrals && (
-         <div className="bg-gradient-to-r from-amber-500/20 to-orange-500/10 border border-amber-500/50 p-5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between mb-8 shadow-[0_0_20px_rgba(245,158,11,0.2)] gap-4 animate-in zoom-in-95 duration-300">
+         <div className="bg-gradient-to-r from-amber-500/20 to-orange-500/10 border border-amber-500/50 p-4 sm:p-5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between shadow-[0_0_20px_rgba(245,158,11,0.2)] gap-4 animate-in zoom-in-95 duration-300">
             <div className="flex items-center gap-4">
                <div className="bg-amber-500/20 p-3 rounded-full shadow-inner"><Gift className="w-6 h-6 text-amber-400" /></div>
                <div>
@@ -1042,30 +1098,30 @@ function DashboardContent() {
                   <p className="text-sm font-medium text-amber-200/80">You've successfully recruited friends to the platform. Claim your points and loot boxes now.</p>
                </div>
             </div>
-            <button onClick={() => goToTab('rewards')} className="bg-amber-500 hover:bg-amber-400 text-amber-950 text-sm font-black px-6 py-3 rounded-xl transition-transform active:scale-[0.98] shadow-[0_0_15px_rgba(245,158,11,0.4)] shrink-0 flex items-center justify-center gap-2">
+            <button onClick={() => goToTab('rewards')} className="w-full sm:w-auto bg-amber-500 hover:bg-amber-400 text-amber-950 text-sm font-black px-6 py-3 rounded-xl transition-transform active:scale-[0.98] shadow-[0_0_15px_rgba(245,158,11,0.4)] shrink-0 flex items-center justify-center gap-2">
                Go to Rewards <ChevronRight className="w-4 h-4" />
             </button>
          </div>
       )}
 
-      <div className={`${theme.sectionBg} rounded-[2rem] ${theme.sectionShadow} border ${theme.sectionBorder} overflow-hidden transition-all duration-300 mt-6`}>
-         <button onClick={() => setIsCollegesOpen(!isCollegesOpen)} className={`w-full flex flex-col md:flex-row md:items-center justify-between p-6 md:p-8 bg-transparent hover:${theme.subCardBg} transition-colors gap-4`}>
-            <div className="flex items-center gap-4 text-left">
-               <div className={`w-14 h-14 rounded-2xl border flex items-center justify-center shrink-0 shadow-inner ${theme.isDark ? 'bg-blue-500/20 border-blue-500/30' : 'bg-blue-50 border-blue-200'}`}><Bookmark className={`w-6 h-6 ${theme.isDark ? 'text-blue-400 fill-blue-400/30' : 'text-blue-600 fill-blue-600/30'}`} /></div>
-               <div><h2 className={`text-2xl font-black tracking-tight ${theme.textHeader}`}>Target Colleges Board</h2><p className={`text-sm font-medium mt-1 ${theme.textMuted}`}>{savedColleges.length} programs loaded in tracked database metrics</p></div>
+      <div className={`${theme.sectionBg} rounded-2xl sm:rounded-[2rem] ${theme.sectionShadow} border ${theme.sectionBorder} overflow-hidden transition-all duration-300`}>
+         <button onClick={() => setIsCollegesOpen(!isCollegesOpen)} className={`w-full flex flex-col md:flex-row md:items-center justify-between p-5 md:p-8 bg-transparent hover:${theme.subCardBg} transition-colors gap-4`}>
+            <div className="flex items-center gap-3 sm:gap-4 text-left">
+               <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-2xl border flex items-center justify-center shrink-0 shadow-inner ${theme.isDark ? 'bg-blue-500/20 border-blue-500/30' : 'bg-blue-50 border-blue-200'}`}><Bookmark className={`w-5 h-5 sm:w-6 sm:h-6 ${theme.isDark ? 'text-blue-400 fill-blue-400/30' : 'text-blue-600 fill-blue-600/30'}`} /></div>
+               <div><h2 className={`text-xl sm:text-2xl font-black tracking-tight ${theme.textHeader}`}>Target Colleges Board</h2><p className={`text-xs sm:text-sm font-medium mt-1 ${theme.textMuted}`}>{savedColleges.length} programs loaded in tracked database metrics</p></div>
             </div>
-            <div className="flex items-center gap-4 self-end md:self-auto">{isCollegesOpen ? <ChevronUp className={`w-6 h-6 ${theme.textMuted} shrink-0`} /> : <ChevronDown className={`w-6 h-6 ${theme.textMuted} shrink-0`} />}</div>
+            <div className="flex items-center gap-4 self-center md:self-auto">{isCollegesOpen ? <ChevronUp className={`w-6 h-6 ${theme.textMuted} shrink-0`} /> : <ChevronDown className={`w-6 h-6 ${theme.textMuted} shrink-0`} />}</div>
          </button>
 
          {isCollegesOpen && (
-            <div className={`p-6 md:p-8 border-t ${theme.isDark ? 'border-white/10 bg-slate-950/50' : 'border-slate-200 bg-slate-50/50'} animate-in fade-in slide-in-from-top-4 duration-300`}>
-               <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
+            <div className={`p-4 sm:p-6 md:p-8 border-t ${theme.isDark ? 'border-white/10 bg-slate-950/50' : 'border-slate-200 bg-slate-50/50'} animate-in fade-in slide-in-from-top-4 duration-300`}>
+               <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 sm:mb-8 gap-4">
                   <h3 className={`font-black text-lg flex items-center gap-2 ${theme.textHeader}`}><Scale className={`w-5 h-5 ${theme.iconColor}`} /> College Comparison Board</h3>
-                  <Link href="/search" className={`text-sm font-bold px-5 py-2.5 rounded-xl transition-all shadow-md flex items-center gap-2 justify-center ${theme.isDark ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}>Find More Colleges <Search className="w-4 h-4" /></Link>
+                  <Link href="/search" className={`text-sm font-bold w-full sm:w-auto px-5 py-3 sm:py-2.5 rounded-xl transition-all shadow-md flex items-center gap-2 justify-center ${theme.isDark ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}>Find More Colleges <Search className="w-4 h-4" /></Link>
                </div>
                {savedColleges.length > 0 ? (
-                 <div className="overflow-x-auto custom-scrollbar pb-4">
-                   <table className="w-full text-left min-w-[900px]">
+                 <div className="overflow-x-auto table-scrollbar overscroll-x-contain touch-pan-x pb-4 -mx-4 sm:mx-0 px-4 sm:px-0">
+                   <table className="w-full text-left min-w-[800px]">
                      <thead>
                        <tr className={`border-b ${theme.isDark ? 'border-white/10' : 'border-slate-200'}`}>
                          <th className={`p-4 text-xs font-black uppercase tracking-widest ${theme.textMuted}`}>Program</th>
@@ -1104,7 +1160,7 @@ function DashboardContent() {
                    </table>
                  </div>
                ) : (
-                 <div className={`text-center py-12 rounded-2xl border border-dashed flex flex-col items-center justify-center ${theme.isDark ? 'bg-slate-900/50 border-white/10' : 'bg-slate-50 border-slate-300'}`}>
+                 <div className={`text-center py-10 sm:py-12 rounded-2xl border border-dashed flex flex-col items-center justify-center mx-4 sm:mx-0 ${theme.isDark ? 'bg-slate-900/50 border-white/10' : 'bg-slate-50 border-slate-300'}`}>
                     <School className={`w-12 h-12 mb-4 ${theme.textMuted}`} />
                     <h4 className={`text-lg font-black mb-1 ${theme.textHeader}`}>Your board is empty</h4>
                     <Link href="/search" className={`font-bold py-2.5 px-6 rounded-xl transition-colors shadow-md mt-4 ${theme.isDark ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}>Open College Finder</Link>
@@ -1114,7 +1170,7 @@ function DashboardContent() {
          )}
       </div>
     </div>
-  ), [athleteProfile, gatingMode, savedColleges, isCollegesOpen, primarySportQuery, dailyViews, monthlyViews, router, theme, homeReferralCode, isSubmittingHomeRef, timeLeft, isOfferExpired, isTimerLoaded]);
+  ), [athleteProfile, streak, gatingMode, savedColleges, isCollegesOpen, primarySportQuery, dailyViews, monthlyViews, router, theme, homeReferralCode, isSubmittingHomeRef, timeLeft, isOfferExpired, isTimerLoaded]);
 
   if (loading) {
     return (
@@ -1153,19 +1209,19 @@ function DashboardContent() {
             <span className="flex h-2 w-2 rounded-full bg-amber-500 animate-pulse"></span>
             <p className="text-sm font-medium text-slate-300"><strong className="text-white font-black">Action Required:</strong> Your profile identity is unverified.</p>
           </div>
-          <button onClick={() => setIsEmailVerificationModalOpen(true)} className="bg-white/10 hover:bg-white/20 border border-white/10 text-white text-xs font-black uppercase tracking-widest px-4 py-1.5 rounded-full transition-all active:scale-[0.98] flex items-center gap-2">Verify Now <ChevronRight className="w-3 h-3" /></button>
+          <button onClick={() => setIsEmailVerificationModalOpen(true)} className="bg-white/10 hover:bg-white/20 border border-white/10 text-white text-xs font-black uppercase tracking-widest px-4 py-2 sm:py-1.5 rounded-full transition-all active:scale-[0.98] flex items-center gap-2">Verify Now <ChevronRight className="w-3 h-3" /></button>
         </div>
       )}
 
       {sportToDelete && (
         <div className="fixed inset-0 z-[500] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-slate-900 border border-slate-700 rounded-[2rem] w-full max-w-md shadow-[0_0_50px_rgba(0,0,0,0.5)] overflow-hidden animate-in zoom-in-95 duration-300">
-            <div className="p-8 text-center flex flex-col items-center relative">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl sm:rounded-[2rem] w-full max-w-md shadow-[0_0_50px_rgba(0,0,0,0.5)] overflow-hidden animate-in zoom-in-95 duration-300">
+            <div className="p-6 sm:p-8 text-center flex flex-col items-center relative">
               <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/10 blur-[40px] rounded-full pointer-events-none"></div>
               <div className="w-16 h-16 bg-red-500/10 border border-red-500/20 rounded-full flex items-center justify-center mb-6 shadow-[0_0_15px_rgba(239,68,68,0.2)]"><ShieldAlert className="w-8 h-8 text-red-500" /></div>
               <h3 className="text-2xl font-black text-white mb-2 tracking-tight">Delete {sportToDelete}?</h3>
               <p className="text-slate-400 font-medium text-sm mb-8 leading-relaxed">Are you absolutely sure you want to permanently delete all your {sportToDelete} data? This action cannot be undone.</p>
-              <div className="flex gap-4 w-full relative z-10">
+              <div className="flex gap-3 sm:gap-4 w-full relative z-10">
                 <button onClick={() => setSportToDelete(null)} className="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-bold py-3.5 rounded-xl transition-colors shadow-sm">Cancel</button>
                 <button onClick={confirmDeleteSport} className="flex-1 bg-red-600 hover:bg-red-500 text-white font-black py-3.5 rounded-xl transition-all shadow-[0_0_20px_rgba(220,38,38,0.4)] active:scale-[0.98]">Yes, Delete</button>
               </div>
@@ -1175,9 +1231,10 @@ function DashboardContent() {
       )}
 
       {toast && (
-        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[200] animate-in slide-in-from-top-5 fade-in duration-300">
-          <div className={`rounded-full px-6 py-3 shadow-2xl flex items-center gap-3 font-bold text-sm border ${toast.type === 'error' ? 'bg-red-900 text-white border-red-700' : 'bg-slate-900 text-white border-slate-700'}`}>
-            {toast.type === 'error' ? <X className="w-4 h-4 text-red-400" /> : <Check className="w-4 h-4 text-emerald-400" />} {toast.message}
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[200] w-[90%] max-w-sm sm:w-auto animate-in slide-in-from-top-5 fade-in duration-300">
+          <div className={`rounded-full px-5 sm:px-6 py-3 shadow-2xl flex items-center gap-3 font-bold text-xs sm:text-sm border ${toast.type === 'error' ? 'bg-red-900 text-white border-red-700' : 'bg-slate-900 text-white border-slate-700'}`}>
+            {toast.type === 'error' ? <X className="w-4 h-4 text-red-400 shrink-0" /> : <Check className="w-4 h-4 text-emerald-400 shrink-0" />} 
+            <span className="truncate">{toast.message}</span>
           </div>
         </div>
       )}
@@ -1188,6 +1245,12 @@ function DashboardContent() {
         .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 10px; }
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* 🔥 UPGRADED TABLE SCROLLBAR 🔥 */
+        .table-scrollbar::-webkit-scrollbar { height: 10px; }
+        .table-scrollbar::-webkit-scrollbar-track { background: rgba(148, 163, 184, 0.1); border-radius: 10px; }
+        .table-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(59, 130, 246, 0.7); border-radius: 10px; border: 2px solid transparent; background-clip: padding-box; }
+        .table-scrollbar::-webkit-scrollbar-thumb:hover { background-color: rgba(59, 130, 246, 1); }
         
         @keyframes shimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
         @keyframes foilShift { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
@@ -1267,27 +1330,27 @@ function DashboardContent() {
       `}} />
 
       {/* 🚨 DYNAMIC PAGE HEADER THEME CONFIG 🚨 */}
-      <div className={`pb-16 md:pb-20 px-5 md:px-6 relative transition-all duration-500 z-30 pt-10 border-b border-b-[rgba(255,255,255,0.1)] ${theme.heroCard} ${getEquippedGlow(athleteProfile?.equipped_border)}`}>
+      <div className={`pb-12 md:pb-20 px-4 md:px-6 relative transition-all duration-500 z-30 pt-6 md:pt-10 border-b border-b-[rgba(255,255,255,0.1)] ${theme.heroCard} ${getEquippedGlow(athleteProfile?.equipped_border)}`}>
         {backgroundEffects}
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center md:items-start justify-between gap-6 md:gap-8 relative z-30">
-          <div className="flex flex-col md:flex-row items-center md:items-start gap-6 w-full">
-            <div className="relative w-28 h-28 md:w-36 md:h-36 shrink-0 flex items-center justify-center group cursor-pointer" onClick={() => !isUploadingAvatar && fileInputRef.current?.click()}>
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center md:items-start justify-between gap-5 md:gap-8 relative z-30">
+          <div className="flex flex-col md:flex-row items-center md:items-start gap-4 sm:gap-6 w-full">
+            <div className="relative w-24 h-24 md:w-36 md:h-36 shrink-0 flex items-center justify-center group cursor-pointer" onClick={() => !isUploadingAvatar && fileInputRef.current?.click()}>
               <svg className="absolute inset-0 w-full h-full -rotate-90 pointer-events-none" viewBox="0 0 144 144">
                 <circle cx="72" cy="72" r={66} stroke="currentColor" strokeWidth="6" fill="transparent" className="text-white/10" />
                 <circle cx="72" cy="72" r={66} stroke="currentColor" strokeWidth="6" fill="transparent" className={readiness.score === 100 ? "text-emerald-500 drop-shadow-[0_0_8px_rgba(16,185,129,0.5)]" : "text-blue-500"} strokeDasharray={2 * Math.PI * 66} strokeDashoffset={(2 * Math.PI * 66) - (readiness.score / 100) * (2 * Math.PI * 66)} strokeLinecap="round" style={{ transition: 'stroke-dashoffset 1s ease-in-out' }} />
               </svg>
-              <div className="relative z-10 flex items-center justify-center w-24 h-24 md:w-32 md:h-32">
+              <div className="relative z-10 flex items-center justify-center w-20 h-20 md:w-32 md:h-32">
                 <AvatarWithBorder avatarUrl={athleteProfile?.avatar_url} borderId={athleteProfile?.equipped_border} sizeClasses="w-full h-full absolute inset-0 shadow-xl" />
                 <div className={`absolute inset-1 rounded-full bg-slate-900/60 flex flex-col items-center justify-center text-white transition-all backdrop-blur-[2px] ${isUploadingAvatar ? 'opacity-100 z-20' : 'opacity-0 group-hover:opacity-100 z-20'}`}>
-                  {isUploadingAvatar ? <RefreshCw className="w-6 h-6 animate-spin text-white" /> : <div className="flex flex-col items-center gap-1"><Camera className="w-6 h-6 text-white" /><span className="text-[9px] font-black uppercase tracking-widest text-white">Upload</span></div>}
+                  {isUploadingAvatar ? <RefreshCw className="w-5 h-5 sm:w-6 sm:h-6 animate-spin text-white" /> : <div className="flex flex-col items-center gap-1"><Camera className="w-5 h-5 sm:w-6 sm:h-6 text-white" /><span className="text-[9px] font-black uppercase tracking-widest text-white">Upload</span></div>}
                 </div>
               </div>
               <input type="file" ref={fileInputRef} className="hidden" accept="image/jpeg, image/png, image/webp" onChange={handleAvatarUpload} />
             </div>
 
             <div className="text-center md:text-left flex-1">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-center md:justify-start gap-3 mb-2">
-                <h1 className={`text-3xl md:text-4xl font-black tracking-tight flex items-center gap-3 ${theme.heroName}`}>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-center md:justify-start gap-2 sm:gap-3 mb-2">
+                <h1 className={`text-2xl sm:text-3xl md:text-4xl font-black tracking-tight flex items-center gap-3 ${theme.heroName}`}>
                   {athleteProfile?.first_name ? `${athleteProfile.first_name} ${athleteProfile.last_name}` : 'Welcome, Athlete'}
                 </h1>
                 <div className="flex items-center justify-center gap-2">
@@ -1300,15 +1363,15 @@ function DashboardContent() {
                 </div>
               </div>
 
-              <p className={`text-base md:text-lg font-medium flex items-center justify-center md:justify-start gap-2 mb-4 ${theme.heroMeta}`}>
-                <MapPin className="w-4 h-4 opacity-70" /> {athleteProfile?.high_school || 'General Athlete Profile'} {athleteProfile?.grad_year && ` • Class of ${athleteProfile.grad_year}`}
+              <p className={`text-sm sm:text-base md:text-lg font-medium flex flex-wrap items-center justify-center md:justify-start gap-1 sm:gap-2 mb-4 ${theme.heroMeta}`}>
+                <MapPin className="w-3 h-3 sm:w-4 sm:h-4 opacity-70" /> {athleteProfile?.high_school || 'General Athlete Profile'} {athleteProfile?.grad_year && ` • Class of ${athleteProfile.grad_year}`}
               </p>
               
               {readiness.score < 100 && (
-                <div className="bg-slate-900/80 backdrop-blur-md border border-slate-700/50 rounded-2xl p-3 inline-flex items-center gap-4 max-w-lg w-full text-left shadow-lg relative overflow-hidden group mb-5 animate-in fade-in zoom-in-95 duration-300">
+                <div className="bg-slate-900/80 backdrop-blur-md border border-slate-700/50 rounded-xl sm:rounded-2xl p-3 inline-flex items-center gap-3 sm:gap-4 max-w-lg w-full text-left shadow-lg relative overflow-hidden group mb-4 sm:mb-5 animate-in fade-in zoom-in-95 duration-300">
                    <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/5 blur-[20px] rounded-full pointer-events-none"></div>
                    <div className="w-10 h-10 rounded-full border-2 border-slate-700 flex items-center justify-center shrink-0 relative bg-slate-950"><span className="text-[10px] font-black text-white">{readiness.score}%</span></div>
-                   <div><p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-0.5">Recruit Readiness Quest</p><p className="text-xs font-bold text-slate-200 leading-tight pr-2">{readiness.nextQuest}</p></div>
+                   <div><p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-0.5">Recruit Quest</p><p className="text-[11px] sm:text-xs font-bold text-slate-200 leading-tight pr-2">{readiness.nextQuest}</p></div>
                 </div>
               )}
             </div>
@@ -1316,21 +1379,21 @@ function DashboardContent() {
         </div>
       </div>
 
-      <div className="sticky top-20 md:top-24 z-20 w-full flex justify-center px-4 mt-6 animate-in slide-in-from-bottom-4 duration-500 pointer-events-none">
-        <div className={`${theme.isDark ? 'bg-slate-900/80' : 'bg-white/90'} backdrop-blur-xl p-1.5 rounded-full shadow-lg border ${theme.isDark ? 'border-white/10' : 'border-slate-200'} inline-flex gap-1 pointer-events-auto`}>
-          <button onClick={() => goToTab('home')} className={`px-6 py-2.5 rounded-full text-sm font-black transition-all flex items-center gap-2 ${activeTab === 'home' ? 'bg-blue-600 text-white shadow-md scale-[1.02]' : 'text-slate-400 hover:text-blue-500 hover:bg-blue-500/10'}`}>
-            <LayoutDashboard className="w-4 h-4" /> <span className="hidden sm:inline">Homebase</span>
+      <div className="sticky top-16 md:top-24 z-20 w-full flex justify-center px-4 mt-4 sm:mt-6 animate-in slide-in-from-bottom-4 duration-500 pointer-events-none">
+        <div className={`${theme.isDark ? 'bg-slate-900/80' : 'bg-white/90'} backdrop-blur-xl p-1.5 rounded-full shadow-lg border ${theme.isDark ? 'border-white/10' : 'border-slate-200'} inline-flex gap-1 overflow-x-auto hide-scrollbar pointer-events-auto`}>
+          <button onClick={() => goToTab('home')} className={`px-4 sm:px-6 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm font-black transition-all flex items-center gap-2 ${activeTab === 'home' ? 'bg-blue-600 text-white shadow-md scale-[1.02]' : 'text-slate-400 hover:text-blue-500 hover:bg-blue-500/10'}`}>
+            <LayoutDashboard className="w-4 h-4 shrink-0" /> <span className="hidden sm:inline">Homebase</span>
           </button>
-          <button onClick={() => goToTab('social')} className={`px-6 py-2.5 rounded-full text-sm font-black transition-all flex items-center gap-2 ${activeTab === 'social' ? 'bg-emerald-500 text-white shadow-md scale-[1.02]' : 'text-slate-400 hover:text-emerald-500 hover:bg-emerald-500/10'}`}>
-            <ImageIcon className="w-4 h-4" /> <span className="hidden sm:inline">Portfolio & Performance</span>
+          <button onClick={() => goToTab('social')} className={`px-4 sm:px-6 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm font-black transition-all flex items-center gap-2 ${activeTab === 'social' ? 'bg-emerald-500 text-white shadow-md scale-[1.02]' : 'text-slate-400 hover:text-emerald-500 hover:bg-emerald-500/10'}`}>
+            <ImageIcon className="w-4 h-4 shrink-0" /> <span className="hidden sm:inline">Portfolio & Stats</span>
           </button>
-          <button onClick={() => goToTab('rewards')} className={`px-6 py-2.5 rounded-full text-sm font-black transition-all flex items-center gap-2 ${activeTab === 'rewards' ? 'bg-fuchsia-500 text-white shadow-md scale-[1.02]' : 'text-slate-400 hover:text-fuchsia-500 hover:bg-fuchsia-500/10'}`}>
-            <Gift className="w-4 h-4" /> <span className="hidden sm:inline">Rewards</span>
+          <button onClick={() => goToTab('rewards')} className={`px-4 sm:px-6 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm font-black transition-all flex items-center gap-2 ${activeTab === 'rewards' ? 'bg-fuchsia-500 text-white shadow-md scale-[1.02]' : 'text-slate-400 hover:text-fuchsia-500 hover:bg-fuchsia-500/10'}`}>
+            <Gift className="w-4 h-4 shrink-0" /> <span className="hidden sm:inline">Rewards</span>
           </button>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 md:px-6 mt-6 relative z-10 space-y-6">
+      <div className="max-w-7xl mx-auto px-4 md:px-6 mt-4 sm:mt-6 relative z-10 space-y-4 sm:space-y-6">
         {activeTab === 'home' && RenderHomeTab}
         {activeTab === 'social' && <PerformanceStats state={sharedPerformanceState} actions={sharedPerformanceActions} />}
         {activeTab === 'rewards' && (
@@ -1355,36 +1418,36 @@ function DashboardContent() {
 
            <div className="god-rays animate-in fade-in zoom-in duration-1000" style={{ '--tease-color': 'rgba(217,70,239,1)' } as React.CSSProperties}></div>
 
-           <div className="bg-slate-900 border border-fuchsia-500/50 shadow-[0_0_50px_rgba(217,70,239,0.3)] rounded-[2rem] w-full max-w-sm relative z-10 animate-in zoom-in-95 duration-300 transition-all">
-              <div className="p-6 sm:p-8 text-center relative overflow-hidden rounded-[2rem]">
+           <div className="bg-slate-900 border border-fuchsia-500/50 shadow-[0_0_50px_rgba(217,70,239,0.3)] rounded-2xl sm:rounded-[2rem] w-full max-w-sm relative z-10 animate-in zoom-in-95 duration-300 transition-all">
+              <div className="p-5 sm:p-8 text-center relative overflow-hidden rounded-[2rem]">
                  <div className="absolute top-0 right-0 w-40 h-40 bg-fuchsia-500/10 blur-[40px] rounded-full pointer-events-none"></div>
                  
                  <div className="relative z-10 animate-reveal">
-                    <Rocket className="w-12 h-12 text-fuchsia-400 mx-auto mb-3 drop-shadow-[0_0_10px_rgba(217,70,239,0.8)]" />
-                    <h3 className="text-3xl font-black text-white mb-2 tracking-tight">Starter Pack Unlocked!</h3>
-                    <p className="text-slate-400 font-medium text-sm mb-6 px-4">Your accounts are linked. You just scored your new athlete bonus loot!</p>
+                    <Rocket className="w-10 h-10 sm:w-12 sm:h-12 text-fuchsia-400 mx-auto mb-3 drop-shadow-[0_0_10px_rgba(217,70,239,0.8)]" />
+                    <h3 className="text-2xl sm:text-3xl font-black text-white mb-2 tracking-tight">Starter Pack Unlocked!</h3>
+                    <p className="text-slate-400 font-medium text-xs sm:text-sm mb-5 sm:mb-6 px-4">Your accounts are linked. You just scored your new athlete bonus loot!</p>
                     
-                    <div className="flex justify-center items-stretch gap-3 sm:gap-4 mb-8 mt-2">
-                       <div className="bg-slate-950 border border-amber-500/50 rounded-2xl p-4 flex flex-col items-center justify-center shadow-inner relative w-36 sm:w-40 aspect-square hover:scale-105 transition-transform duration-300">
+                    <div className="flex justify-center items-stretch gap-3 sm:gap-4 mb-6 sm:mb-8 mt-2">
+                       <div className="bg-slate-950 border border-amber-500/50 rounded-xl sm:rounded-2xl p-3 sm:p-4 flex flex-col items-center justify-center shadow-inner relative w-32 sm:w-40 aspect-square hover:scale-105 transition-transform duration-300">
                           <div className="flex-1 flex items-center justify-center mb-2">
-                             <Points className="w-10 h-10 sm:w-12 sm:h-12 text-amber-400 drop-shadow-[0_0_10px_rgba(251,191,36,0.8)]" />
+                             <Points className="w-8 h-8 sm:w-12 sm:h-12 text-amber-400 drop-shadow-[0_0_10px_rgba(251,191,36,0.8)]" />
                           </div>
-                          <span className="text-3xl font-black text-white leading-none mb-1">+500</span>
-                          <span className="text-[10px] font-bold text-amber-500/80 uppercase tracking-widest text-center">Points</span>
+                          <span className="text-2xl sm:text-3xl font-black text-white leading-none mb-1">+500</span>
+                          <span className="text-[9px] sm:text-[10px] font-bold text-amber-500/80 uppercase tracking-widest text-center">Points</span>
                        </div>
                        
-                       <div className="bg-slate-950 border border-blue-500/50 rounded-2xl p-4 flex flex-col items-center justify-center shadow-inner relative w-36 sm:w-40 aspect-square hover:scale-105 transition-transform duration-300">
+                       <div className="bg-slate-950 border border-blue-500/50 rounded-xl sm:rounded-2xl p-3 sm:p-4 flex flex-col items-center justify-center shadow-inner relative w-32 sm:w-40 aspect-square hover:scale-105 transition-transform duration-300">
                           <div className="flex-1 flex items-center justify-center mb-2 w-full max-h-[50%]">
                              <LootBoxVisual tier="standard" size="md" />
                           </div>
-                          <span className="text-2xl font-black text-white leading-none mb-1">+1</span>
-                          <span className="text-[10px] font-bold text-blue-500/80 uppercase tracking-widest text-center leading-tight">Standard Box</span>
+                          <span className="text-xl sm:text-2xl font-black text-white leading-none mb-1">+1</span>
+                          <span className="text-[9px] sm:text-[10px] font-bold text-blue-500/80 uppercase tracking-widest text-center leading-tight">Standard Box</span>
                        </div>
                     </div>
 
                     <button
                        onClick={() => setShowStarterPackModal(false)}
-                       className="w-full bg-slate-800 hover:bg-slate-700 text-white font-black py-4 rounded-xl border border-slate-700 transition-transform active:scale-[0.98] text-sm flex items-center justify-center gap-2"
+                       className="w-full bg-slate-800 hover:bg-slate-700 text-white font-black py-3 sm:py-4 rounded-xl border border-slate-700 transition-transform active:scale-[0.98] text-sm flex items-center justify-center gap-2"
                     >
                        Awesome! <CheckCircle2 className="w-4 h-4" />
                     </button>
@@ -1394,6 +1457,7 @@ function DashboardContent() {
         </div>
       )}
 
+      {/* 🚀 UPGRADED REDUCED DAILY REWARD MODAL 🚀 */}
       {showDailyRewardModal && dailyRewardData && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
            <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-md animate-in fade-in duration-300"></div>
@@ -1405,8 +1469,8 @@ function DashboardContent() {
                ></div>
            )}
 
-           <div className={`bg-slate-900 border ${dailyRewardData.tier === 'ultra' && claimStage === 'claimed' ? 'border-fuchsia-500/50 shadow-[0_0_50px_rgba(217,70,239,0.3)]' : 'border-amber-500/30 shadow-[0_0_50px_rgba(245,158,11,0.2)]'} rounded-[2rem] w-full ${claimStage === 'idle' ? 'max-w-3xl' : 'max-w-sm'} max-h-[85vh] overflow-y-auto custom-scrollbar relative z-10 animate-in zoom-in-95 duration-300 transition-all`}>
-              <div className="p-6 sm:p-8 text-center relative overflow-hidden rounded-[2rem]">
+           <div className={`bg-slate-900 border ${dailyRewardData.tier === 'ultra' && claimStage === 'claimed' ? 'border-fuchsia-500/50 shadow-[0_0_50px_rgba(217,70,239,0.3)]' : 'border-amber-500/30 shadow-[0_0_50px_rgba(245,158,11,0.2)]'} rounded-2xl sm:rounded-[2rem] w-full max-w-sm max-h-[90vh] overflow-y-auto custom-scrollbar relative z-10 animate-in zoom-in-95 duration-300 transition-all`}>
+              <div className="p-5 sm:p-8 text-center relative overflow-hidden rounded-[2rem]">
                  <div className="absolute top-0 right-0 w-40 h-40 bg-amber-500/10 blur-[40px] rounded-full pointer-events-none"></div>
                  {dailyRewardData.tier && claimStage === 'claimed' && (
                     <div className="absolute bottom-0 left-0 w-40 h-40 bg-fuchsia-500/10 blur-[40px] rounded-full pointer-events-none transition-opacity duration-500"></div>
@@ -1414,76 +1478,59 @@ function DashboardContent() {
 
                  {claimStage === 'idle' ? (
                     <div className="relative z-10 animate-in fade-in zoom-in duration-300">
-                       <Gift className="w-12 h-12 text-amber-400 mx-auto mb-3 animate-pulse-glow" />
-                       <h3 className="text-3xl font-black text-white mb-2 tracking-tight">Daily Login Reward</h3>
-                       <p className="text-slate-400 font-medium text-sm mb-6 px-4">You've reached Day {dailyRewardData.dayNumInCycle} of your {dailyRewardData.cycleMultiplier.toFixed(1)}x cycle!</p>
+                       <Gift className="w-10 h-10 sm:w-12 sm:h-12 text-amber-400 mx-auto mb-3 animate-pulse-glow" />
+                       <h3 className="text-2xl sm:text-3xl font-black text-white mb-2 tracking-tight">Daily Reward</h3>
+                       <p className="text-slate-400 font-medium text-xs sm:text-sm mb-5 sm:mb-6 px-4">You've reached Day {dailyRewardData.dayNumInCycle} of your {dailyRewardData.cycleMultiplier.toFixed(1)}x cycle!</p>
                        
-                       <div className="grid grid-cols-4 sm:grid-cols-7 gap-2 sm:gap-3 mb-6 bg-slate-950 p-4 rounded-2xl border border-slate-800 shadow-inner">
-                         {[...Array(28)].map((_, i) => {
-                           const dayNum = i + 1;
-                           const isPast = dayNum <= dailyRewardData.dayNumInCycle;
-                           const isUpcomingDay = dayNum === dailyRewardData.dayNumInCycle + 1;
-                           
-                           const rewardData = getRewardForDay(dayNum);
-                           const totalReward = Math.round(rewardData.baseCoins * dailyRewardData.cycleMultiplier);
-
-                           return (
-                               <div key={i} className={`relative p-2 sm:p-3 rounded-2xl border-2 flex flex-col items-center justify-between gap-1 text-center transition-all aspect-[3/4] sm:aspect-[4/5] ${isPast ? 'bg-slate-900 border-slate-800 opacity-50' : isUpcomingDay ? 'bg-emerald-900/40 border-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.2)] scale-[1.05] z-10' : 'bg-slate-900 border-slate-700'}`}>
-                                   {isPast && <div className="absolute top-1 right-1"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-500"/></div>}
-                                   <span className={`text-[9px] font-black uppercase tracking-widest shrink-0 ${isUpcomingDay ? 'text-emerald-400' : 'text-slate-500'}`}>Day {dayNum}</span>
-
-                                   <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-slate-800 flex items-center justify-center shrink-0 shadow-sm border border-slate-700 ${rewardData.glow && !isPast ? rewardData.glow : ''}`}>
-                                       {rewardData.tier && !isPast ? (
-                                           <LootBoxVisual tier={rewardData.tier} size="sm" />
-                                       ) : (
-                                          <div className={`w-4 h-4 sm:w-5 sm:h-5 shrink-0 ${isPast ? 'text-slate-600' : rewardData.iconColor}`}>
-                                              <rewardData.Icon className="w-full h-full" />
-                                          </div>
-                                       )}
-                                   </div>
-                                   
-                                   <span className={`font-black mt-auto ${isUpcomingDay ? 'text-amber-400 text-sm sm:text-base drop-shadow-[0_0_8px_rgba(251,191,36,0.8)]' : 'text-[10px] sm:text-xs text-slate-400'}`}>+{totalReward}</span>
-                               </div>
-                           )
-                         })}
-                       </div>
-
-                       <div className="mb-4 text-amber-400 font-bold bg-amber-500/10 border border-amber-500/20 py-2.5 px-4 rounded-xl inline-flex items-center gap-2">
-                           <Points className="w-4 h-4" /> Today's Reward: +{dailyRewardData.points} Points {dailyRewardData.box && ` & 1x ${dailyRewardData.box}`}
+                       <div className="mb-5 sm:mb-6 font-black bg-amber-500/10 border border-amber-500/20 py-3 sm:py-4 px-4 sm:px-5 rounded-xl sm:rounded-2xl inline-flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3 w-full shadow-inner">
+                           <div className="flex items-center gap-2 text-amber-400">
+                               <Points className="w-5 h-5 sm:w-6 sm:h-6" />
+                               <span className="text-lg sm:text-xl">+{dailyRewardData.points}</span>
+                           </div>
+                           {dailyRewardData.box && (
+                               <>
+                                  <span className="text-amber-500/50 hidden sm:block">|</span>
+                                  <div className="w-full h-px bg-amber-500/20 sm:hidden"></div>
+                                  <div className="flex items-center gap-2 text-blue-400 pt-1 sm:pt-0">
+                                      <Package className="w-5 h-5 sm:w-6 sm:h-6" />
+                                      <span className="text-lg sm:text-xl leading-none">+1 <span className="text-[10px] sm:text-xs uppercase tracking-widest">{dailyRewardData.box}</span></span>
+                                  </div>
+                               </>
+                           )}
                        </div>
 
                        <button
                          onClick={handleClaimDailyReward}
-                         className="w-full sm:w-2/3 mx-auto bg-amber-500 hover:bg-amber-400 text-amber-950 font-black py-4 rounded-xl shadow-[0_0_20px_rgba(245,158,11,0.3)] transition-transform active:scale-[0.98] text-lg flex items-center justify-center gap-2"
+                         className="w-full bg-amber-500 hover:bg-amber-400 text-amber-950 font-black py-3 sm:py-4 rounded-xl shadow-[0_0_20px_rgba(245,158,11,0.3)] transition-transform active:scale-[0.98] text-base sm:text-lg flex items-center justify-center gap-2"
                        >
                           Claim Today's Loot <ArrowRight className="w-5 h-5" />
                        </button>
                     </div>
                  ) : (
                     <div className="relative z-10 animate-reveal">
-                       <div className="flex justify-center items-stretch gap-3 sm:gap-4 mb-8 mt-2">
-                          <div className="bg-slate-950 border border-amber-500/50 rounded-2xl p-4 flex flex-col items-center justify-center shadow-inner relative w-36 sm:w-40 aspect-square hover:scale-105 transition-transform duration-300">
+                       <div className="flex justify-center items-stretch gap-3 sm:gap-4 mb-6 sm:mb-8 mt-2">
+                          <div className="bg-slate-950 border border-amber-500/50 rounded-xl sm:rounded-2xl p-3 sm:p-4 flex flex-col items-center justify-center shadow-inner relative w-32 sm:w-40 aspect-square hover:scale-105 transition-transform duration-300">
                              <div className="flex-1 flex items-center justify-center mb-2">
-                                <Points className="w-10 h-10 sm:w-12 sm:h-12 text-amber-400 drop-shadow-[0_0_10px_rgba(251,191,36,0.8)]" />
+                                <Points className="w-8 h-8 sm:w-12 sm:h-12 text-amber-400 drop-shadow-[0_0_10px_rgba(251,191,36,0.8)]" />
                              </div>
-                             <span className="text-3xl font-black text-white leading-none mb-1">+{dailyRewardData.points}</span>
-                             <span className="text-[10px] font-bold text-amber-500/80 uppercase tracking-widest text-center">Points</span>
+                             <span className="text-2xl sm:text-3xl font-black text-white leading-none mb-1">+{dailyRewardData.points}</span>
+                             <span className="text-[9px] sm:text-[10px] font-bold text-amber-500/80 uppercase tracking-widest text-center">Points</span>
                           </div>
                           {dailyRewardData.box && dailyRewardData.tier && (
-                             <div className="bg-slate-950 border border-fuchsia-500/50 rounded-2xl p-4 flex flex-col items-center justify-center shadow-inner relative w-36 sm:w-40 aspect-square hover:scale-105 transition-transform duration-300">
+                             <div className="bg-slate-950 border border-fuchsia-500/50 rounded-xl sm:rounded-2xl p-3 sm:p-4 flex flex-col items-center justify-center shadow-inner relative w-32 sm:w-40 aspect-square hover:scale-105 transition-transform duration-300">
                                 <div className="flex-1 flex items-center justify-center mb-2 w-full max-h-[50%]">
                                    <LootBoxVisual tier={dailyRewardData.tier} size="md" />
                                 </div>
-                                <span className="text-2xl font-black text-white leading-none mb-1">+1</span>
-                                <span className="text-[10px] font-bold text-fuchsia-500/80 uppercase tracking-widest text-center leading-tight">{dailyRewardData.box}</span>
+                                <span className="text-xl sm:text-2xl font-black text-white leading-none mb-1">+1</span>
+                                <span className="text-[9px] sm:text-[10px] font-bold text-fuchsia-500/80 uppercase tracking-widest text-center leading-tight">{dailyRewardData.box}</span>
                              </div>
                           )}
                        </div>
-                       <h3 className="text-3xl font-black text-white mb-2 tracking-tight">Loot Secured!</h3>
-                       <p className="text-amber-200/80 font-medium text-sm mb-6">Come back tomorrow to keep your multiplier growing.</p>
+                       <h3 className="text-2xl sm:text-3xl font-black text-white mb-2 tracking-tight">Loot Secured!</h3>
+                       <p className="text-amber-200/80 font-medium text-xs sm:text-sm mb-5 sm:mb-6">Come back tomorrow to keep your multiplier growing.</p>
                        <button
                          onClick={() => { setShowDailyRewardModal(false); setClaimStage('idle'); }}
-                         className="w-full bg-slate-800 hover:bg-slate-700 text-white font-black py-4 rounded-xl border border-slate-700 transition-transform active:scale-[0.98] text-sm flex items-center justify-center gap-2"
+                         className="w-full bg-slate-800 hover:bg-slate-700 text-white font-black py-3 sm:py-4 rounded-xl border border-slate-700 transition-transform active:scale-[0.98] text-sm flex items-center justify-center gap-2"
                        >
                          Continue to Homebase <CheckCircle2 className="w-4 h-4" />
                        </button>
@@ -1501,37 +1548,37 @@ function DashboardContent() {
 
            <div className="god-rays animate-in fade-in zoom-in duration-1000" style={{ '--tease-color': 'rgba(217,70,239,1)' } as React.CSSProperties}></div>
 
-           <div className="bg-slate-900 border border-fuchsia-500/50 shadow-[0_0_50px_rgba(217,70,239,0.3)] rounded-[2rem] w-full max-w-sm relative z-10 animate-in zoom-in-95 duration-300">
-              <div className="p-6 sm:p-8 text-center relative overflow-hidden rounded-[2rem]">
+           <div className="bg-slate-900 border border-fuchsia-500/50 shadow-[0_0_50px_rgba(217,70,239,0.3)] rounded-2xl sm:rounded-[2rem] w-full max-w-sm relative z-10 animate-in zoom-in-95 duration-300">
+              <div className="p-5 sm:p-8 text-center relative overflow-hidden rounded-[2rem]">
                  <div className="absolute top-0 right-0 w-40 h-40 bg-fuchsia-500/10 blur-[40px] rounded-full pointer-events-none"></div>
                  
                  <div className="relative z-10 animate-reveal">
-                    <div className="flex justify-center items-stretch gap-3 sm:gap-4 mb-8 mt-2">
-                       <div className="bg-slate-950 border border-amber-500/50 rounded-2xl p-4 flex flex-col items-center justify-center shadow-inner relative w-36 sm:w-40 aspect-square hover:scale-105 transition-transform duration-300">
+                    <div className="flex justify-center items-stretch gap-3 sm:gap-4 mb-6 sm:mb-8 mt-2">
+                       <div className="bg-slate-950 border border-amber-500/50 rounded-xl sm:rounded-2xl p-3 sm:p-4 flex flex-col items-center justify-center shadow-inner relative w-32 sm:w-40 aspect-square hover:scale-105 transition-transform duration-300">
                           <div className="flex-1 flex items-center justify-center mb-2">
-                             <Points className="w-10 h-10 sm:w-12 sm:h-12 text-amber-400 drop-shadow-[0_0_10px_rgba(251,191,36,0.8)]" />
+                             <Points className="w-8 h-8 sm:w-12 sm:h-12 text-amber-400 drop-shadow-[0_0_10px_rgba(251,191,36,0.8)]" />
                           </div>
-                          <span className="text-3xl font-black text-white leading-none mb-1">+{referralRewardData.pts}</span>
-                          <span className="text-[10px] font-bold text-amber-500/80 uppercase tracking-widest text-center">Points</span>
+                          <span className="text-2xl sm:text-3xl font-black text-white leading-none mb-1">+{referralRewardData.pts}</span>
+                          <span className="text-[9px] sm:text-[10px] font-bold text-amber-500/80 uppercase tracking-widest text-center">Points</span>
                        </div>
                        
                        {referralRewardData.hasBox && (
-                          <div className="bg-slate-950 border border-fuchsia-500/50 rounded-2xl p-4 flex flex-col items-center justify-center shadow-inner relative w-36 sm:w-40 aspect-square hover:scale-105 transition-transform duration-300">
+                          <div className="bg-slate-950 border border-fuchsia-500/50 rounded-xl sm:rounded-2xl p-3 sm:p-4 flex flex-col items-center justify-center shadow-inner relative w-32 sm:w-40 aspect-square hover:scale-105 transition-transform duration-300">
                              <div className="flex-1 flex items-center justify-center mb-2 w-full max-h-[50%]">
                                 <LootBoxVisual tier="ultra" size="md" />
                              </div>
-                             <span className="text-2xl font-black text-white leading-none mb-1">+1</span>
-                             <span className="text-[10px] font-bold text-fuchsia-500/80 uppercase tracking-widest text-center leading-tight">{referralRewardData.box}</span>
+                             <span className="text-xl sm:text-2xl font-black text-white leading-none mb-1">+1</span>
+                             <span className="text-[9px] sm:text-[10px] font-bold text-fuchsia-500/80 uppercase tracking-widest text-center leading-tight">{referralRewardData.box}</span>
                           </div>
                        )}
                     </div>
 
-                    <h3 className="text-3xl font-black text-white mb-2 tracking-tight">Recruit Secured!</h3>
-                    <p className="text-fuchsia-200/80 font-medium text-sm mb-6">You claimed your bounty for reaching {referralRewardData.count} verified recruits.</p>
+                    <h3 className="text-2xl sm:text-3xl font-black text-white mb-2 tracking-tight">Recruit Secured!</h3>
+                    <p className="text-fuchsia-200/80 font-medium text-xs sm:text-sm mb-5 sm:mb-6">You claimed your bounty for reaching {referralRewardData.count} verified recruits.</p>
                     
                     <button
                        onClick={() => setShowReferralModal(false)}
-                       className="w-full bg-slate-800 hover:bg-slate-700 text-white font-black py-4 rounded-xl border border-slate-700 transition-transform active:scale-[0.98] text-sm flex items-center justify-center gap-2"
+                       className="w-full bg-slate-800 hover:bg-slate-700 text-white font-black py-3 sm:py-4 rounded-xl border border-slate-700 transition-transform active:scale-[0.98] text-sm flex items-center justify-center gap-2"
                     >
                        Continue to Homebase <CheckCircle2 className="w-4 h-4" />
                     </button>
@@ -1552,14 +1599,14 @@ function DashboardContent() {
 
       {isTeamJoinModalOpen && (
         <div className="fixed inset-0 z-[300] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-[2rem] w-full max-w-2xl shadow-[0_0_50px_rgba(0,0,0,0.5)] overflow-hidden animate-in zoom-in-95 duration-300">
-            <div className="bg-gradient-to-br from-blue-600 to-indigo-600 p-8 text-white relative">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl sm:rounded-[2rem] w-full max-w-2xl shadow-[0_0_50px_rgba(0,0,0,0.5)] overflow-hidden animate-in zoom-in-95 duration-300">
+            <div className="bg-gradient-to-br from-blue-600 to-indigo-600 p-5 sm:p-8 text-white relative">
                <div className="absolute top-0 right-0 w-48 h-48 bg-white/10 blur-[50px] rounded-full"></div>
-               <button onClick={() => setIsTeamJoinModalOpen(false)} className="absolute top-6 right-6 w-8 h-8 flex items-center justify-center bg-white/10 hover:bg-white/20 rounded-full transition-colors z-10"><X className="w-5 h-5 text-white" /></button>
-               <h2 className="text-3xl font-black mb-2 flex items-center gap-3 relative z-10"><Users className="w-8 h-8 text-amber-300" /> Join Your Team</h2>
-               <p className="text-blue-100 font-medium relative z-10">Search the database to link your profile to your High School roster.</p>
+               <button onClick={() => setIsTeamJoinModalOpen(false)} className="absolute top-4 right-4 sm:top-6 sm:right-6 w-8 h-8 flex items-center justify-center bg-white/10 hover:bg-white/20 rounded-full transition-colors z-10"><X className="w-5 h-5 text-white" /></button>
+               <h2 className="text-2xl sm:text-3xl font-black mb-2 flex items-center gap-3 relative z-10"><Users className="w-6 h-6 sm:w-8 sm:h-8 text-amber-300" /> Join Your Team</h2>
+               <p className="text-blue-100 font-medium text-sm sm:text-base relative z-10">Search the database to link your profile to your High School roster.</p>
             </div>
-            <div className="p-8 space-y-6 max-h-[75vh] overflow-y-auto custom-scrollbar">
+            <div className="p-5 sm:p-8 space-y-5 sm:space-y-6 max-h-[75vh] overflow-y-auto custom-scrollbar">
               {!showAddTeamForm ? (
                 <>
                   <div className="relative" ref={teamDropdownRef}>
@@ -1588,19 +1635,19 @@ function DashboardContent() {
                     )}
                     {teamForm.city && teamForm.state && <p className="text-xs font-bold text-emerald-500 mt-2 flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" /> Verified Location: {teamForm.city}, {teamForm.state}</p>}
                   </div>
-                  <button onClick={handleSaveTeamJoin} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-4 rounded-xl shadow-lg transition-transform active:scale-[0.98] text-sm flex items-center justify-center gap-2 mt-4"><Save className="w-5 h-5"/> Join Team Roster</button>
+                  <button onClick={handleSaveTeamJoin} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 sm:py-4 rounded-xl shadow-lg transition-transform active:scale-[0.98] text-sm flex items-center justify-center gap-2 mt-4"><Save className="w-5 h-5"/> Join Team Roster</button>
                 </>
               ) : (
                 <div className="animate-in slide-in-from-right-8 duration-300">
-                   <button onClick={() => setShowAddTeamForm(false)} className="text-sm font-bold text-blue-400 hover:text-blue-300 flex items-center gap-1 mb-6"><ChevronDown className="w-4 h-4 rotate-90" /> Back to Team Search</button>
-                   <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 mb-6"><h4 className="text-sm font-black text-blue-400 flex items-center gap-2 mb-1"><Map className="w-4 h-4" /> Global Database Addition</h4><p className="text-xs font-medium text-blue-300">You are adding a new High School to the global database. Name formatting is auto-enforced.</p></div>
-                   <div className="space-y-5">
+                   <button onClick={() => setShowAddTeamForm(false)} className="text-sm font-bold text-blue-400 hover:text-blue-300 flex items-center gap-1 mb-5 sm:mb-6"><ChevronDown className="w-4 h-4 rotate-90" /> Back to Team Search</button>
+                   <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-3 sm:p-4 mb-5 sm:mb-6"><h4 className="text-sm font-black text-blue-400 flex items-center gap-2 mb-1"><Map className="w-4 h-4" /> Global Database Addition</h4><p className="text-xs font-medium text-blue-300">You are adding a new High School to the global database. Name formatting is auto-enforced.</p></div>
+                   <div className="space-y-4 sm:space-y-5">
                       <div><label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">High School Name <span className="text-red-500">*</span></label><input type="text" value={newTeamName} onChange={(e) => setNewTeamName(e.target.value)} onBlur={() => setNewTeamName(normalizeHSName(newTeamName))} className="w-full bg-slate-950 text-white border border-slate-800 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none" placeholder="e.g. South Albany High School"/></div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
                         <div><label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Team Mascot <span className="text-red-500">*</span></label><input type="text" value={newTeamMascot} onChange={(e) => setNewTeamNameMascot(e.target.value)} className="w-full bg-slate-950 text-white border border-slate-800 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none" placeholder="e.g. RedHawks"/></div>
                         <div><label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">State Division <span className="text-red-500">*</span></label><input type="text" value={newTeamDivision} onChange={(e) => setNewTeamDivision(e.target.value)} className="w-full bg-slate-950 text-white border border-slate-800 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none" placeholder="e.g. 5A, Division 1"/></div>
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
                         <div><label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">City <span className="text-red-500">*</span></label><input type="text" value={newTeamCity} onChange={(e) => setNewTeamCity(e.target.value)} className="w-full bg-slate-950 text-white border border-slate-800 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none" placeholder="e.g. Albany"/></div>
                         <div>
                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">State <span className="text-red-500">*</span></label>
@@ -1609,7 +1656,7 @@ function DashboardContent() {
                            </select>
                         </div>
                       </div>
-                      <button onClick={handleCreateNewTeam} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded-xl shadow-lg transition-transform active:scale-[0.98] text-sm flex items-center justify-center gap-2 mt-2"><Save className="w-5 h-5"/> Create & Select Team</button>
+                      <button onClick={handleCreateNewTeam} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-3 sm:py-4 rounded-xl shadow-lg transition-transform active:scale-[0.98] text-sm flex items-center justify-center gap-2 mt-2"><Save className="w-5 h-5"/> Create & Select Team</button>
                    </div>
                 </div>
               )}

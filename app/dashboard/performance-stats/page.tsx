@@ -52,23 +52,21 @@ function PerformanceStatsContent({ state, actions }: PerformanceStatsProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // Local Component States
   const [isSportsMenuOpen, setIsSportsMenuOpen] = useState(false);
   const sportsMenuRef = React.useRef<HTMLDivElement>(null);
-
+  
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [localUnlocked, setLocalUnlocked] = useState(false);
+  const [localCollapseMap, setLocalCollapseMap] = useState<Record<string, boolean>>({});
+  const [infoExpanded, setInfoExpanded] = useState<Record<string, boolean>>({});
 
-  // Next.js Page Route Guard: If accessed directly without props, redirect to the real hub.
   useEffect(() => {
     if (!state || !actions) {
       const tab = searchParams.get('tab');
-      // Forward the intent to the main dashboard instead of stripping it
       router.replace(`/dashboard?view=performance${tab ? `&tab=${tab}` : ''}`);
     }
   }, [state, actions, router, searchParams]);
 
-  // Handle clicking outside of the local sports dropdown
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (sportsMenuRef.current && !sportsMenuRef.current.contains(event.target as Node)) {
@@ -79,7 +77,6 @@ function PerformanceStatsContent({ state, actions }: PerformanceStatsProps) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // RENDER LOADING FALLBACK WHILE REDIRECTING
   if (!state || !actions) {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center animate-in fade-in duration-500">
@@ -101,7 +98,6 @@ function PerformanceStatsContent({ state, actions }: PerformanceStatsProps) {
     setShowAllViewersModal, handleContactCoach, handleToggleSportDropdown
   } = actions;
 
-  // Evaluate if the user has unlocked the basic numeric analytics
   const hasUnlockedAnalytics = useMemo(() => {
     if (localUnlocked) return true;
     if (gatingMode?.hasAccess) return true;
@@ -109,7 +105,6 @@ function PerformanceStatsContent({ state, actions }: PerformanceStatsProps) {
     return false;
   }, [athleteProfile, gatingMode, localUnlocked]);
 
-  // Handle Point Unlock Transaction
   const handleUnlockAnalytics = async () => {
     if (!athleteProfile || isUnlocking) return;
 
@@ -132,26 +127,33 @@ function PerformanceStatsContent({ state, actions }: PerformanceStatsProps) {
     if (error) {
         showToast("Failed to process transaction. Please try again.", "error");
     } else {
-        setLocalUnlocked(true); // Instant UI Update
+        setLocalUnlocked(true); 
         showToast("Basic Analytics unlocked successfully!", "success");
     }
     setIsUnlocking(false);
   };
 
-  // DUAL-LAYER PERSISTENCE: Fallback to localStorage if parent load missed it, and ensure DB errors are caught.
+  const getIsCollapsed = (sport: string) => {
+    if (localCollapseMap[sport] !== undefined) return localCollapseMap[sport];
+    if (collapsedSports[sport] !== undefined) return collapsedSports[sport] === true;
+    if (typeof window !== 'undefined' && athleteProfile?.id) {
+      const local = localStorage.getItem(`chased_collapse_${athleteProfile.id}_${sport}`);
+      if (local !== null) return local === 'true';
+    }
+    return true; 
+  };
+
   const handleCollapseToggle = async (sport: string) => {
-    const isCurrentlyCollapsed = collapsedSports[sport] === true;
+    const isCurrentlyCollapsed = getIsCollapsed(sport);
     const sendState = !isCurrentlyCollapsed;
     
-    // 1. Optimistic UI update
-    toggleSportCollapse(sport);
+    setLocalCollapseMap(prev => ({ ...prev, [sport]: sendState }));
+    toggleSportCollapse(sport); 
 
-    // 2. Local Storage sync for instant client-side persistence on reload
     if (typeof window !== 'undefined' && athleteProfile?.id) {
       localStorage.setItem(`chased_collapse_${athleteProfile.id}_${sport}`, String(sendState));
     }
 
-    // 3. Persist strict boolean to Supabase
     if (athleteProfile?.id) {
       const supabase = createClient();
       const { error } = await supabase
@@ -166,14 +168,29 @@ function PerformanceStatsContent({ state, actions }: PerformanceStatsProps) {
     }
   };
 
-  const renderSportBlock = (sport: string) => {
-    // Check state first, fallback to localStorage if parent is out of sync during hydration
-    let isCollapsed = collapsedSports[sport] === true;
-    if (typeof window !== 'undefined' && athleteProfile?.id && collapsedSports[sport] === undefined) {
-      const localState = localStorage.getItem(`chased_collapse_${athleteProfile.id}_${sport}`);
-      if (localState) isCollapsed = localState === 'true';
+  const scrollToSport = (sport: string) => {
+    const isCurrentlyCollapsed = getIsCollapsed(sport);
+    
+    if (isCurrentlyCollapsed) {
+      handleCollapseToggle(sport);
     }
+    
+    setTimeout(() => {
+      const elementId = `sport-block-${sport.replace(/\s+/g, '-')}`;
+      const el = document.getElementById(elementId);
+      if (el) {
+        const y = el.getBoundingClientRect().top + window.scrollY - 120;
+        window.scrollTo({ top: y, behavior: 'smooth' });
+      }
+    }, 150);
+  };
 
+  const toggleInfo = (sport: string) => {
+    setInfoExpanded(prev => ({ ...prev, [sport]: !prev[sport] }));
+  };
+
+  const renderSportBlock = (sport: string) => {
+    const isCollapsed = getIsCollapsed(sport);
     const stats = sportStats[sport] || { calculatedRating: 0 };
     const displayRating = getDisplayRating(sport);
     const tierStyles = getTierStyles(displayRating);
@@ -185,32 +202,35 @@ function PerformanceStatsContent({ state, actions }: PerformanceStatsProps) {
     return (
       <div 
         key={sport} 
-        className={`backdrop-blur-2xl rounded-[2rem] border flex-1 transition-all duration-500 group ${getEquippedGlow(athleteProfile?.equipped_border)} ${sportMenuOpen === sport ? 'overflow-visible z-50' : 'overflow-hidden z-10'}`}
+        id={`sport-block-${sport.replace(/\s+/g, '-')}`}
+        className={`backdrop-blur-2xl border flex-1 transition-all duration-500 group ${getEquippedGlow(athleteProfile?.equipped_border)} z-10 ${sportMenuOpen === sport ? 'z-50 overflow-visible' : 'overflow-visible'} rounded-[2rem]`}
       >
         <div 
           onClick={() => handleCollapseToggle(sport)} 
-          className="w-full flex items-center justify-between p-6 hover:bg-white/[0.03] transition-colors cursor-pointer"
+          className={`w-full flex items-center justify-between p-4 sm:p-6 hover:bg-white/[0.03] transition-colors cursor-pointer rounded-t-[2rem] ${isCollapsed ? 'rounded-b-[2rem]' : ''} gap-2`}
         >
-          <div className="flex items-center gap-4">
-            <div className={`p-3 bg-indigo-500/10 rounded-2xl border border-indigo-500/30 shadow-[0_0_15px_rgba(99,102,241,0.2)] group-hover:scale-110 group-hover:shadow-[0_0_20px_rgba(99,102,241,0.4)] transition-all duration-300`}>
-              <TrendingUp className="w-6 h-6 text-indigo-400" />
+          {/* min-w-0 flex-1 forces the container to shrink and wrap text instead of pushing UI off mobile screens */}
+          <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
+            <div className={`p-2 sm:p-3 bg-indigo-500/10 rounded-xl sm:rounded-2xl border border-indigo-500/30 shadow-[0_0_15px_rgba(99,102,241,0.2)] shrink-0 group-hover:scale-110 group-hover:shadow-[0_0_20px_rgba(99,102,241,0.4)] transition-all duration-300`}>
+              <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6 text-indigo-400" />
             </div>
-            <div className="text-left">
-              <h3 className="text-xl font-black text-white tracking-tight">{sport}</h3>
-              <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-0.5">{displayLevelText}</p>
+            <div className="text-left min-w-0 flex-1">
+              <h3 className="text-lg sm:text-xl font-black text-white tracking-tight truncate">{sport}</h3>
+              {/* Used line-clamp-2 and break-words for long Placements & Honors strings returned in displayLevelText */}
+              <p className="text-slate-400 text-[10px] sm:text-xs font-bold uppercase tracking-widest mt-0.5 break-words line-clamp-2 sm:line-clamp-none">{displayLevelText}</p>
             </div>
           </div>
           
-          <div className="flex items-center gap-4 sm:gap-6">
-             <div className={`px-4 py-2 rounded-xl border ${tierStyles.borderClass} ${tierStyles.bgClass} ${tierStyles.glowClass} flex items-center gap-2 transition-all duration-500 group-hover:scale-105`}>
-                <span className={`text-xl sm:text-2xl font-black ${tierStyles.colorClass}`}>{displayRating}</span>
-                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">/99</span>
+          <div className="flex items-center gap-2 sm:gap-6 shrink-0">
+             <div className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl border ${tierStyles.borderClass} ${tierStyles.bgClass} ${tierStyles.glowClass} flex items-center gap-1 sm:gap-2 transition-all duration-500 group-hover:scale-105`}>
+                <span className={`text-lg sm:text-2xl font-black ${tierStyles.colorClass}`}>{displayRating}</span>
+                <span className="text-[9px] sm:text-[10px] font-black text-slate-500 uppercase tracking-widest">/99</span>
              </div>
 
              <div className="relative z-50">
                <button 
                  onClick={(e) => { e.stopPropagation(); setSportMenuOpen(sportMenuOpen === sport ? null : sport); }}
-                 className="p-2 text-slate-400 hover:text-white hover:bg-slate-800/80 rounded-xl transition-all hover:shadow-lg focus:outline-none"
+                 className="p-1.5 sm:p-2 text-slate-400 hover:text-white hover:bg-slate-800/80 rounded-xl transition-all hover:shadow-lg focus:outline-none"
                >
                  <MoreHorizontal className="w-5 h-5" />
                </button>
@@ -237,7 +257,6 @@ function PerformanceStatsContent({ state, actions }: PerformanceStatsProps) {
           </div>
         </div>
         
-        {/* Smooth Glassy Dropdown Content */}
         {!isCollapsed && (
           <div className="p-4 sm:p-6 border-t border-white/10 bg-black/20 animate-in fade-in slide-in-from-top-4 duration-500 rounded-b-[2rem]">
              {stats.calculatedRating > 0 && athleteProfile?.id && (
@@ -245,10 +264,23 @@ function PerformanceStatsContent({ state, actions }: PerformanceStatsProps) {
                    <GlobalPercentileTracker athleteId={athleteProfile.id} sportName={sport} currentScore={stats.calculatedRating} />
                 </div>
              )}
-             <div className="bg-indigo-500/5 p-4 border border-indigo-500/20 rounded-2xl mb-6 mx-2 sm:mx-4 text-xs font-medium text-indigo-300 shadow-inner flex items-start gap-3 backdrop-blur-sm">
-                <Info className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
-                <p className="leading-relaxed">Your baseline rank will <strong className="text-indigo-200 font-black">ONLY</strong> be calculated through the <strong className="text-indigo-200 font-black">Season Placement</strong> section. Unless you compete in a stat-based sport (e.g., Track, Swimming, XC, Bowling, Golf).</p>
+             
+             <div 
+               onClick={(e) => { e.stopPropagation(); toggleInfo(sport); }}
+               className="bg-indigo-500/5 p-3 sm:p-4 border border-indigo-500/20 rounded-2xl mb-6 mx-2 sm:mx-4 text-xs font-medium text-indigo-300 shadow-inner flex flex-col gap-2 backdrop-blur-sm cursor-pointer hover:bg-indigo-500/10 transition-colors"
+             >
+                <div className="flex items-center gap-3">
+                  <Info className="w-5 h-5 text-indigo-400 shrink-0" />
+                  <span className="font-bold text-sm tracking-wide">How is my baseline rank calculated?</span>
+                  <ChevronDown className={`w-4 h-4 ml-auto transition-transform ${infoExpanded[sport] ? 'rotate-180' : ''}`} />
+                </div>
+                {infoExpanded[sport] && (
+                  <p className="leading-relaxed mt-2 pl-8 pr-2 pb-1 animate-in fade-in slide-in-from-top-2 duration-200 text-slate-300 break-words whitespace-normal">
+                    Your baseline rank will <strong className="text-indigo-200 font-black">ONLY</strong> be calculated through the <strong className="text-indigo-200 font-black">Season Placements and Honors</strong> section. Unless you compete in a stat-based sport (e.g., Track, Swimming, XC, Bowling, Golf).
+                  </p>
+                )}
              </div>
+
              <SportEditorRegistry 
                sport={sport}
                sportStats={sportStats[sport] || { metrics: [], metaContext: {} }}
@@ -267,62 +299,59 @@ function PerformanceStatsContent({ state, actions }: PerformanceStatsProps) {
   };
 
   const renderDisabledSportBlock = (sport: string) => (
-    <div key={`disabled-${sport}`} className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-4 flex items-center justify-between opacity-70 hover:opacity-100 hover:shadow-[0_4px_20px_rgba(0,0,0,0.3)] hover:-translate-y-0.5 transition-all duration-300 group">
-       <div className="flex items-center gap-4">
-         <div className="p-2.5 bg-white/5 rounded-xl border border-white/10 group-hover:border-white/20 transition-colors">
+    <div key={`disabled-${sport}`} className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-2xl p-4 flex items-center justify-between opacity-70 hover:opacity-100 hover:shadow-[0_4px_20px_rgba(0,0,0,0.3)] hover:-translate-y-0.5 transition-all duration-300 group gap-2">
+       <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
+         <div className="p-2 sm:p-2.5 bg-white/5 rounded-xl border border-white/10 group-hover:border-white/20 transition-colors shrink-0">
            <Activity className="w-4 h-4 text-slate-400" />
          </div>
-         <div>
-           <h4 className="text-sm font-black text-slate-200">{sport}</h4>
-           <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Currently Disabled</p>
+         <div className="min-w-0 flex-1">
+           <h4 className="text-sm font-black text-slate-200 truncate">{sport}</h4>
+           <p className="text-[9px] sm:text-[10px] font-bold text-slate-500 uppercase tracking-widest truncate">Currently Disabled</p>
          </div>
        </div>
-       <div className="flex items-center gap-2">
-         <button onClick={() => setSportActiveState(sport, true)} className="text-xs font-bold bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white px-4 py-2 rounded-xl transition-all border border-emerald-500/20 hover:shadow-[0_0_15px_rgba(16,185,129,0.4)] shadow-sm">Enable</button>
-         <button onClick={() => setSportToDelete(sport)} className="text-xs font-bold bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white px-3 py-2 rounded-xl transition-all border border-red-500/20 hover:shadow-[0_0_15px_rgba(239,68,68,0.4)] shadow-sm"><Trash2 className="w-4 h-4" /></button>
+       <div className="flex items-center gap-2 shrink-0">
+         <button onClick={() => setSportActiveState(sport, true)} className="text-[10px] sm:text-xs font-bold bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white px-3 sm:px-4 py-2 rounded-xl transition-all border border-emerald-500/20 hover:shadow-[0_0_15px_rgba(16,185,129,0.4)] shadow-sm">Enable</button>
+         <button onClick={() => setSportToDelete(sport)} className="text-[10px] sm:text-xs font-bold bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white px-3 py-2 rounded-xl transition-all border border-red-500/20 hover:shadow-[0_0_15px_rgba(239,68,68,0.4)] shadow-sm"><Trash2 className="w-4 h-4" /></button>
        </div>
     </div>
   );
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-6 duration-500">
-      
-      {/* 🚨 PERFECTLY CENTERED GLOSSY SUB-NAVIGATION */}
       <div className="w-full flex justify-center mb-8">
-        <div className="inline-flex bg-slate-900/60 backdrop-blur-2xl p-1.5 rounded-[1.25rem] border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
+        <div className="inline-flex bg-slate-900/60 backdrop-blur-2xl p-1.5 rounded-[1.25rem] border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.3)] max-w-full overflow-x-auto custom-scrollbar">
           <button 
             onClick={() => setSocialSubTab('performance')} 
-            className={`px-8 py-3.5 rounded-xl text-sm font-black transition-all duration-300 flex items-center justify-center gap-2 whitespace-nowrap ${socialSubTab === 'performance' ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-[0_4px_20px_rgba(99,102,241,0.4)] scale-[1.02]' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+            className={`px-5 sm:px-8 py-3.5 rounded-xl text-[11px] sm:text-sm font-black transition-all duration-300 flex items-center justify-center gap-2 whitespace-nowrap ${socialSubTab === 'performance' ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-[0_4px_20px_rgba(99,102,241,0.4)] scale-[1.02]' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
           >
-            <Activity className="w-4 h-4" /> Performance Hub
+            <Activity className="w-4 h-4 shrink-0" /> Performance Hub
           </button>
           <button 
             onClick={() => setSocialSubTab('analytics')} 
-            className={`px-8 py-3.5 rounded-xl text-sm font-black transition-all duration-300 flex items-center justify-center gap-2 whitespace-nowrap ${socialSubTab === 'analytics' ? 'bg-gradient-to-r from-blue-600 to-cyan-500 text-white shadow-[0_4px_20px_rgba(37,99,235,0.4)] scale-[1.02]' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+            className={`px-5 sm:px-8 py-3.5 rounded-xl text-[11px] sm:text-sm font-black transition-all duration-300 flex items-center justify-center gap-2 whitespace-nowrap ${socialSubTab === 'analytics' ? 'bg-gradient-to-r from-blue-600 to-cyan-500 text-white shadow-[0_4px_20px_rgba(37,99,235,0.4)] scale-[1.02]' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
           >
-            <BarChart3 className="w-4 h-4" /> Analytics
+            <BarChart3 className="w-4 h-4 shrink-0" /> Analytics
           </button>
         </div>
       </div>
 
       {socialSubTab === 'performance' && (
-         <div className={`backdrop-blur-2xl rounded-[2.5rem] p-6 md:p-10 border transition-all duration-500 ${getEquippedGlow(athleteProfile?.equipped_border)}`}>
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 pb-6 border-b border-white/10 gap-4">
+         <div className={`backdrop-blur-2xl rounded-[2.5rem] p-4 sm:p-6 md:p-10 border transition-all duration-500 ${getEquippedGlow(athleteProfile?.equipped_border)}`}>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 pb-6 border-b border-white/10 gap-4">
                <div>
-                 <h2 className="text-3xl font-black text-white flex items-center gap-3 tracking-tight">
-                   <Activity className="w-7 h-7 text-indigo-400 drop-shadow-[0_0_15px_rgba(99,102,241,0.5)]" /> Performance Hub
+                 <h2 className="text-2xl sm:text-3xl font-black text-white flex items-center gap-3 tracking-tight">
+                   <Activity className="w-6 h-6 sm:w-7 sm:h-7 text-indigo-400 drop-shadow-[0_0_15px_rgba(99,102,241,0.5)] shrink-0" /> Performance Hub
                  </h2>
-                 <p className="text-slate-400 font-medium text-sm mt-2">Manage, update, and evaluate your sport-specific stats to increase match rating.</p>
+                 <p className="text-slate-400 font-medium text-xs sm:text-sm mt-2 break-words whitespace-normal">Manage, update, and evaluate your sport-specific stats to increase match rating.</p>
                </div>
                
-               {/* Add / Update Sports Dropdown */}
-               <div className="relative inline-block text-left w-full sm:w-auto" ref={sportsMenuRef}>
-                 <button onClick={() => setIsSportsMenuOpen(!isSportsMenuOpen)} className="inline-flex items-center justify-center w-full sm:w-auto gap-2 font-black px-6 py-3 rounded-xl transition-all shadow-[0_0_20px_rgba(6,182,212,0.3)] bg-cyan-500 hover:bg-cyan-400 text-white border border-cyan-400">
-                    <Plus className="w-4 h-4" /> Add / Update Sports <ChevronDown className={`w-4 h-4 transition-transform ${isSportsMenuOpen ? 'rotate-180' : ''}`} />
+               <div className="relative inline-block text-left w-full sm:w-auto shrink-0" ref={sportsMenuRef}>
+                 <button onClick={() => setIsSportsMenuOpen(!isSportsMenuOpen)} className="inline-flex items-center justify-center w-full sm:w-auto gap-2 font-black px-5 sm:px-6 py-3.5 sm:py-3 rounded-xl transition-all shadow-[0_0_20px_rgba(6,182,212,0.3)] bg-cyan-500 hover:bg-cyan-400 text-white border border-cyan-400 text-sm">
+                    <Plus className="w-4 h-4 shrink-0" /> Add / Update Sports <ChevronDown className={`w-4 h-4 shrink-0 transition-transform ${isSportsMenuOpen ? 'rotate-180' : ''}`} />
                  </button>
                  
                  {isSportsMenuOpen && (
-                   <div className="absolute right-0 mt-3 w-[280px] sm:w-[320px] bg-slate-900 rounded-2xl shadow-2xl border border-cyan-500/30 p-3 sm:p-4 z-[100] max-h-[60vh] overflow-y-auto custom-scrollbar text-white text-left animate-in fade-in slide-in-from-top-2 duration-200">
+                   <div className="absolute right-0 mt-3 w-full sm:w-[320px] bg-slate-900 rounded-2xl shadow-2xl border border-cyan-500/30 p-3 sm:p-4 z-[100] max-h-[60vh] overflow-y-auto custom-scrollbar text-white text-left animate-in fade-in slide-in-from-top-2 duration-200">
                       <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 px-3 py-2 border-b border-slate-800 mb-2">Sport Specifications</p>
                       <div className="grid grid-cols-1 gap-2">
                         {ALL_SPORTS.map((sport: string) => {
@@ -332,7 +361,7 @@ function PerformanceStatsContent({ state, actions }: PerformanceStatsProps) {
                                <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors shrink-0 ${isActive ? 'bg-cyan-500 border-cyan-500' : 'bg-slate-950 border-slate-700 group-hover:border-cyan-500'}`}>
                                   {isActive && <CheckCircle2 className="w-3 h-3 text-white" />}
                                </div>
-                               <span className={`text-sm font-bold truncate select-none ${isActive ? 'text-white' : 'text-slate-400'}`}>{sport}</span>
+                               <span className={`text-sm font-bold break-words whitespace-normal leading-tight select-none ${isActive ? 'text-white' : 'text-slate-400'}`}>{sport}</span>
                             </div>
                           )
                         })}
@@ -342,25 +371,44 @@ function PerformanceStatsContent({ state, actions }: PerformanceStatsProps) {
                </div>
             </div>
             
+            {Object.keys(sportStats).length > 0 && userSports.length > 0 && (
+              <div className="block md:hidden w-full overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] pb-5 mb-4 border-b border-white/5">
+                <div className="flex items-center gap-2 px-1">
+                  <Search className="w-4 h-4 text-slate-500 shrink-0 mr-1" />
+                  <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest whitespace-nowrap shrink-0">Quick Jump:</span>
+                  {userSports.map((sport: string) => (
+                     <button
+                       key={`quick-${sport}`}
+                       onClick={() => scrollToSport(sport)}
+                       className="whitespace-nowrap px-4 py-2 rounded-xl bg-slate-800/50 border border-white/10 text-xs font-bold text-cyan-400 hover:text-white hover:bg-cyan-500/20 hover:border-cyan-500/30 active:scale-95 transition-all shadow-sm flex items-center gap-2"
+                     >
+                       <Activity className="w-3 h-3 shrink-0" />
+                       {sport}
+                     </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            
             {Object.keys(sportStats).length > 0 ? (
-               <div className="grid grid-cols-1 gap-8">
+               <div className="grid grid-cols-1 gap-6 sm:gap-8 relative">
                  {userSports.map((sport: string) => renderSportBlock(sport))}
                  {disabledSportsList.length > 0 && (
-                   <div className="pt-8 border-t border-white/10 mt-4">
+                   <div className="pt-8 border-t border-white/10 mt-2 sm:mt-4">
                      <h3 className="text-xs font-black uppercase tracking-widest text-slate-500 mb-6 px-1">Disabled Sports</h3>
-                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
                        {disabledSportsList.map((sport: string) => renderDisabledSportBlock(sport))}
                      </div>
                    </div>
                  )}
                </div>
             ) : (
-               <div className="flex flex-col items-center justify-center py-20 px-4 text-center border-2 border-dashed border-white/10 rounded-[2rem] bg-black/20 backdrop-blur-md">
-                 <div className="w-20 h-20 bg-white/5 border border-white/10 rounded-full flex items-center justify-center shadow-inner mb-6 shadow-[0_0_30px_rgba(255,255,255,0.05)]">
-                   <Activity className="w-10 h-10 text-slate-500" />
+               <div className="flex flex-col items-center justify-center py-16 sm:py-20 px-4 text-center border-2 border-dashed border-white/10 rounded-[2rem] bg-black/20 backdrop-blur-md mt-4">
+                 <div className="w-16 h-16 sm:w-20 sm:h-20 bg-white/5 border border-white/10 rounded-full flex items-center justify-center shadow-inner mb-6 shadow-[0_0_30px_rgba(255,255,255,0.05)]">
+                   <Activity className="w-8 h-8 sm:w-10 sm:h-10 text-slate-500" />
                  </div>
-                 <h3 className="text-2xl font-black text-white mb-2 tracking-tight">No Sports Loaded</h3>
-                 <p className="text-sm font-medium text-slate-400 max-w-md mb-8">To rank in the matchmaker algorithm, add your sport from the Hero Header dropdown above.</p>
+                 <h3 className="text-xl sm:text-2xl font-black text-white mb-2 tracking-tight">No Sports Loaded</h3>
+                 <p className="text-xs sm:text-sm font-medium text-slate-400 max-w-md mb-8">To rank in the matchmaker algorithm, add your sport from the Hero Header dropdown above.</p>
                </div>
             )}
          </div>
@@ -368,129 +416,125 @@ function PerformanceStatsContent({ state, actions }: PerformanceStatsProps) {
 
       {socialSubTab === 'analytics' && (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-6 duration-500">
-          <div className={`backdrop-blur-2xl rounded-[2.5rem] p-6 md:p-10 border relative overflow-hidden transition-all duration-500 ${getEquippedGlow(athleteProfile?.equipped_border)}`}>
-            <div className="flex items-center justify-between mb-8 pb-6 border-b border-white/10">
+          <div className={`backdrop-blur-2xl rounded-[2.5rem] p-4 sm:p-6 md:p-10 border relative overflow-hidden transition-all duration-500 ${getEquippedGlow(athleteProfile?.equipped_border)}`}>
+            <div className="flex items-center justify-between mb-6 sm:mb-8 pb-6 border-b border-white/10">
               <div>
-                <h2 className="text-3xl font-black text-white flex items-center tracking-tight">
-                  <BarChart3 className="w-7 h-7 mr-3 text-blue-400 drop-shadow-[0_0_15px_rgba(96,165,250,0.5)]" /> Scouting Analytics
+                <h2 className="text-2xl sm:text-3xl font-black text-white flex items-center tracking-tight">
+                  <BarChart3 className="w-6 h-6 sm:w-7 sm:h-7 mr-3 text-blue-400 drop-shadow-[0_0_15px_rgba(96,165,250,0.5)] shrink-0" /> Scouting Analytics
                 </h2>
-                <p className="text-slate-400 font-medium mt-2">See exactly how much traction your profile is getting with college coaches.</p>
+                <p className="text-slate-400 font-medium mt-2 text-xs sm:text-sm break-words whitespace-normal">See exactly how much traction your profile is getting with college coaches.</p>
               </div>
             </div>
 
             <div className={`relative ${!hasUnlockedAnalytics ? 'min-h-[350px]' : ''}`}>
-              <div className="mb-8">
-                <div className="bg-gradient-to-br from-blue-900/40 to-indigo-900/40 border border-blue-500/20 rounded-[2rem] p-8 md:p-10 flex flex-col sm:flex-row items-center justify-between gap-8 shadow-[0_10px_40px_rgba(0,0,0,0.2)] backdrop-blur-md transition-all duration-500 hover:border-blue-400/40 hover:shadow-[0_10px_40px_rgba(59,130,246,0.15)]">
+              <div className="mb-6 sm:mb-8">
+                <div className="bg-gradient-to-br from-blue-900/40 to-indigo-900/40 border border-blue-500/20 rounded-[2rem] p-6 sm:p-8 md:p-10 flex flex-col sm:flex-row items-center justify-between gap-6 sm:gap-8 shadow-[0_10px_40px_rgba(0,0,0,0.2)] backdrop-blur-md transition-all duration-500 hover:border-blue-400/40 hover:shadow-[0_10px_40px_rgba(59,130,246,0.15)] text-center sm:text-left">
                   <div>
-                    <p className="text-xs font-bold text-blue-400 uppercase tracking-widest mb-2 flex items-center gap-1.5 drop-shadow-sm"><Eye className="w-4 h-4" /> All-Time Profile Clicks</p>
+                    <p className="text-[10px] sm:text-xs font-bold text-blue-400 uppercase tracking-widest mb-2 flex items-center justify-center sm:justify-start gap-1.5 drop-shadow-sm"><Eye className="w-4 h-4 shrink-0" /> All-Time Profile Clicks</p>
                     <h3 className="text-5xl md:text-6xl font-black text-white tracking-tight drop-shadow-md">{athleteProfile?.profile_views || 0}</h3>
                   </div>
-                  <div className="text-center sm:text-right max-w-[220px]">
-                    <p className="text-sm font-medium text-slate-300 leading-relaxed">Coaches have actively clicked to view your full profile and metrics.</p>
+                  <div className="max-w-[220px]">
+                    <p className="text-xs sm:text-sm font-medium text-slate-300 leading-relaxed break-words whitespace-normal">Coaches have actively clicked to view your full profile and metrics.</p>
                   </div>
                 </div>
               </div>
 
-              <div className="relative rounded-[2rem] border border-white/10 bg-black/20 p-8 overflow-hidden backdrop-blur-md">
-                
-                {/* 🚨 DYNAMIC POINTS LOCK / PREMIUM UPSELL OVERLAY 🚨 */}
+              <div className="relative rounded-[2rem] border border-white/10 bg-black/20 p-5 sm:p-8 overflow-hidden backdrop-blur-md">
                 {!hasUnlockedAnalytics && (
-                  <div className="absolute inset-0 z-20 bg-slate-950/80 backdrop-blur-xl flex flex-col items-center justify-center text-center p-8">
-                    <div className="absolute top-6 right-6 bg-slate-800 text-slate-400 font-black tracking-widest text-[10px] uppercase px-3 py-1 rounded-lg border border-white/10 shadow-sm">Locked</div>
-                    <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mb-5 border border-white/10 shadow-[0_0_30px_rgba(255,255,255,0.05)]">
-                      <Lock className="w-7 h-7 text-slate-300" />
+                  <div className="absolute inset-0 z-20 bg-slate-950/80 backdrop-blur-xl flex flex-col items-center justify-center text-center p-6 sm:p-8">
+                    <div className="absolute top-4 right-4 sm:top-6 sm:right-6 bg-slate-800 text-slate-400 font-black tracking-widest text-[9px] sm:text-[10px] uppercase px-2 py-1 sm:px-3 sm:py-1 rounded-lg border border-white/10 shadow-sm">Locked</div>
+                    <div className="w-14 h-14 sm:w-16 sm:h-16 bg-white/5 rounded-full flex items-center justify-center mb-4 sm:mb-5 border border-white/10 shadow-[0_0_30px_rgba(255,255,255,0.05)]">
+                      <Lock className="w-6 h-6 sm:w-7 sm:h-7 text-slate-300" />
                     </div>
                     
-                    <h3 className="text-2xl font-black text-white mb-2 tracking-tight">Basic Analytics Locked</h3>
+                    <h3 className="text-xl sm:text-2xl font-black text-white mb-2 tracking-tight">Basic Analytics Locked</h3>
                     
-                    <p className="text-slate-400 text-sm font-medium mb-6 max-w-lg leading-relaxed">
+                    <p className="text-slate-400 text-xs sm:text-sm font-medium mb-6 max-w-lg leading-relaxed break-words whitespace-normal">
                       Unlock basic analytics to track your feed impressions and see <strong className="text-white">how many</strong> people view your profile. Upgrade to <strong className="text-amber-400">Premium</strong> below to see exactly <strong className="text-amber-400">WHO</strong> is viewing it.
                     </p>
                     
-                    <div className="flex flex-col sm:flex-row items-center gap-4">
+                    <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4 w-full sm:w-auto">
                       <button 
                         onClick={handleUnlockAnalytics}
                         disabled={isUnlocking}
-                        className="bg-slate-800 hover:bg-slate-700 text-white font-black px-6 py-3.5 rounded-xl shadow-lg hover:scale-105 transition-all flex items-center gap-2 text-sm border border-slate-700 active:scale-95 disabled:opacity-50 disabled:hover:scale-100"
+                        className="w-full sm:w-auto justify-center bg-slate-800 hover:bg-slate-700 text-white font-black px-5 sm:px-6 py-3.5 rounded-xl shadow-lg hover:scale-105 transition-all flex items-center gap-2 text-[11px] sm:text-sm border border-slate-700 active:scale-95 disabled:opacity-50 disabled:hover:scale-100"
                       >
-                        {isUnlocking ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Points className="w-5 h-5 text-amber-400" />} 
+                        {isUnlocking ? <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5 animate-spin shrink-0" /> : <Points className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400 shrink-0" />} 
                         Unlock for 1,000 pts
                       </button>
                       
-                      <Link href="/pro" className="bg-gradient-to-r from-amber-500 to-amber-600 text-white font-black px-6 py-3.5 rounded-xl shadow-[0_10px_30px_rgba(245,158,11,0.3)] hover:scale-105 transition-transform flex items-center gap-2 text-sm tracking-wide active:scale-95">
-                        <Crown className="w-5 h-5 drop-shadow-md" /> Get Premium
+                      <Link href="/pro" className="w-full sm:w-auto justify-center bg-gradient-to-r from-amber-500 to-amber-600 text-white font-black px-5 sm:px-6 py-3.5 rounded-xl shadow-[0_10px_30px_rgba(245,158,11,0.3)] hover:scale-105 transition-transform flex items-center gap-2 text-[11px] sm:text-sm tracking-wide active:scale-95">
+                        <Crown className="w-4 h-4 sm:w-5 sm:h-5 drop-shadow-md shrink-0" /> Get Premium
                       </Link>
                     </div>
 
                     {athleteProfile && (athleteProfile.coins || 0) < 1000 && (
-                      <p className="text-xs text-red-400 mt-4 font-bold">You only have {(athleteProfile.coins || 0).toLocaleString()} / 1,000 points.</p>
+                      <p className="text-[10px] sm:text-xs text-red-400 mt-4 font-bold">You only have {(athleteProfile.coins || 0).toLocaleString()} / 1,000 points.</p>
                     )}
                   </div>
                 )}
 
-                {/* Blurring active when points aren't met */}
                 <div className={`${!hasUnlockedAnalytics ? 'opacity-20 select-none blur-[4px] pointer-events-none' : ''}`}>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 mb-8">
-                    <div className="bg-slate-800/40 backdrop-blur-md rounded-2xl p-6 border border-white/5 shadow-lg relative transition-all duration-300 hover:-translate-y-1 hover:border-emerald-500/30 hover:bg-slate-800/60">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-5 mb-6 sm:mb-8">
+                    <div className="bg-slate-800/40 backdrop-blur-md rounded-2xl p-5 sm:p-6 border border-white/5 shadow-lg relative transition-all duration-300 hover:-translate-y-1 hover:border-emerald-500/30 hover:bg-slate-800/60">
                       <div className="flex items-center justify-between mb-3">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                        <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
                           Feed Impressions
-                          <button onClick={() => setShowImpressionTooltip(!showImpressionTooltip)} className="text-slate-500 hover:text-emerald-400 transition-colors focus:outline-none"><HelpCircle className="w-4 h-4" /></button>
+                          <button onClick={() => setShowImpressionTooltip(!showImpressionTooltip)} className="text-slate-500 hover:text-emerald-400 transition-colors focus:outline-none"><HelpCircle className="w-4 h-4 shrink-0" /></button>
                         </p>
-                        <Search className="w-5 h-5 text-emerald-400" />
+                        <Search className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400 shrink-0" />
                       </div>
-                      <h3 className="text-4xl font-black text-white tracking-tight">{athleteProfile?.search_appearances || 0}</h3>
+                      <h3 className="text-3xl sm:text-4xl font-black text-white tracking-tight">{athleteProfile?.search_appearances || 0}</h3>
                       {showImpressionTooltip && hasUnlockedAnalytics && (
-                        <div className="absolute top-14 left-0 w-[220px] bg-slate-800 text-slate-200 text-xs p-5 rounded-xl shadow-2xl z-50 animate-in fade-in zoom-in-95 border border-white/10">
+                        <div className="absolute top-14 left-0 w-[200px] sm:w-[220px] bg-slate-800 text-slate-200 text-[10px] sm:text-xs p-4 sm:p-5 rounded-xl shadow-2xl z-50 animate-in fade-in zoom-in-95 border border-white/10 break-words whitespace-normal">
                           <p className="mb-4 leading-relaxed font-medium">Number of times your profile appeared directly on a coach's screen.</p>
-                          <button onClick={() => setShowImpressionTooltip(false)} className="w-full bg-slate-900 hover:bg-slate-950 text-white font-bold py-2.5 rounded-lg transition-colors border border-white/5">Got it</button>
+                          <button onClick={() => setShowImpressionTooltip(false)} className="w-full bg-slate-900 hover:bg-slate-950 text-white font-bold py-2 sm:py-2.5 rounded-lg transition-colors border border-white/5">Got it</button>
                         </div>
                       )}
                     </div>
-                    <div className="bg-slate-800/40 backdrop-blur-md rounded-2xl p-6 border border-white/5 shadow-lg transition-all duration-300 hover:-translate-y-1 hover:border-blue-500/30 hover:bg-slate-800/60">
+                    <div className="bg-slate-800/40 backdrop-blur-md rounded-2xl p-5 sm:p-6 border border-white/5 shadow-lg transition-all duration-300 hover:-translate-y-1 hover:border-blue-500/30 hover:bg-slate-800/60">
                       <div className="flex items-center justify-between mb-3">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Views Today</p>
-                        <Activity className="w-5 h-5 text-blue-400" />
+                        <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest">Views Today</p>
+                        <Activity className="w-4 h-4 sm:w-5 sm:h-5 text-blue-400 shrink-0" />
                       </div>
-                      <h3 className="text-4xl font-black text-white tracking-tight">{dailyViews || 0}</h3>
+                      <h3 className="text-3xl sm:text-4xl font-black text-white tracking-tight">{dailyViews || 0}</h3>
                     </div>
-                    <div className="bg-slate-800/40 backdrop-blur-md rounded-2xl p-6 border border-white/5 shadow-lg transition-all duration-300 hover:-translate-y-1 hover:border-indigo-500/30 hover:bg-slate-800/60">
+                    <div className="bg-slate-800/40 backdrop-blur-md rounded-2xl p-5 sm:p-6 border border-white/5 shadow-lg transition-all duration-300 hover:-translate-y-1 hover:border-indigo-500/30 hover:bg-slate-800/60">
                       <div className="flex items-center justify-between mb-3">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Views This Month</p>
-                        <Calendar className="w-5 h-5 text-indigo-400" />
+                        <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest">Views This Month</p>
+                        <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-400 shrink-0" />
                       </div>
-                      <h3 className="text-4xl font-black text-white tracking-tight">{monthlyViews || 0}</h3>
+                      <h3 className="text-3xl sm:text-4xl font-black text-white tracking-tight">{monthlyViews || 0}</h3>
                     </div>
                   </div>
 
-                  <div className="border-t border-white/10 pt-8">
-                      <div className="flex items-center justify-between mb-6">
-                        <p className="text-sm font-black text-slate-300 uppercase tracking-widest flex items-center gap-2"><UserCircle2 className="w-5 h-5 text-indigo-400" /> Recent Coach Views</p>
+                  <div className="border-t border-white/10 pt-6 sm:pt-8">
+                      <div className="flex items-center justify-between mb-5 sm:mb-6">
+                        <p className="text-xs sm:text-sm font-black text-slate-300 uppercase tracking-widest flex items-center gap-2"><UserCircle2 className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-400 shrink-0" /> Recent Coach Views</p>
                         {allRecentViewers.length > 3 && (
-                          <button onClick={() => setShowAllViewersModal(true)} className="text-[10px] font-black text-indigo-300 hover:text-white uppercase tracking-widest bg-indigo-500/10 hover:bg-indigo-500/30 px-4 py-2 rounded-xl transition-all border border-indigo-500/20 shadow-sm">View All ({allRecentViewers.length})</button>
+                          <button onClick={() => setShowAllViewersModal(true)} className="text-[9px] sm:text-[10px] font-black text-indigo-300 hover:text-white uppercase tracking-widest bg-indigo-500/10 hover:bg-indigo-500/30 px-3 sm:px-4 py-2 rounded-xl transition-all border border-indigo-500/20 shadow-sm shrink-0">View All ({allRecentViewers.length})</button>
                         )}
                       </div>
                       
-                      {/* Premium Only Lock stays active beneath the numbers! */}
                       <ProGate athleteProfile={athleteProfile} featureName="Advanced View Logs">
                         {recentViewers.length > 0 ? (
-                          <div className="space-y-4">
+                          <div className="space-y-3 sm:space-y-4">
                             {recentViewers.map((coach: any, idx: number) => (
-                              <div key={`view-${idx}`} className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/10 shadow-sm hover:bg-white/10 hover:border-white/20 transition-all group">
-                                <div className="flex items-center gap-5">
-                                  <AvatarWithBorder avatarUrl={coach.avatar_url} borderId="none" sizeClasses="w-12 h-12 shadow-md group-hover:scale-105 transition-transform" userRole="coach" />
-                                  <div>
-                                    <p className="font-black text-white text-base tracking-tight">Coach {coach.last_name}</p>
-                                    <p className="text-xs font-bold text-slate-400 truncate max-w-[220px]">{coach.school_name}</p>
+                              <div key={`view-${idx}`} className="flex items-center justify-between p-3 sm:p-4 rounded-2xl bg-white/5 border border-white/10 shadow-sm hover:bg-white/10 hover:border-white/20 transition-all group gap-2">
+                                <div className="flex items-center gap-3 sm:gap-5 min-w-0 flex-1">
+                                  <AvatarWithBorder avatarUrl={coach.avatar_url} borderId="none" sizeClasses="w-10 h-10 sm:w-12 sm:h-12 shadow-md shrink-0 group-hover:scale-105 transition-transform" userRole="coach" />
+                                  <div className="min-w-0 flex-1 pr-2">
+                                    <p className="font-black text-white text-sm sm:text-base tracking-tight truncate">Coach {coach.last_name}</p>
+                                    <p className="text-[10px] sm:text-xs font-bold text-slate-400 line-clamp-2 break-words whitespace-normal">{coach.school_name}</p>
                                   </div>
                                 </div>
-                                <button onClick={() => handleContactCoach(coach.email)} className="w-12 h-12 rounded-xl bg-indigo-500/10 text-indigo-300 flex items-center justify-center hover:bg-indigo-500 hover:text-white hover:shadow-[0_0_20px_rgba(99,102,241,0.4)] transition-all border border-indigo-500/20"><Mail className="w-5 h-5" /></button>
+                                <button onClick={() => handleContactCoach(coach.email)} className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-indigo-500/10 text-indigo-300 flex items-center justify-center shrink-0 hover:bg-indigo-500 hover:text-white hover:shadow-[0_0_20px_rgba(99,102,241,0.4)] transition-all border border-indigo-500/20"><Mail className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" /></button>
                               </div>
                             ))}
                           </div>
                         ) : (
-                          <div className="bg-white/5 border border-dashed border-white/10 rounded-2xl p-8 text-center backdrop-blur-sm">
-                            <p className="text-sm font-medium text-slate-400 italic">No recent views from verified coaches yet.</p>
+                          <div className="bg-white/5 border border-dashed border-white/10 rounded-2xl p-6 sm:p-8 text-center backdrop-blur-sm">
+                            <p className="text-xs sm:text-sm font-medium text-slate-400 italic break-words whitespace-normal">No recent views from verified coaches yet.</p>
                           </div>
                         )}
                       </ProGate>
@@ -509,8 +553,8 @@ export default function PerformanceStats(props: PerformanceStatsProps) {
   return (
     <Suspense fallback={
       <div className="min-h-[60vh] flex flex-col items-center justify-center animate-in fade-in duration-500">
-        <div className="w-12 h-12 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin mb-4 shadow-[0_0_20px_rgba(99,102,241,0.4)]"></div>
-        <p className="text-indigo-400 font-black uppercase tracking-widest text-xs animate-pulse">Loading Analytics...</p>
+        <div className="w-10 h-10 sm:w-12 sm:h-12 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin mb-4 shadow-[0_0_20px_rgba(99,102,241,0.4)]"></div>
+        <p className="text-indigo-400 font-black uppercase tracking-widest text-[10px] sm:text-xs animate-pulse">Loading Analytics...</p>
       </div>
     }>
       <PerformanceStatsContent {...props} />
