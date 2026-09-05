@@ -59,6 +59,7 @@ function PerformanceStatsContent({ state, actions }: PerformanceStatsProps) {
   const [localUnlocked, setLocalUnlocked] = useState(false);
   const [localCollapseMap, setLocalCollapseMap] = useState<Record<string, boolean>>({});
   const [infoExpanded, setInfoExpanded] = useState<Record<string, boolean>>({});
+  const [scoreInfoExpanded, setScoreInfoExpanded] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (!state || !actions) {
@@ -189,6 +190,10 @@ function PerformanceStatsContent({ state, actions }: PerformanceStatsProps) {
     setInfoExpanded(prev => ({ ...prev, [sport]: !prev[sport] }));
   };
 
+  const toggleScoreInfo = (sport: string) => {
+    setScoreInfoExpanded(prev => ({ ...prev, [sport]: !prev[sport] }));
+  };
+
   const renderSportBlock = (sport: string) => {
     const isCollapsed = getIsCollapsed(sport);
     const stats = sportStats[sport] || { calculatedRating: 0 };
@@ -207,24 +212,33 @@ function PerformanceStatsContent({ state, actions }: PerformanceStatsProps) {
       >
         <div 
           onClick={() => handleCollapseToggle(sport)} 
-          className={`w-full flex items-center justify-between p-4 sm:p-6 hover:bg-white/[0.03] transition-colors cursor-pointer rounded-t-[2rem] ${isCollapsed ? 'rounded-b-[2rem]' : ''} gap-2`}
+          className={`w-full flex items-center justify-between p-4 sm:p-6 hover:bg-white/[0.03] transition-colors cursor-pointer rounded-t-[2rem] ${isCollapsed && !scoreInfoExpanded[sport] ? 'rounded-b-[2rem]' : ''} gap-2`}
         >
-          {/* min-w-0 flex-1 forces the container to shrink and wrap text instead of pushing UI off mobile screens */}
           <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
             <div className={`p-2 sm:p-3 bg-indigo-500/10 rounded-xl sm:rounded-2xl border border-indigo-500/30 shadow-[0_0_15px_rgba(99,102,241,0.2)] shrink-0 group-hover:scale-110 group-hover:shadow-[0_0_20px_rgba(99,102,241,0.4)] transition-all duration-300`}>
               <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6 text-indigo-400" />
             </div>
             <div className="text-left min-w-0 flex-1">
               <h3 className="text-lg sm:text-xl font-black text-white tracking-tight truncate">{sport}</h3>
-              {/* Used line-clamp-2 and break-words for long Placements & Honors strings returned in displayLevelText */}
-              <p className="text-slate-400 text-[10px] sm:text-xs font-bold uppercase tracking-widest mt-0.5 break-words line-clamp-2 sm:line-clamp-none">{displayLevelText}</p>
+              <p className="text-slate-400 text-[10px] sm:text-xs font-bold uppercase tracking-widest mt-0.5 break-words whitespace-normal leading-relaxed">{displayLevelText}</p>
             </div>
           </div>
           
           <div className="flex items-center gap-2 sm:gap-6 shrink-0">
-             <div className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl border ${tierStyles.borderClass} ${tierStyles.bgClass} ${tierStyles.glowClass} flex items-center gap-1 sm:gap-2 transition-all duration-500 group-hover:scale-105`}>
-                <span className={`text-lg sm:text-2xl font-black ${tierStyles.colorClass}`}>{displayRating}</span>
-                <span className="text-[9px] sm:text-[10px] font-black text-slate-500 uppercase tracking-widest">/99</span>
+             <div className="relative z-10 flex items-center">
+               <div className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl border ${tierStyles.borderClass} ${tierStyles.bgClass} ${tierStyles.glowClass} flex items-center gap-1 sm:gap-2 transition-all duration-500 group-hover:scale-105`}>
+                 <div className="flex items-baseline gap-0.5 sm:gap-1">
+                    <span className={`text-lg sm:text-2xl font-black ${tierStyles.colorClass}`}>{displayRating}</span>
+                    <span className="text-[9px] sm:text-[10px] font-black text-slate-500 uppercase tracking-widest">/99</span>
+                 </div>
+                 <button 
+                   onClick={(e) => { e.stopPropagation(); toggleScoreInfo(sport); }} 
+                   className="ml-1 sm:ml-2 p-1 text-slate-400 hover:text-white bg-white/5 hover:bg-white/10 rounded-full transition-colors focus:outline-none shrink-0"
+                   title="View Score Specifications"
+                 >
+                   <Info className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                 </button>
+               </div>
              </div>
 
              <div className="relative z-50">
@@ -257,6 +271,17 @@ function PerformanceStatsContent({ state, actions }: PerformanceStatsProps) {
           </div>
         </div>
         
+        {scoreInfoExpanded[sport] && (
+          <div className={`px-4 sm:px-6 pb-4 animate-in fade-in slide-in-from-top-2 duration-300 ${isCollapsed ? 'rounded-b-[2rem]' : ''}`}>
+            <div className="bg-slate-900/80 border border-slate-700/50 p-4 sm:p-5 rounded-xl text-xs sm:text-sm text-slate-300 leading-relaxed shadow-inner backdrop-blur-md">
+              <strong className="text-white block mb-2 font-black tracking-wide text-sm">Recruitment Score Specifications</strong>
+              This score (1-99) evaluates your verified metrics against college division averages for <span className="text-indigo-400 font-bold">{sport}</span>. 
+              Higher scores unlock higher tiers (e.g., <span className="text-fuchsia-400 font-bold">95+ = Power 4 D1</span>, <span className="text-purple-400 font-bold">85+ = Mid-Major D1</span>). 
+              The algorithm dynamically dictates your matchmaking visibility to programs of that exact caliber.
+            </div>
+          </div>
+        )}
+
         {!isCollapsed && (
           <div className="p-4 sm:p-6 border-t border-white/10 bg-black/20 animate-in fade-in slide-in-from-top-4 duration-500 rounded-b-[2rem]">
              {stats.calculatedRating > 0 && athleteProfile?.id && (

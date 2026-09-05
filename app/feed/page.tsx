@@ -685,28 +685,54 @@ export default function FeaturedPage() {
       )}
 
       <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-16 md:pt-20 relative z-30">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
-            <div>
-                <h1 className="text-4xl md:text-6xl font-black tracking-tight mb-2 text-white flex items-center gap-3">
-                  The <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300">Network</span>
-                </h1>
-                <p className="text-slate-400 font-medium text-sm md:text-base flex items-center gap-2">
-                    Multi-Sport Hub & Recruiting Directory
-                </p>
-            </div>
+        
+        {/* 🚨 CENTERED HERO TEXT 🚨 */}
+        <div className="flex flex-col items-center justify-center text-center gap-3 mb-8">
+            <h1 className="text-4xl md:text-6xl font-black tracking-tight text-white flex items-center justify-center gap-3">
+                The <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300">Network</span>
+            </h1>
+            <p className="text-slate-400 font-medium text-sm md:text-base flex items-center justify-center gap-2">
+                Multi-Sport Hub & Recruiting Directory
+            </p>
         </div>
 
-        <div className="flex gap-4 mb-8 overflow-x-auto custom-scrollbar pb-1 border-b border-white/5 relative">
-          <Link href="/feed" className={`pb-4 text-sm font-bold transition-all relative flex items-center gap-2 ${pathname === '/feed' ? 'text-white' : 'text-slate-500 hover:text-slate-300'}`}>
-            <Star className="w-4 h-4" /> Featured Athletes 
-            {pathname === '/feed' && <><div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" /><div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500 rounded-t-full" /></>}
-          </Link>
-          <Link href="/feed/discussions" className={`pb-4 text-sm font-bold transition-all relative flex items-center gap-2 ${pathname === '/feed/discussions' ? 'text-white' : 'text-slate-500 hover:text-slate-300'}`}>
-            <Flame className="w-4 h-4" /> Trending Discussions
-          </Link>
-          <Link href="/feed/network" className={`pb-4 text-sm font-bold transition-all relative flex items-center gap-2 ${pathname === '/feed/network' ? 'text-white' : 'text-slate-500 hover:text-slate-300'}`}>
-            <Users className="w-4 h-4" /> Directory
-          </Link>
+        {/* 🚨 DECLUTTERED & MODERNIZED SEGMENTED NAV 🚨 */}
+        <div className="flex justify-center mb-10 w-full px-2">
+          <div className="inline-flex items-center gap-1.5 p-1.5 bg-[#0B101A]/80 backdrop-blur-xl border border-white/10 rounded-2xl md:rounded-full overflow-x-auto custom-scrollbar max-w-full shadow-2xl">
+            <Link 
+              href="/feed" 
+              className={`px-4 sm:px-6 py-2.5 rounded-xl md:rounded-full text-[11px] sm:text-sm font-black uppercase tracking-wider sm:normal-case sm:tracking-normal sm:font-bold transition-all flex items-center gap-2 whitespace-nowrap shrink-0 ${
+                pathname === '/feed' 
+                  ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30 shadow-[0_0_15px_rgba(59,130,246,0.3)]' 
+                  : 'text-slate-500 hover:text-slate-300 hover:bg-white/5 border border-transparent'
+              }`}
+            >
+              <Star className={`w-4 h-4 ${pathname === '/feed' ? 'text-blue-400 fill-blue-400/20 animate-pulse' : ''}`} /> 
+              Featured Athletes
+            </Link>
+            <Link 
+              href="/feed/discussions" 
+              className={`px-4 sm:px-6 py-2.5 rounded-xl md:rounded-full text-[11px] sm:text-sm font-black uppercase tracking-wider sm:normal-case sm:tracking-normal sm:font-bold transition-all flex items-center gap-2 whitespace-nowrap shrink-0 ${
+                pathname === '/feed/discussions' 
+                  ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30 shadow-[0_0_15px_rgba(244,63,94,0.3)]' 
+                  : 'text-slate-500 hover:text-slate-300 hover:bg-white/5 border border-transparent'
+              }`}
+            >
+              <Flame className={`w-4 h-4 ${pathname === '/feed/discussions' ? 'text-rose-400 fill-rose-400/20 animate-pulse' : ''}`} /> 
+              Trending Discussions
+            </Link>
+            <Link 
+              href="/feed/network" 
+              className={`px-4 sm:px-6 py-2.5 rounded-xl md:rounded-full text-[11px] sm:text-sm font-black uppercase tracking-wider sm:normal-case sm:tracking-normal sm:font-bold transition-all flex items-center gap-2 whitespace-nowrap shrink-0 ${
+                pathname === '/feed/network' 
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.3)]' 
+                  : 'text-slate-500 hover:text-slate-300 hover:bg-white/5 border border-transparent'
+              }`}
+            >
+              <Users className={`w-4 h-4 ${pathname === '/feed/network' ? 'text-emerald-400 fill-emerald-400/20 animate-pulse' : ''}`} /> 
+              Directory
+            </Link>
+          </div>
         </div>
 
         <div className="animate-in fade-in slide-in-from-bottom-6 duration-500 space-y-8">

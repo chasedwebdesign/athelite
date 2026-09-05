@@ -27,10 +27,8 @@ export default function TrackEditor({ trackStats, genderKey, onSync, showToast, 
   const [newMark, setNewMark] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
-  // Determine if the current selected event is a field/distance event for dynamic UX
   const isDistanceEvent = ['Long Jump', 'Triple Jump', 'High Jump', 'Pole Vault', 'Shot Put', 'Discus', 'Javelin'].includes(newEvent);
 
-  // Engine alignment: Replicates XCEditor tiering logic
   const getTierLabel = (score: number) => {
     if (score >= 95) return { text: 'Power 4 D1 Elite', color: 'from-fuchsia-500 to-indigo-500 shadow-fuchsia-500/20' };
     if (score >= 85) return { text: 'Mid-Major D1 Priority', color: 'from-purple-500 to-blue-500 shadow-purple-500/20' };
@@ -41,15 +39,12 @@ export default function TrackEditor({ trackStats, genderKey, onSync, showToast, 
     return { text: 'Developing Varsity Track', color: 'from-slate-700 to-slate-800 shadow-slate-500/20' };
   };
 
-  // Helper to proxy missing engine standards (like 3000m) to their closest equivalent (3200m)
   const getCalculatedScore = (eventName: string, markValue: string) => {
-    // 1. Try Native Engine Evaluation
     const nativeResult = evaluateMetric(genderKey, 'Track & Field', eventName, markValue, 'Varsity');
     const nativeScore = nativeResult?.score || 10;
     
     if (nativeScore > 10) return nativeScore;
 
-    // 2. If engine returns 10 (unrecognized event), use conversion proxy for 3000 Meters
     if (eventName === '3000 Meters') {
       const parts = markValue.split(':');
       if (parts.length === 2) {
@@ -57,7 +52,7 @@ export default function TrackEditor({ trackStats, genderKey, onSync, showToast, 
         const secs = parseFloat(parts[1]);
         if (!isNaN(mins) && !isNaN(secs)) {
           const totalSeconds = (mins * 60) + secs;
-          const convertedSeconds = totalSeconds * 1.0737; // Standard NFHS 3k to 3200m multiplier
+          const convertedSeconds = totalSeconds * 1.0737; 
           
           const newMins = Math.floor(convertedSeconds / 60);
           const newSecs = (convertedSeconds % 60).toFixed(2);
@@ -68,11 +63,9 @@ export default function TrackEditor({ trackStats, genderKey, onSync, showToast, 
         }
       }
     }
-
     return nativeScore;
   };
 
-  // Dynamically calculate the highest score if not passed from Registry
   const getActiveScore = () => {
     if (displayRating > 0) return displayRating;
     let highest = 0;
@@ -86,7 +79,6 @@ export default function TrackEditor({ trackStats, genderKey, onSync, showToast, 
   const activeScore = getActiveScore();
   const activeTier = getTierLabel(activeScore);
 
-  // Normalizer: Solves the flat time issue by coercing standard database formatting
   const sanitizeMark = (event: string, mark: string) => {
     let sanitized = mark.trim();
     if ((event.includes('Meters') || event.includes('Mile')) && sanitized.includes(':') && !sanitized.includes('.')) {
@@ -103,7 +95,6 @@ export default function TrackEditor({ trackStats, genderKey, onSync, showToast, 
     const newMetrics = [...(trackStats.metrics || [])];
     const existingIdx = newMetrics.findIndex((m: any) => m.name === newEvent);
 
-    // Pre-evaluate to ensure immediate UI feedback and database indexing
     const calculatedScore = getCalculatedScore(newEvent, formattedMark);
 
     if (existingIdx >= 0) {
@@ -233,22 +224,22 @@ export default function TrackEditor({ trackStats, genderKey, onSync, showToast, 
 
                   return (
                     <div key={i} className="bg-slate-950/80 border border-slate-900 p-3 rounded-xl flex justify-between items-center text-xs group transition-all hover:border-slate-700">
-                      <div>
-                        <span className="font-black text-slate-200 block text-sm">{metric.name}</span>
-                        <span className="text-slate-500 font-medium text-[11px]">
+                      <div className="min-w-0 pr-2">
+                        <span className="font-black text-slate-200 block text-sm truncate">{metric.name}</span>
+                        <span className="text-slate-500 font-medium text-[11px] block mt-0.5">
                           Raw Mark: <strong className="text-slate-400">{metric.value}</strong>
                         </span>
                       </div>
-                      <div className="text-right flex items-center gap-3">
-                        <div>
-                          <span className={`text-[10px] font-black uppercase tracking-widest bg-gradient-to-r ${tier.color} bg-clip-text text-transparent block mb-0.5`}>
+                      <div className="text-right flex items-center gap-3 shrink-0">
+                        <div className="flex flex-col items-end gap-0.5">
+                          <span className={`text-[10px] font-black uppercase tracking-widest bg-gradient-to-r ${tier.color} bg-clip-text text-transparent`}>
                             {tier.text}
                           </span>
                           <span className="text-[10px] font-black text-slate-500 tracking-wider uppercase">
                             Score: {metricScore}/99
                           </span>
                         </div>
-                        <button onClick={() => removeMetric(i)} disabled={isSaving} className="text-slate-600 hover:text-red-500 p-1.5 bg-slate-900 rounded-md hover:bg-red-500/10 transition-colors">
+                        <button onClick={() => removeMetric(i)} disabled={isSaving} className="text-slate-600 hover:text-red-500 p-1.5 bg-slate-900 rounded-md hover:bg-red-500/10 transition-colors shrink-0">
                           <X className="w-4 h-4"/>
                         </button>
                       </div>

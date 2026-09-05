@@ -3,7 +3,11 @@
 import { useEffect, useState, useMemo } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { usePathname } from 'next/navigation'; 
-import { ShieldCheck, CheckCircle2, AlertCircle, Flame, Users, Star, Crown, Search, SlidersHorizontal, ChevronDown, UserCircle2, School, Briefcase } from 'lucide-react';
+import { 
+  ShieldCheck, CheckCircle2, AlertCircle, Flame, Users, Star, 
+  Crown, Search, SlidersHorizontal, ChevronDown, UserCircle2, 
+  School, Briefcase, MessageSquare 
+} from 'lucide-react';
 import Link from 'next/link';
 import { AvatarWithBorder } from '@/components/AnimatedBorders';
 
@@ -99,29 +103,54 @@ export default function NetworkPage() {
       `}} />
 
       <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-16 md:pt-20 relative z-30">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
-            <div>
-                <h1 className="text-4xl md:text-6xl font-black tracking-tight mb-2 text-white flex items-center gap-3">
-                  The <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300">Network</span>
-                </h1>
-                <p className="text-slate-400 font-medium text-sm md:text-base flex items-center gap-2">
-                   Multi-Sport Hub & Recruiting Directory
-                </p>
-            </div>
+        
+        {/* 🚨 CENTERED HERO TEXT 🚨 */}
+        <div className="flex flex-col items-center justify-center text-center gap-3 mb-8">
+            <h1 className="text-4xl md:text-6xl font-black tracking-tight text-white flex items-center justify-center gap-3">
+                The <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300">Network</span>
+            </h1>
+            <p className="text-slate-400 font-medium text-sm md:text-base flex items-center justify-center gap-2">
+                Multi-Sport Hub & Recruiting Directory
+            </p>
         </div>
 
-        {/* 🚨 SHARED TABS NAVIGATION 🚨 */}
-        <div className="flex gap-4 mb-8 overflow-x-auto custom-scrollbar pb-1 border-b border-white/5 relative">
-          <Link href="/feed" className={`pb-4 text-sm font-bold transition-all relative flex items-center gap-2 ${pathname === '/feed' ? 'text-white' : 'text-slate-500 hover:text-slate-300'}`}>
-            <Star className="w-4 h-4" /> Featured Athletes 
-          </Link>
-          <Link href="/feed/discussions" className={`pb-4 text-sm font-bold transition-all relative flex items-center gap-2 ${pathname === '/feed/discussions' ? 'text-white' : 'text-slate-500 hover:text-slate-300'}`}>
-            <Flame className="w-4 h-4" /> Trending Discussions
-          </Link>
-          <Link href="/feed/network" className={`pb-4 text-sm font-bold transition-all relative flex items-center gap-2 ${pathname === '/feed/network' ? 'text-white' : 'text-slate-500 hover:text-slate-300'}`}>
-            <Users className="w-4 h-4" /> Directory
-            {pathname === '/feed/network' && <><div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" /><div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500 rounded-t-full" /></>}
-          </Link>
+        {/* 🚨 DECLUTTERED & MODERNIZED SEGMENTED NAV 🚨 */}
+        <div className="flex justify-center mb-10 w-full px-2">
+          <div className="inline-flex items-center gap-1.5 p-1.5 bg-[#0B101A]/80 backdrop-blur-xl border border-white/10 rounded-2xl md:rounded-full overflow-x-auto custom-scrollbar max-w-full shadow-2xl">
+            <Link 
+              href="/feed" 
+              className={`px-4 sm:px-6 py-2.5 rounded-xl md:rounded-full text-[11px] sm:text-sm font-black uppercase tracking-wider sm:normal-case sm:tracking-normal sm:font-bold transition-all flex items-center gap-2 whitespace-nowrap shrink-0 ${
+                pathname === '/feed' 
+                  ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30 shadow-[0_0_15px_rgba(59,130,246,0.3)]' 
+                  : 'text-slate-500 hover:text-slate-300 hover:bg-white/5 border border-transparent'
+              }`}
+            >
+              <Star className={`w-4 h-4 ${pathname === '/feed' ? 'text-blue-400 fill-blue-400/20 animate-pulse' : ''}`} /> 
+              Featured Athletes
+            </Link>
+            <Link 
+              href="/feed/discussions" 
+              className={`px-4 sm:px-6 py-2.5 rounded-xl md:rounded-full text-[11px] sm:text-sm font-black uppercase tracking-wider sm:normal-case sm:tracking-normal sm:font-bold transition-all flex items-center gap-2 whitespace-nowrap shrink-0 ${
+                pathname === '/feed/discussions' 
+                  ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30 shadow-[0_0_15px_rgba(244,63,94,0.3)]' 
+                  : 'text-slate-500 hover:text-slate-300 hover:bg-white/5 border border-transparent'
+              }`}
+            >
+              <Flame className={`w-4 h-4 ${pathname === '/feed/discussions' ? 'text-rose-400 fill-rose-400/20 animate-pulse' : ''}`} /> 
+              Trending Discussions
+            </Link>
+            <Link 
+              href="/feed/network" 
+              className={`px-4 sm:px-6 py-2.5 rounded-xl md:rounded-full text-[11px] sm:text-sm font-black uppercase tracking-wider sm:normal-case sm:tracking-normal sm:font-bold transition-all flex items-center gap-2 whitespace-nowrap shrink-0 ${
+                pathname === '/feed/network' 
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.3)]' 
+                  : 'text-slate-500 hover:text-slate-300 hover:bg-white/5 border border-transparent'
+              }`}
+            >
+              <Users className={`w-4 h-4 ${pathname === '/feed/network' ? 'text-emerald-400 fill-emerald-400/20 animate-pulse' : ''}`} /> 
+              Directory
+            </Link>
+          </div>
         </div>
 
         <div className="animate-in fade-in slide-in-from-bottom-6 duration-500">
@@ -154,17 +183,44 @@ export default function NetworkPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 {viewerRole !== 'coach' ? (
                     filteredDirectory.map(coach => (
-                        <div key={coach.id} className="bg-gradient-to-b from-white/[0.05] to-transparent backdrop-blur-xl border border-white/10 rounded-[2rem] p-6 transition-all duration-500 flex flex-col justify-between h-full group hover:-translate-y-1 relative">
+                        <div key={coach.id} className="bg-gradient-to-b from-white/[0.05] to-transparent backdrop-blur-xl border border-white/10 rounded-[2rem] p-6 transition-all duration-500 flex flex-col justify-between h-full group hover:-translate-y-1 hover:shadow-[0_0_30px_rgba(59,130,246,0.1)] relative">
                             <div className="flex items-start gap-4 mb-6 relative z-10">
                                 <AvatarWithBorder avatarUrl={coach.avatar_url || ''} sizeClasses="w-16 h-16 shadow-md border border-white/5" borderId="none" />
                                 <div className="pt-1 w-full min-w-0">
-                                    <h3 className="font-bold text-lg text-white group-hover:text-blue-400 transition-colors leading-tight truncate">Coach {coach.last_name}</h3>
+                                    <h3 className="font-bold text-lg text-white group-hover:text-blue-400 transition-colors leading-tight truncate">
+                                      Coach {coach.first_name ? `${coach.first_name} ` : ''}{coach.last_name}
+                                    </h3>
                                     <div className="flex flex-col gap-1.5 mt-1.5">
                                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5 truncate">
                                         <School className="w-3 h-3 shrink-0" /> <span className="truncate">{coach.school_name}</span>
                                       </p>
+                                      {coach.sport && (
+                                        <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1.5 truncate">
+                                          <Briefcase className="w-3 h-3 shrink-0" /> 
+                                          <span className="truncate">{coach.sport} {coach.coach_title ? `- ${coach.coach_title}` : ''}</span>
+                                        </p>
+                                      )}
                                     </div>
                                 </div>
+                            </div>
+
+                            {/* 🚨 CONTACT COACH BUTTON 🚨 */}
+                            <div className="mt-auto relative z-10">
+                                {viewerRole === 'athlete' ? (
+                                    <Link 
+                                        href={`/dashboard/messages?compose=${coach.id}`} 
+                                        className="w-full bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 font-black py-3 rounded-xl transition-colors flex items-center justify-center gap-2 text-xs shadow-inner"
+                                    >
+                                        <MessageSquare className="w-4 h-4" /> Message Coach
+                                    </Link>
+                                ) : (
+                                    <Link 
+                                        href="/login" 
+                                        className="w-full bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 font-black py-3 rounded-xl transition-colors flex items-center justify-center gap-2 text-xs shadow-inner"
+                                    >
+                                        <MessageSquare className="w-4 h-4" /> Log in to Message
+                                    </Link>
+                                )}
                             </div>
                         </div>
                     ))
@@ -193,9 +249,22 @@ export default function NetworkPage() {
                                      <div className={`w-1.5 h-1.5 rounded-full ${lastSeen.dot}`}></div>
                                      <span className="text-[9px] font-black uppercase tracking-widest">{lastSeen.text}</span>
                                   </div>
-                                  <Link href={`/athlete/${athlete.id}`} className="bg-black/20 hover:bg-black/40 text-white border border-white/10 font-black py-3 rounded-xl transition-colors flex items-center justify-center gap-1.5 text-xs shadow-inner">
-                                      <UserCircle2 className="w-4 h-4" /> View Profile
-                                  </Link>
+                                  
+                                  {/* 🚨 DUAL ACTIONS FOR COACHES 🚨 */}
+                                  <div className="flex gap-2 w-full">
+                                      <Link 
+                                        href={`/athlete/${athlete.id}`} 
+                                        className="flex-1 bg-black/20 hover:bg-black/40 text-white border border-white/10 font-black py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5 text-xs shadow-inner"
+                                      >
+                                          <UserCircle2 className="w-4 h-4" /> Profile
+                                      </Link>
+                                      <Link 
+                                        href={`/dashboard/messages?compose=${athlete.id}`} 
+                                        className="flex-1 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 font-black py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5 text-xs shadow-inner"
+                                      >
+                                          <MessageSquare className="w-4 h-4" /> Message
+                                      </Link>
+                                  </div>
                               </div>
                           </div>
                         );

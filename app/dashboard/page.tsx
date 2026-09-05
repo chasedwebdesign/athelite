@@ -1030,7 +1030,7 @@ function DashboardContent() {
            </div>
          </div>
 
-         <div className="flex gap-2 sm:gap-3 overflow-x-auto hide-scrollbar snap-x snap-mandatory pb-2 relative z-10 overscroll-x-contain touch-pan-x scroll-pl-4">
+         <div className="flex gap-2 sm:gap-3 overflow-x-auto hide-scrollbar snap-x snap-mandatory pb-2 relative z-10 overscroll-x-contain scroll-pl-4">
            {[...Array(7)].map((_, i) => {
               const dayNumInCycle = (Math.max(0, streak - 1) % 28) + 1;
               const currentWeek = Math.floor((dayNumInCycle - 1) / 7);
@@ -1120,7 +1120,7 @@ function DashboardContent() {
                   <Link href="/search" className={`text-sm font-bold w-full sm:w-auto px-5 py-3 sm:py-2.5 rounded-xl transition-all shadow-md flex items-center gap-2 justify-center ${theme.isDark ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}>Find More Colleges <Search className="w-4 h-4" /></Link>
                </div>
                {savedColleges.length > 0 ? (
-                 <div className="overflow-x-auto table-scrollbar overscroll-x-contain touch-pan-x pb-4 -mx-4 sm:mx-0 px-4 sm:px-0">
+                 <div className="overflow-x-auto table-scrollbar overscroll-x-contain pb-4 -mx-4 sm:mx-0 px-4 sm:px-0">
                    <table className="w-full text-left min-w-[800px]">
                      <thead>
                        <tr className={`border-b ${theme.isDark ? 'border-white/10' : 'border-slate-200'}`}>

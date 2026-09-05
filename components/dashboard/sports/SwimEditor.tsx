@@ -162,23 +162,31 @@ export default function SwimEditor({ swimStats, genderKey, onSync, showToast }: 
         <div className="w-full xl:w-2/3">
           {parsedMetrics.length > 0 && (
             <div className="p-4 bg-slate-900/40 rounded-2xl border border-slate-800/80 space-y-4 backdrop-blur-md">
-              <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-1.5">
-                <Activity className="w-3.5 h-3.5" /> Individual Event Ranks
+              <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-1.5 mb-2">
+                <Activity className="w-3.5 h-3.5" /> Individual Event Scores
               </h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {parsedMetrics.map((metric, i) => {
                   const indTier = getSwimTierLabel(metric.score);
+                  const rawMark = metricList.find(m => m.name === metric.name)?.value || '--';
                   
                   return (
-                    <div key={i} className={`bg-slate-950/80 border p-3.5 rounded-xl flex flex-col justify-between gap-3 ${i === 0 ? 'border-cyan-500/50 shadow-[0_0_15px_rgba(6,182,212,0.15)]' : 'border-slate-800'}`}>
-                      <div className="flex justify-between items-start">
-                        <span className={`font-black text-sm truncate pr-2 ${i===0 ? 'text-cyan-400' : 'text-slate-300'}`}>{metric.name}</span>
-                        <span className="text-[10px] font-black text-white bg-slate-900 px-2 py-1 rounded-md border border-slate-800 shadow-inner shrink-0">{metric.score}</span>
+                    <div key={i} className={`bg-slate-950/80 border p-3.5 rounded-xl flex justify-between items-center group transition-all hover:border-slate-700 ${i === 0 ? 'border-cyan-500/50 shadow-[0_0_15px_rgba(6,182,212,0.15)]' : 'border-slate-800'}`}>
+                      <div className="min-w-0 pr-2">
+                        <span className={`font-black text-sm block truncate ${i === 0 ? 'text-cyan-400' : 'text-slate-200'}`}>
+                          {metric.name}
+                        </span>
+                        <span className="text-slate-500 font-medium text-[11px] block mt-0.5">
+                          Raw Mark: <strong className="text-slate-400">{rawMark}</strong>
+                        </span>
                       </div>
                       
-                      <div className="flex flex-col gap-1.5 border-t border-slate-800/60 pt-2">
-                        <span className={`text-[10px] font-black uppercase tracking-widest truncate ${indTier.solid}`}>
-                           {indTier.text}
+                      <div className="text-right shrink-0 flex flex-col items-end gap-0.5">
+                        <span className={`text-[10px] font-black uppercase tracking-widest ${indTier.solid}`}>
+                          {indTier.text}
+                        </span>
+                        <span className="text-[10px] font-black text-slate-500 tracking-wider uppercase">
+                          Score: {metric.score}/99
                         </span>
                       </div>
                     </div>
