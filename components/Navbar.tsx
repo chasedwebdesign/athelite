@@ -365,7 +365,6 @@ export default function Navbar() {
               </>
             ) : (
               <div className="flex items-center gap-3 ml-2">
-                <Link href="/login" className="text-sm font-bold text-slate-500 hover:text-slate-900 transition-colors">Log In</Link>
                 <Link href="/login?mode=signup" className="text-sm font-bold bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-full transition-all shadow-sm shadow-blue-600/20 whitespace-nowrap">Get Started</Link>
               </div>
             )}
@@ -517,7 +516,6 @@ export default function Navbar() {
                 <>
                   <div className="h-px bg-slate-100 my-2"></div>
                   <Link href="/login?mode=signup" onClick={closeMobileMenu} className="bg-blue-600 text-white font-black text-center p-4 rounded-2xl shadow-lg shadow-blue-600/20">Get Started</Link>
-                  <Link href="/login" onClick={closeMobileMenu} className="text-slate-500 font-bold text-center p-4 rounded-2xl hover:bg-slate-50">Log In</Link>
                 </>
               )}
             </div>
