@@ -7,7 +7,7 @@ import {
   CheckCircle2, MapPin, Mail, X, Send, Lock, Trophy,
   Share2, ArrowLeft, Activity, School, UserCircle2, 
   Clock, Star, ShieldCheck, AlertTriangle, Search, BookOpen, 
-  Link as LinkIcon, FileText, GraduationCap, Medal, Target, RefreshCw
+  Link as LinkIcon, FileText, GraduationCap, Medal, Target, RefreshCw, ChevronRight, MessageSquare
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -65,7 +65,7 @@ const getOrdinal = (n: number | string) => {
   return num + (s[(v - 20) % 10] || s[v] || s[0]);
 };
 
-// 🚨 THEME ENGINE: DYNAMICALLY SKINS THE ENTIRE PORTFOLIO 🚨
+// 🚨 THEME ENGINE 🚨
 const getThemeConfig = (cardType: string | null | undefined) => {
   const safeCardType = cardType === 'default' || !cardType ? 'base' : cardType;
   const isBase = safeCardType === 'base';
@@ -117,7 +117,6 @@ const getThemeConfig = (cardType: string | null | undefined) => {
     };
   }
 
-  // Map distinct aesthetic configurations to the user's equipped items
   const map: Record<string, any> = {
     obsidian: { glow: 'shadow-[0_0_30px_rgba(71,85,105,0.2)]', border: 'border-slate-600/50', accent: 'text-slate-400', borderHover: 'hover:border-slate-400', ring: 'focus:ring-slate-500' },
     crimson: { glow: 'shadow-[0_0_30px_rgba(239,68,68,0.2)]', border: 'border-red-500/50', accent: 'text-red-400', borderHover: 'hover:border-red-400', ring: 'focus:ring-red-500' },
@@ -202,6 +201,7 @@ export default function AthleteClient() {
 
   // Message Modal State
   const [isMessageModalOpen, setIsMessageModalOpen] = useState(false);
+  const [showVerificationRequired, setShowVerificationRequired] = useState(false);
   const [modalMode, setModalMode] = useState<'pitch' | 'chat'>('pitch');
   const [senderName, setSenderName] = useState('');
   const [senderSchool, setSenderSchool] = useState('');
@@ -209,11 +209,14 @@ export default function AthleteClient() {
   const [messageContent, setMessageContent] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [sendSuccess, setSendSuccess] = useState(false);
+  const [charCount, setCharCount] = useState(0); // 🚨 Added Character Counter
+  const MAX_MESSAGE_LENGTH = 500; // Limit for clean DB storage and concise pitches
 
   const [copySuccess, setCopySuccess] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const hasLoggedView = useRef(false);
+  const messageInputRef = useRef<HTMLTextAreaElement>(null);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
@@ -222,7 +225,6 @@ export default function AthleteClient() {
 
   useEffect(() => {
     async function fetchProfileAndUser() {
-      // 1. Dynamic Routing Check (Is UUID or Custom Slug?)
       const isUUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(rawIdParam);
       
       let query = supabase.from('athletes').select('*');
@@ -238,7 +240,6 @@ export default function AthleteClient() {
         setAthlete(athleteData as AthleteProfile);
         const resolvedAthleteId = athleteData.id;
 
-        // 2. Fetch Athlete Sports
         const { data: sportsData } = await supabase
           .from('athlete_sports')
           .select('*')
@@ -247,7 +248,6 @@ export default function AthleteClient() {
           .order('created_at', { ascending: false });
         if (sportsData) setAthleteSports(sportsData as AthleteSport[]);
 
-        // 3. Resolve Auth & View State
         const { data: { session } } = await supabase.auth.getSession();
         
         if (session) {
@@ -283,7 +283,7 @@ export default function AthleteClient() {
             const { data: aData } = await supabase.from('athletes').select('id, trust_level, first_name, last_name, high_school').eq('id', session.user.id).maybeSingle();
             if (aData) {
               setViewerRole('athlete');
-              setIsVerifiedAthlete(aData.trust_level > 0);
+              setIsVerifiedAthlete(aData.trust_level === 1);
               setSenderName(`${aData.first_name} ${aData.last_name}`);
               setSenderSchool(aData.high_school || '');
               setSenderEmail(session.user.email || '');
@@ -297,19 +297,15 @@ export default function AthleteClient() {
     if (rawIdParam) fetchProfileAndUser();
   }, [rawIdParam, supabase]);
 
-  // 🚨 SMART NAVIGATION FALLBACK
   const handleBackNavigation = () => {
     if (typeof window !== 'undefined') {
       const fallbackRoute = viewerRole === 'coach' ? '/dashboard/coach' 
                           : viewerRole === 'athlete' ? '/dashboard/profile' 
                           : '/search';
 
-      // Next.js client-side navigation doesn't perfectly update document.referrer.
-      // window.history.length > 2 guarantees there is a deep stack within the application to safely pop.
       if (window.history.length > 2) {
         router.back();
       } else {
-        // Direct link entry fallback to logical dashboard
         router.push(fallbackRoute);
       }
     }
@@ -344,13 +340,24 @@ export default function AthleteClient() {
       return;
     }
     if (viewerRole === 'athlete' && !isVerifiedAthlete) {
-      showToast("Please sync your Athletic.net profile to message other athletes.", 'error');
+      setShowVerificationRequired(true);
       return;
     }
 
     const mode = (viewerRole === 'coach' && coachType === 'college') ? 'pitch' : 'chat';
     setModalMode(mode);
     setIsMessageModalOpen(true);
+    
+    // Auto focus the input after modal opens
+    setTimeout(() => messageInputRef.current?.focus(), 100);
+  };
+
+  const handleMessageChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    if (val.length <= MAX_MESSAGE_LENGTH) {
+      setMessageContent(val);
+      setCharCount(val.length);
+    }
   };
 
   const handleSendMessage = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -390,6 +397,7 @@ export default function AthleteClient() {
         setIsMessageModalOpen(false);
         setSendSuccess(false);
         setMessageContent('');
+        setCharCount(0);
       }, 2000);
     } catch (error: any) { 
       showToast(`Failed to send message: ${error.message}`, 'error'); 
@@ -416,7 +424,6 @@ export default function AthleteClient() {
     setTimeout(() => setCopySuccess(false), 2000);
   };
 
-  // 🚨 GAMIFIED ACCOLADE RENDERER 🚨
   const renderAccoladeBadge = (acc: any, idx: number, theme: any) => {
     if (acc.type === 'Honor' || (!acc.placement && acc.text)) {
       return (
@@ -485,7 +492,6 @@ export default function AthleteClient() {
   const activeTitle = EARNED_TITLES.find(t => t.id === athlete.equipped_title) || EARNED_TITLES[6];
   const isVerified = athlete.trust_level > 0;
   
-  // Inject Dynamic Theme
   const theme = getThemeConfig(athlete.equipped_card);
 
   let parsedResume = { gpa: '', accolades: [] as string[], schoolPrefs: '' };
@@ -517,7 +523,6 @@ export default function AthleteClient() {
   return (
     <main className={`min-h-screen ${theme.pageBg} font-sans pb-32 relative overflow-hidden transition-colors duration-500`} itemScope itemType="https://schema.org/ProfilePage">
       
-      {/* Heavy Glassmorphism Background Base */}
       <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
          <div className={`absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] ${theme.pagePattern}`}></div>
          <div className={`absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] ${theme.isDark ? 'bg-blue-900/10' : 'bg-blue-400/10'} blur-[120px] rounded-full transition-colors duration-500`}></div>
@@ -594,6 +599,26 @@ export default function AthleteClient() {
         </div>
       )}
 
+      {showVerificationRequired && (
+        <div className="fixed inset-0 z-[200] bg-slate-950/80 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-300">
+            <div className="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl border border-slate-200 flex flex-col items-center relative">
+                <button onClick={() => setShowVerificationRequired(false)} className="absolute top-4 right-4 p-2 hover:bg-slate-100 rounded-full transition-colors">
+                    <X className="w-5 h-5 text-slate-500" />
+                </button>
+                <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mb-5 border border-amber-200">
+                    <Lock className="w-7 h-7 text-amber-500" />
+                </div>
+                <h2 className="text-2xl font-black text-slate-900 mb-2 tracking-tight">Verification Required</h2>
+                <p className="text-sm text-slate-500 font-medium mb-8 leading-relaxed">
+                    To protect the community from spam and maintain a trusted ecosystem, you must verify your identity before sending direct messages.
+                </p>
+                <Link href="/dashboard/profile" className="bg-slate-900 hover:bg-slate-800 text-white font-black py-3.5 px-6 rounded-xl transition-all shadow-md active:scale-[0.98] flex items-center justify-center gap-2 w-full">
+                    Verify My Account <ChevronRight className="w-4 h-4" />
+                </Link>
+            </div>
+        </div>
+      )}
+
       <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-10 relative z-10">
         
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
@@ -621,7 +646,6 @@ export default function AthleteClient() {
           )}
         </div>
 
-        {/* 🌟 HERO CARD 🌟 */}
         <section itemScope itemProp="mainEntity" itemType="https://schema.org/Person" className={`rounded-[2.5rem] p-6 sm:p-8 md:p-12 border relative overflow-hidden mb-10 transition-all duration-500 ${theme.heroCard}`}>
           {backgroundEffects}
           
@@ -697,7 +721,7 @@ export default function AthleteClient() {
                       </div>
                     ) : (
                       <button onClick={handleContactClick} className={`w-full sm:w-auto font-black py-3.5 px-10 rounded-xl transition-transform active:scale-[0.98] flex items-center justify-center gap-2 ${theme.btnPrimary}`}>
-                        <Mail className="w-5 h-5" /> Contact Athlete
+                        <MessageSquare className="w-5 h-5" /> Message Athlete
                       </button>
                     )}
 
@@ -736,7 +760,6 @@ export default function AthleteClient() {
            </div>
         )}
 
-        {/* 🌟 STATS & ACADEMICS 🌟 */}
         <div className="animate-in fade-in duration-500 delay-150">
           
           {(parsedResume.gpa || parsedResume.accolades.length > 0 || parsedResume.schoolPrefs) && (
@@ -782,7 +805,6 @@ export default function AthleteClient() {
                   <section key={sport.id} className={`${theme.sectionBg} p-6 sm:p-8 md:p-10 rounded-[2rem] border ${theme.sectionBorder} ${theme.sectionShadow} relative overflow-hidden group transition-all duration-500`}>
                     <div className={`absolute top-0 right-0 w-32 h-32 ${theme.isDark ? 'bg-white/5' : 'bg-slate-50/50'} rounded-full blur-[40px] pointer-events-none transition-colors`}></div>
                     
-                    {/* Sport Header */}
                     <header className={`flex flex-col sm:flex-row justify-between sm:items-center border-b ${theme.isDark ? 'border-white/10' : 'border-slate-100'} pb-6 mb-6 gap-4 relative z-10`}>
                       <div>
                         <h2 className={`text-3xl font-black ${theme.textHeader} flex items-center gap-3`}>
@@ -802,7 +824,6 @@ export default function AthleteClient() {
                       )}
                     </header>
 
-                    {/* Honors & Accolades Bar */}
                     {sport.meta_context?.accolades && sport.meta_context.accolades.length > 0 && (
                       <div className="mb-8 relative z-10">
                         <h3 className={`text-[10px] font-black uppercase tracking-widest ${theme.iconColor} mb-3 flex items-center gap-2`}>
@@ -816,7 +837,6 @@ export default function AthleteClient() {
                       </div>
                     )}
 
-                    {/* Metrics Grid */}
                     {sport.metrics && sport.metrics.length > 0 ? (
                       <div className={`relative z-10 border-t ${theme.isDark ? 'border-white/10' : 'border-slate-100'} pt-6`}>
                         <h3 className={`text-[10px] font-black uppercase tracking-widest ${theme.textMuted} mb-4 flex items-center gap-2`}>
@@ -850,53 +870,113 @@ export default function AthleteClient() {
             </div>
           )}
         </div>
-
       </div>
 
-      {/* Message Modal */}
+      {/* 📱 ENHANCED MESSAGING MODAL / BOTTOM SHEET 📱 */}
       {isMessageModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200 border border-slate-200" role="dialog" aria-modal="true">
-            <div className="bg-slate-50 px-8 py-6 border-b border-slate-200 flex justify-between items-center">
-              <div>
-                <h3 className="font-black text-xl text-slate-900 tracking-tight">{modalMode === 'pitch' ? `Message ${athlete.first_name}` : `Connect with ${athlete.first_name}`}</h3>
-                <p className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-widest mt-1">{modalMode === 'pitch' ? 'College Coach Pitch' : 'Connection Request'}</p>
-              </div>
-              <button onClick={() => setIsMessageModalOpen(false)} className="p-2 hover:bg-slate-200 rounded-full transition-colors bg-white shadow-sm border border-slate-200" aria-label="Close Modal"><X className="w-5 h-5 text-slate-500" /></button>
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 animate-in fade-in duration-300">
+          
+          {/* Backdrop (clickable to dismiss) */}
+          <div 
+             className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" 
+             onClick={() => !isSending && setIsMessageModalOpen(false)}
+             aria-hidden="true"
+          />
+
+          {/* Drawer / Modal Container */}
+          <div 
+             className="relative w-full sm:max-w-lg bg-white rounded-t-[2rem] sm:rounded-[2rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in slide-in-from-bottom-full sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-300 ease-out" 
+             role="dialog" 
+             aria-modal="true"
+          >
+            
+            {/* Mobile Drag Indicator */}
+            <div className="w-full flex justify-center pt-3 pb-1 sm:hidden cursor-grab active:cursor-grabbing" onClick={() => setIsMessageModalOpen(false)}>
+              <div className="w-12 h-1.5 bg-slate-200 rounded-full"></div>
             </div>
+
+            <div className="bg-white px-6 sm:px-8 py-4 sm:py-6 border-b border-slate-100 flex justify-between items-center shrink-0">
+              <div>
+                <h3 className="font-black text-xl sm:text-2xl text-slate-900 tracking-tight flex items-center gap-2">
+                  {modalMode === 'pitch' ? `Message ${athlete.first_name}` : `Connect with ${athlete.first_name}`}
+                </h3>
+                <p className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-widest mt-1 flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" /> Secure connection
+                </p>
+              </div>
+              <button 
+                onClick={() => setIsMessageModalOpen(false)} 
+                className="p-2.5 bg-slate-50 hover:bg-slate-100 rounded-full transition-colors border border-slate-200 active:scale-95" 
+                aria-label="Close Modal"
+              >
+                <X className="w-5 h-5 text-slate-500" />
+              </button>
+            </div>
+            
             {sendSuccess ? (
-              <div className="p-12 flex flex-col items-center justify-center text-center">
-                <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-6 shadow-inner"><CheckCircle2 className="w-10 h-10 text-green-600" /></div>
-                <h4 className="text-2xl font-black text-slate-900 mb-2">Message Sent!</h4>
-                <p className="text-sm text-slate-500 font-medium">Your connection request has been securely delivered to their dashboard.</p>
+              <div className="p-12 flex flex-col items-center justify-center text-center overflow-y-auto animate-in zoom-in-95 duration-300">
+                <div className="w-24 h-24 bg-emerald-50 rounded-full flex items-center justify-center mb-6 border border-emerald-100 shadow-inner">
+                  <CheckCircle2 className="w-12 h-12 text-emerald-500" />
+                </div>
+                <h4 className="text-2xl font-black text-slate-900 mb-2">Message Delivered!</h4>
+                <p className="text-sm text-slate-500 font-medium">Your request has been securely delivered to their recruiting dashboard.</p>
               </div>
             ) : (
-              <form onSubmit={handleSendMessage} className="p-6 sm:p-8 space-y-6 relative">
+              <form onSubmit={handleSendMessage} className="p-6 sm:p-8 space-y-6 overflow-y-auto custom-scrollbar">
                 
-                <p className="text-[10px] font-black text-amber-600 bg-amber-100 rounded-xl px-4 py-2.5 text-center uppercase tracking-widest border border-amber-200 flex items-center justify-center gap-2 shadow-sm">
-                  <Clock className="w-4 h-4 shrink-0" /> Daily Limit: 10 Pitches/Requests
+                <p className="text-[10px] sm:text-xs font-black text-amber-700 bg-amber-50 rounded-xl px-4 py-3 text-center uppercase tracking-widest border border-amber-200 flex items-center justify-center gap-2 shadow-sm">
+                  <Clock className="w-4 h-4 shrink-0 text-amber-500" /> Daily Limit: 10 Pitches/Requests
                 </p>
 
-                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex items-center justify-between shadow-inner">
+                <div className="bg-slate-50/50 border border-slate-200 rounded-2xl p-4 flex items-center justify-between shadow-sm">
                   <div className="flex items-center gap-4 min-w-0">
-                    <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white border border-slate-200 rounded-full flex items-center justify-center shrink-0 shadow-sm">
-                      {viewerRole === 'coach' ? <School className="w-5 h-5 text-blue-600" /> : <UserCircle2 className="w-5 h-5 text-blue-600" />}
+                    <div className="w-12 h-12 bg-white border border-slate-200 rounded-full flex items-center justify-center shrink-0 shadow-sm">
+                      {viewerRole === 'coach' ? <School className="w-6 h-6 text-blue-600" /> : <UserCircle2 className="w-6 h-6 text-blue-600" />}
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-black text-slate-900 truncate">{senderName}</p>
-                      <p className="text-[10px] sm:text-xs font-bold text-slate-500 truncate">{senderSchool} • {senderEmail}</p>
+                      <p className="text-sm font-black text-slate-900 truncate">Sending as {senderName}</p>
+                      <p className="text-xs font-bold text-slate-500 truncate">{senderSchool}</p>
                     </div>
                   </div>
-                  <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0 ml-2" />
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-[10px] sm:text-xs font-black text-slate-500 uppercase tracking-widest">Secure Message</label>
-                  <textarea required value={messageContent} onChange={(e) => setMessageContent(e.target.value)} rows={5} className="w-full text-sm sm:text-base border border-slate-200 rounded-2xl p-5 bg-white focus:bg-white focus:ring-2 focus:ring-blue-500 font-medium resize-none shadow-sm transition-all" placeholder={modalMode === 'pitch' ? `Hi ${athlete.first_name}...` : `Hey ${athlete.first_name}...`}></textarea>
+                <div className="space-y-2 group">
+                  <div className="flex justify-between items-end">
+                     <label className="text-xs font-black text-slate-700 uppercase tracking-widest flex items-center gap-2">
+                       <MessageSquare className="w-4 h-4 text-slate-400" /> Message
+                     </label>
+                     <span className={`text-[10px] font-bold ${charCount >= MAX_MESSAGE_LENGTH ? 'text-red-500' : 'text-slate-400'} uppercase tracking-widest`}>
+                       {charCount} / {MAX_MESSAGE_LENGTH}
+                     </span>
+                  </div>
+                  
+                  {/* Note: text-base is required here to prevent iOS Safari auto-zoom on input focus */}
+                  <textarea 
+                    ref={messageInputRef}
+                    required 
+                    value={messageContent} 
+                    onChange={handleMessageChange} 
+                    maxLength={MAX_MESSAGE_LENGTH}
+                    rows={5} 
+                    className="w-full text-base border border-slate-200 rounded-2xl p-5 bg-slate-50 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 font-medium resize-none shadow-inner transition-all group-hover:border-blue-300" 
+                    placeholder={modalMode === 'pitch' ? `Hi ${athlete.first_name}, I'm reaching out because...` : `Hey ${athlete.first_name}, let's connect...`}
+                  />
                 </div>
 
-                <button type="submit" disabled={isSending} className={`w-full text-white font-black py-4 rounded-xl shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 text-sm sm:text-base transition-transform active:scale-[0.98] ${modalMode === 'pitch' ? 'bg-slate-900 hover:bg-slate-800' : 'bg-blue-600 hover:bg-blue-500'}`}>
-                  {isSending ? <RefreshCw className="w-5 h-5 animate-spin" /> : <><Send className="w-5 h-5" /> Send Message</>}
+                <button 
+                  type="submit" 
+                  disabled={isSending || charCount === 0} 
+                  className={`w-full text-white font-black py-4 sm:py-4.5 rounded-xl shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:active:scale-100 disabled:cursor-not-allowed text-base transition-all active:scale-[0.98] ${
+                    modalMode === 'pitch' 
+                      ? 'bg-slate-900 hover:bg-slate-800 hover:shadow-slate-900/20' 
+                      : 'bg-blue-600 hover:bg-blue-500 hover:shadow-blue-600/30'
+                  }`}
+                >
+                  {isSending ? (
+                     <><RefreshCw className="w-5 h-5 animate-spin" /> Sending Securely...</>
+                  ) : (
+                     <><Send className="w-5 h-5" /> Send {modalMode === 'pitch' ? 'Pitch' : 'Request'}</>
+                  )}
                 </button>
               </form>
             )}

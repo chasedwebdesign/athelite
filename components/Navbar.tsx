@@ -69,9 +69,10 @@ export default function Navbar() {
       }
       if (isMounted) setIsSearching(true);
 
+      // Added custom_slug to the select payload
       let query = supabase
         .from('athletes')
-        .select('id, first_name, last_name, avatar_url, high_school')
+        .select('id, first_name, last_name, avatar_url, high_school, custom_slug')
         .gt('trust_level', 0)
         .limit(5);
 
@@ -173,7 +174,6 @@ export default function Navbar() {
     }
   }, [supabase]);
 
-  // 🚨 THE FIX: Explicitly typed the Promise payload to avoid deep-destructuring any types
   useEffect(() => {
     let isMounted = true;
 
@@ -263,7 +263,13 @@ export default function Navbar() {
                     <div className="p-6 text-center text-sm font-bold text-slate-400">Searching...</div>
                   ) : searchResults.length > 0 ? (
                     searchResults.map(result => (
-                      <Link key={result.id} href={`/athlete/${result.id}`} onClick={() => { setSearchQuery(''); setSearchResults([]); setIsSearchOpen(false); }} className="flex items-center gap-4 p-4 hover:bg-slate-50 border-b border-slate-100 last:border-0 transition-colors">
+                      <Link 
+                        key={result.id} 
+                        // Updated to dynamically route to custom_slug with ID fallback
+                        href={`/athlete/${result.custom_slug || result.id}`} 
+                        onClick={() => { setSearchQuery(''); setSearchResults([]); setIsSearchOpen(false); }} 
+                        className="flex items-center gap-4 p-4 hover:bg-slate-50 border-b border-slate-100 last:border-0 transition-colors"
+                      >
                         <div className="w-12 h-12 rounded-full bg-slate-100 border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center">
                           {result.avatar_url ? <img src={result.avatar_url} alt="" className="w-full h-full object-cover"/> : <Medal className="w-6 h-6 text-slate-400"/>}
                         </div>
@@ -358,25 +364,38 @@ export default function Navbar() {
                 </button>
               </>
             ) : (
-              <Link href="/login" className="text-sm font-bold bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-xl transition-all shadow-sm shadow-blue-600/20 ml-2 whitespace-nowrap">Log In</Link>
+              <div className="flex items-center gap-3 ml-2">
+                <Link href="/login" className="text-sm font-bold text-slate-500 hover:text-slate-900 transition-colors">Log In</Link>
+                <Link href="/login?mode=signup" className="text-sm font-bold bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-full transition-all shadow-sm shadow-blue-600/20 whitespace-nowrap">Get Started</Link>
+              </div>
             )}
           </div>
 
           {/* Mobile Actions */}
-          <div className="flex items-center gap-4 md:hidden">
+          <div className="flex items-center gap-3 md:hidden">
+            {!session && (
+              <Link 
+                href="/login?mode=signup" 
+                className="text-sm font-bold bg-blue-600 hover:bg-blue-500 text-white px-5 py-2 rounded-full transition-all shadow-sm"
+              >
+                Get Started
+              </Link>
+            )}
+
             {session && isAthlete && (
-              <Link href="/shop" className={`p-2 transition-colors rounded-lg ${isActive('/shop') ? 'text-emerald-600 bg-emerald-50' : 'text-slate-500 hover:bg-slate-100 hover:text-emerald-600'}`}>
-                <ShoppingCart className="w-6 h-6" />
+              <Link href="/shop" className={`p-2 transition-colors rounded-full ${isActive('/shop') ? 'text-emerald-600 bg-emerald-50' : 'text-slate-500 hover:bg-slate-100 hover:text-emerald-600'}`}>
+                <ShoppingCart className="w-5 h-5" />
               </Link>
             )}
 
             {session && (
-               <Link href="/dashboard/messages" className={`relative p-2 transition-colors ${isActive('/dashboard/messages') ? 'text-blue-600' : 'text-slate-500 hover:text-blue-600'}`} onClick={closeMobileMenu}>
-                 <Mail className="w-6 h-6" />
-                 {unreadCount > 0 && <span className="absolute top-1 right-1 bg-red-500 text-white text-[10px] leading-none font-black min-w-[16px] h-[16px] flex items-center justify-center rounded-full border-2 border-white">{unreadCount}</span>}
+               <Link href="/dashboard/messages" className={`relative p-2 transition-colors rounded-full ${isActive('/dashboard/messages') ? 'text-blue-600' : 'text-slate-500 hover:text-blue-600'}`} onClick={closeMobileMenu}>
+                 <Mail className="w-5 h-5" />
+                 {unreadCount > 0 && <span className="absolute top-0 right-0 bg-red-500 text-white text-[10px] leading-none font-black min-w-[16px] h-[16px] flex items-center justify-center rounded-full border-2 border-white">{unreadCount}</span>}
                </Link>
             )}
-            <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+            
+            <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 text-slate-600 hover:bg-slate-100 rounded-full transition-colors ml-1">
               {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
           </div>
@@ -386,7 +405,7 @@ export default function Navbar() {
       {/* Mobile Slide-Out Menu */}
       {isMobileMenuOpen && (
         <div className="fixed inset-0 top-[80px] z-[50] bg-white overflow-y-auto animate-in slide-in-from-top-5 duration-200 md:hidden">
-          <div className="p-6 flex flex-col gap-6">
+          <div className="p-6 flex flex-col gap-6 min-h-full pb-32">
             
             <div className="relative w-full" ref={mobileSearchRef}>
               <div className="relative">
@@ -410,7 +429,13 @@ export default function Navbar() {
                     <div className="p-4 text-center text-sm font-bold text-slate-400">Searching...</div>
                   ) : searchResults.length > 0 ? (
                     searchResults.map(result => (
-                      <Link key={result.id} href={`/athlete/${result.id}`} onClick={closeMobileMenu} className="flex items-center gap-4 p-4 hover:bg-slate-50 border-b border-slate-100 last:border-0">
+                      <Link 
+                        key={result.id} 
+                        // Updated to dynamically route to custom_slug with ID fallback
+                        href={`/athlete/${result.custom_slug || result.id}`} 
+                        onClick={closeMobileMenu} 
+                        className="flex items-center gap-4 p-4 hover:bg-slate-50 border-b border-slate-100 last:border-0"
+                      >
                         <div className="w-12 h-12 rounded-full bg-slate-100 border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center">
                           {result.avatar_url ? <img src={result.avatar_url} alt="" className="w-full h-full object-cover"/> : <Medal className="w-6 h-6 text-slate-400"/>}
                         </div>
@@ -491,7 +516,8 @@ export default function Navbar() {
               ) : (
                 <>
                   <div className="h-px bg-slate-100 my-2"></div>
-                  <Link href="/login" onClick={closeMobileMenu} className="bg-blue-600 text-white font-black text-center p-4 rounded-2xl shadow-lg shadow-blue-600/20">Log In / Sign Up</Link>
+                  <Link href="/login?mode=signup" onClick={closeMobileMenu} className="bg-blue-600 text-white font-black text-center p-4 rounded-2xl shadow-lg shadow-blue-600/20">Get Started</Link>
+                  <Link href="/login" onClick={closeMobileMenu} className="text-slate-500 font-bold text-center p-4 rounded-2xl hover:bg-slate-50">Log In</Link>
                 </>
               )}
             </div>

@@ -1,233 +1,166 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { Resend } from 'resend';
 import { createClient } from '@supabase/supabase-js';
 
-export const maxDuration = 60;
-export const dynamic = 'force-dynamic';
+// Initialize Resend
+const resend = new Resend(process.env.RESEND_API_KEY);
 
-// 🚨 ADMIN SUPABASE CLIENT (Bypasses RLS strictly for the kill-switch counter) 🚨
+// Initialize Supabase Admin
+// We use the Service Role Key here to bypass Row Level Security (RLS) so the server 
+// can securely write to the verifications table and forcefully upgrade the trust_level.
 const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!, 
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// Set your global limit (e.g., 500 scrapes per day)
-const DAILY_GLOBAL_LIMIT = 500; 
-
-// ==========================================
-// 💡 THE "DON'T REWRITE LOGIC" TRICK
-// We wrap your exact DOM extraction logic in a standard function.
-// Next.js will convert this to a string and ScrapingAnt will inject it directly!
-// ==========================================
-const searchPageLogicFn = function(fName: string, lName: string, filterState: string, filterCity: string) {
-  const athletes: any[] = [];
-  
-  // 1. ONLY look for anchor tags that are actual links
-  const allLinks = Array.from(document.querySelectorAll('a')).filter(a => {
-      const href = a.href.toLowerCase();
-      return href.includes('/athlete/') || href.includes('athlete.aspx');
-  });
-
-  // 2. Filter for name match
-  const nameLinks = allLinks.filter(a => {
-      const t = a.textContent || '';
-      const tLower = t.toLowerCase();
-      return tLower.includes(fName.toLowerCase()) && tLower.includes(lName.toLowerCase());
-  });
-
-  nameLinks.forEach(link => {
-      let rawUrl = link.href;
-      const cleanName = (link.textContent || '').replace(/(TF|XC|Indoor|Outdoor)/gi, '').replace(/\s+/g, ' ').trim();
-      
-      let container = link.closest('li, tr, .search-result, .list-group-item, .card');
-      
-      if (!container || !/(HS|High School|MS|Middle School)/i.test(container.textContent || '')) {
-          container = link as Element;
-          for (let i = 0; i < 5; i++) {
-              if (container.parentElement) container = container.parentElement;
-              if (/(HS|High School|MS|Middle School)/i.test(container.textContent || '')) break;
-          }
-      }
-
-      if (!container) return;
-
-      const fullText = container.textContent || '';
-      let schoolName = 'Unknown High School';
-      const lines = fullText.split('\n').map(s => s.trim()).filter(s => s.length > 0);
-      const schoolLine = lines.find(l => /(HS|High School|MS|Middle School)/i.test(l) && !l.toLowerCase().includes(fName.toLowerCase()));
-      
-      if (schoolLine) {
-          schoolName = schoolLine.replace(/^((?:TF|XC)\s+)?/i, '').replace(/\([0-9-]+\)/g, '').replace(/Show PRs\.\.\./gi, '').trim();
-      } else {
-          const rawMatch = fullText.match(/(?:TF|XC)?\s*([A-Z][A-Za-z0-9\s.'-]+\s(?:HS|High School|MS|Middle School))/i);
-          if (rawMatch && !rawMatch[1].toLowerCase().includes(fName.toLowerCase())) {
-              schoolName = rawMatch[1].trim();
-          }
-      }
-
-      // 🚨 THE FIX: Remove jammed state abbreviations (e.g., "ORSouth" -> "South")
-      schoolName = schoolName.replace(/^([A-Z]{2})(?=[A-Z][a-z])/g, '').trim();
-
-      // Force URL format
-      let finalUrl = rawUrl;
-      if (finalUrl.includes('/athlete/') && !finalUrl.includes('/track-and-field') && !finalUrl.includes('/cross-country')) {
-          if (!finalUrl.endsWith('/')) finalUrl += '/';
-          finalUrl += 'track-and-field';
-      } else if (finalUrl.toLowerCase().includes('athlete.aspx')) {
-          const urlObj = new URL(finalUrl);
-          const aid = urlObj.searchParams.get('AID');
-          if (aid) finalUrl = `https://www.athletic.net/athlete/${aid}/track-and-field`;
-      }
-
-      if (cleanName.length > 2 && finalUrl) {
-          const textLower = fullText.toLowerCase();
-          const stateMap: Record<string, string> = { 'oregon': ' or', 'washington': ' wa', 'california': ' ca', 'texas': ' tx', 'florida': ' fl', 'new york': ' ny', 'ohio': ' oh' };
-          const mappedState = stateMap[filterState.toLowerCase()] || filterState.toLowerCase();
-          
-          const stateMatch = !filterState || textLower.includes(filterState.toLowerCase()) || textLower.includes(mappedState);
-          const cityMatch = !filterCity || textLower.includes(filterCity.toLowerCase());
-
-          if (stateMatch && cityMatch && !athletes.some(a => a.url === finalUrl)) {
-              athletes.push({ name: cleanName, school: schoolName, url: finalUrl });
-          }
-      }
-  });
-  
-  return athletes.slice(0, 5);
-};
-
-// Converts logic functions into a format ScrapingAnt will execute cleanly.
-const buildScrapingAntSnippet = (fn: Function, args: any[]) => {
-  let script = `
-    try {
-      const execLogic = ${fn.toString()};
-      const result = execLogic(${args.map(a => JSON.stringify(a)).join(', ')});
-      const ta = document.createElement('textarea');
-      ta.id = '__chased_data__';
-      ta.textContent = JSON.stringify(result);
-      document.body.appendChild(ta);
-    } catch (e) {
-      const ta = document.createElement('textarea');
-      ta.id = '__chased_error__';
-      ta.textContent = e.message || String(e);
-      document.body.appendChild(ta);
-    }
-  `;
-  
-  // Minify the script string to ensure we stay well under URL length limits
-  script = script.replace(/\n/g, ' ').replace(/\s{2,}/g, ' ');
-  return Buffer.from(script).toString('base64');
-};
-
-const extractDataFromHtml = (html: string) => {
-  const dataMatch = html.match(/<textarea id="__chased_data__">([\s\S]*?)<\/textarea>/);
-  if (dataMatch && dataMatch[1]) return JSON.parse(dataMatch[1]);
-  
-  const errMatch = html.match(/<textarea id="__chased_error__">([\s\S]*?)<\/textarea>/);
-  if (errMatch && errMatch[1]) throw new Error("Injected JS Error: " + errMatch[1]);
-  
-  throw new Error("ScrapingAnt loaded the page, but no scraped data was returned. Potential bot block.");
-};
-
-export async function POST(req: Request) {
-  const { firstName, lastName, state, city } = await req.json();
-  const SCRAPINGANT_API_KEY = process.env.SCRAPINGANT_API_KEY;
-
-  if (!firstName || !lastName) {
-    return NextResponse.json({ error: 'First and last name are required.' }, { status: 400 });
-  }
-
-  if (!SCRAPINGANT_API_KEY) {
-    return NextResponse.json({ error: 'ScrapingAnt API key is missing from environment variables.' }, { status: 500 });
-  }
-
-  // ==========================================
-  // 🚨 1. CHECK THE KILL SWITCH (THE TRAP DOOR)
-  // ==========================================
+export async function POST(req: NextRequest) {
   try {
-    const { data: isAllowed, error } = await supabaseAdmin.rpc('check_and_increment_usage', {
-      limit_amount: DAILY_GLOBAL_LIMIT
-    });
+    const body = await req.json();
+    const { action, email, userId, firstName, lastName, code } = body;
 
-    if (error) {
-      console.error("Supabase RPC Error:", error);
-      return NextResponse.json({ error: "Internal Server Error verifying limits." }, { status: 500 });
+    if (!action) {
+      return NextResponse.json({ error: 'Missing action parameter.' }, { status: 400 });
     }
 
-    if (!isAllowed) {
-      console.warn("🛑 TRAP DOOR ACTIVATED: Global daily search limit reached.");
-      return NextResponse.json({ 
-        error: "Global daily limit reached to protect platform stability. Please try again tomorrow." 
-      }, { status: 429 });
-    }
-  } catch (err) {
-    console.error("Kill switch error:", err);
-    return NextResponse.json({ error: "Failed to verify usage limits." }, { status: 500 });
-  }
-
-  // ==========================================
-  // 🚀 2. EXECUTE SCRAPINGANT REQUEST
-  // ==========================================
-  const searchTerms = `${firstName} ${lastName}`;
-  const searchUrl = `https://www.athletic.net/Search.aspx?q=${encodeURIComponent(searchTerms)}`;
-  
-  const MAX_RETRIES = 2;
-  let attempt = 0;
-
-  while (attempt < MAX_RETRIES) {
-    attempt++;
-
-    try {
-      console.log(`\n☁️ Booting Scraper for: "${searchTerms}" (Attempt ${attempt}/${MAX_RETRIES})`);
-      
-      const snippet = buildScrapingAntSnippet(searchPageLogicFn, [firstName, lastName, state || '', city || '']);
-      
-      // 🚨 ScrapingAnt v2 requires parameters in the URL query string for GET requests.
-      const queryParams = new URLSearchParams({
-        url: searchUrl,
-        browser: 'true',
-        proxy_type: 'residential', // 🚨 THE FIX: Use real home ISP IPs to bypass Cloudflare instantly
-        proxy_country: 'US',       // 🚨 Keep it stateside so Athletic.net doesn't flag a foreign request
-        js_snippet: snippet
-      });
-
-      const res = await fetch(`https://api.scrapingant.com/v2/general?${queryParams.toString()}`, {
-        method: 'GET',
-        headers: {
-          'x-api-key': SCRAPINGANT_API_KEY
-        }
-      });
-
-      if (!res.ok) {
-        if (res.status === 422) {
-            const errText = await res.text();
-            throw new Error(`422 Validation Error from ScrapingAnt: ${errText}`);
-        }
-        if (res.status === 429 || res.status >= 500) throw new Error("Retryable ScrapingAnt Error");
-        throw new Error(`ScrapingAnt Failed: HTTP ${res.status}`);
+    // ==========================================
+    // ACTION 1: SEND SECURE PIN
+    // ==========================================
+    if (action === 'send') {
+      if (!email || !userId || !firstName) {
+        return NextResponse.json({ error: 'Identity verification failed. Missing user data.' }, { status: 400 });
       }
 
-      const html = await res.text();
-      const domResults = extractDataFromHtml(html);
+      // 1. Generate a secure 6-digit OTP & Expiration
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString(); // 15 mins
 
-      console.log(`✅ Extracted ${domResults.length} athletes.`);
-      console.log("🔗 URLs Returned to Frontend:", JSON.stringify(domResults, null, 2));
+      // 2. Store the OTP in the database
+      const { error: dbError } = await supabaseAdmin
+        .from('email_verifications')
+        .insert({
+          athlete_id: userId,
+          email: email.trim().toLowerCase(),
+          code: otp,
+          expires_at: expiresAt
+        });
 
-      return NextResponse.json({ success: true, data: domResults });
-
-    } catch (error: any) {
-      console.error(`❌ Search Error Captured (Attempt ${attempt}):`, error.message);
-      
-      const msg = error.message || "";
-      
-      // Auto-retry transient network errors, timeouts, or 429 blocks
-      if (msg.includes('Retryable') || msg.includes('Cloudflare') || msg.includes('bot block') || msg.includes('429')) {
-        if (attempt >= MAX_RETRIES) {
-          return NextResponse.json({ error: 'Athletic.net security check is temporarily blocking us. Please wait a minute and try again.' }, { status: 503 });
-        }
-        await new Promise(res => setTimeout(res, 1500));
-        continue; 
+      if (dbError) {
+         console.error('Supabase Insert Error:', dbError);
+         return NextResponse.json({ error: 'Failed to generate secure token. Database error.' }, { status: 500 });
       }
-      return NextResponse.json({ error: `Search temporarily unavailable: ${msg}` }, { status: 500 });
+
+      // 3. Dispatch the Gamified HTML Email via Resend
+      // 🚨 FIX: Hardcoded to the verified domain to bypass Next.js local sandbox restrictions
+      const senderEmail = 'verify@chasedsports.com';
+
+      const { error: resendError } = await resend.emails.send({
+        from: `ChasedSports Auth <${senderEmail}>`,
+        to: [email.trim().toLowerCase()],
+        subject: `${otp} is your ChasedSports Verification Code`,
+        html: `
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Verify your ChasedSports Account</title>
+          </head>
+          <body style="margin: 0; padding: 40px 20px; background-color: #020617; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #f8fafc;">
+            <div style="max-width: 520px; margin: 0 auto; background-color: #0f172a; border: 1px solid #1e293b; border-radius: 24px; padding: 40px; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);">
+              
+              <div style="text-align: center; margin-bottom: 24px;">
+                <span style="background: rgba(168, 85, 247, 0.1); border: 1px solid rgba(168, 85, 247, 0.3); color: #c084fc; font-size: 13px; font-weight: 700; padding: 8px 16px; border-radius: 9999px; letter-spacing: 1.5px; text-transform: uppercase;">
+                  Network Security
+                </span>
+              </div>
+
+              <h2 style="color: #ffffff; text-align: center; font-size: 24px; font-weight: 800; margin-top: 0; margin-bottom: 12px; letter-spacing: -0.5px;">
+                Verify Your Identity, ${firstName}
+              </h2>
+              
+              <p style="color: #94a3b8; font-size: 15px; line-height: 24px; text-align: center; margin-bottom: 32px;">
+                Lock in your recruiting profile and upgrade your account to unlock verified leaderboards, PR tracking, and recruiter matchmaking.
+              </p>
+
+              <div style="background-color: #020617; border: 1px solid #1e293b; padding: 32px 24px; border-radius: 16px; text-align: center; margin-bottom: 32px;">
+                <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; color: #64748b; margin-bottom: 12px;">Your 6-Digit Passcode</div>
+                <div style="font-size: 42px; font-weight: 900; letter-spacing: 12px; color: #c084fc; font-family: monospace; text-shadow: 0 0 20px rgba(168, 85, 247, 0.4);">
+                  ${otp}
+                </div>
+              </div>
+
+              <p style="color: #475569; font-size: 13px; text-align: center; margin: 0;">
+                Valid for 15 minutes. If you did not request this, safely ignore this email.
+              </p>
+            </div>
+          </body>
+          </html>
+        `
+      });
+
+      if (resendError) {
+         console.error('Resend Error Details:', resendError);
+         return NextResponse.json({ error: `Mail Error: ${resendError.message}` }, { status: 502 });
+      }
+
+      return NextResponse.json({ success: true, message: 'Pin dispatched successfully.' });
     }
+
+    // ==========================================
+    // ACTION 2: VERIFY PIN & UPGRADE ACCOUNT
+    // ==========================================
+    if (action === 'verify') {
+      if (!userId || !code) {
+         return NextResponse.json({ error: 'Missing account identity or pin code.' }, { status: 400 });
+      }
+
+      const normalizedCode = code.toString().trim();
+
+      // 1. Find the latest unverified code for this athlete
+      const { data: verifications, error: lookupError } = await supabaseAdmin
+        .from('email_verifications')
+        .select('id, expires_at')
+        .eq('athlete_id', userId)
+        .eq('code', normalizedCode)
+        .is('verified_at', null)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (lookupError || !verifications || verifications.length === 0) {
+         return NextResponse.json({ error: 'Invalid verification pin. Please check your email and try again.' }, { status: 400 });
+      }
+
+      const record = verifications[0];
+
+      // 2. Check Expiration
+      if (new Date(record.expires_at).getTime() < Date.now()) {
+         return NextResponse.json({ error: 'This verification pin has expired. Please request a new one.' }, { status: 410 });
+      }
+
+      // 3. Mark the pin as utilized
+      await supabaseAdmin
+        .from('email_verifications')
+        .update({ verified_at: new Date().toISOString() })
+        .eq('id', record.id);
+
+      // 4. Upgrade the athlete's trust level to 1 (Verified)
+      const { error: updateError } = await supabaseAdmin
+        .from('athletes')
+        .update({ trust_level: 1 })
+        .eq('id', userId);
+
+      if (updateError) {
+         console.error('Athlete Trust Upgrade Error:', updateError);
+         return NextResponse.json({ error: 'Pin matched successfully, but failed to upgrade account trust level in the database.' }, { status: 500 });
+      }
+
+      return NextResponse.json({ success: true, message: 'Account successfully verified.' });
+    }
+
+    return NextResponse.json({ error: 'Invalid API operation requested.' }, { status: 400 });
+
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Internal Server Error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

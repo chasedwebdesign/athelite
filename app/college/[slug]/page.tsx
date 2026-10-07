@@ -98,8 +98,6 @@ function getBudgetTier(expense: number | null, sportName: string) {
 // ==========================================
 export async function generateStaticParams() {
   const supabase = createClient();
-
-  // MIGRATION: Select slug instead of id
   const { data: universities } = await supabase.from('universities').select('slug');
   
   return (universities || []).map((uni: { slug: string }) => ({ 
@@ -111,7 +109,6 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const resolvedParams = await params;
   const supabase = createClient();
 
-  // MIGRATION: Query by slug
   const { data: university } = await supabase
     .from('universities')
     .select('name, city, state, division, tuition_in_state')
@@ -127,7 +124,6 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   return {
     title: `How Much Is ${university.name} Tuition? (2026 Rankings & Recruiting)`,
     description: `In-state tuition at ${university.name} is ${inStateCost}. See national & state rankings, athletic recruiting standards, average scholarships, acceptance rates, and alumni ROI.`,
-    // MIGRATION: Canonical URL uses slug
     alternates: { canonical: `https://www.chasedsports.com/college/${resolvedParams.slug}` },
     openGraph: {
       title: `${university.name} Athletics & State/National Rankings`,
@@ -154,7 +150,6 @@ export default async function CollegePage({
   const supabase = createClient();
 
   // 1. Fetch Target University
-  // MIGRATION: Query by slug, but pull all data (including ID for relationships)
   const { data: collegeData, error: uniError } = await supabase
     .from('universities')
     .select('*')
@@ -292,7 +287,6 @@ export default async function CollegePage({
   };
 
   // 3. Fetch & Filter Programs Server-Side
-  // MIGRATION: Even though we are routing by slug, database relations still use the core ID
   let progQuery = supabase
     .from('programs')
     .select(`*, recruiting_standards (*)`)
@@ -311,7 +305,7 @@ export default async function CollegePage({
       {/* ========================================================= */}
       {/* HERO SECTION                                              */}
       {/* ========================================================= */}
-      <div className="relative bg-white pt-16 pb-32 px-8 overflow-hidden rounded-b-[2.5rem] shadow-[0_10px_40px_-15px_rgba(0,0,0,0.05)] border-b border-slate-200">
+      <div className="relative bg-white pt-16 pb-32 px-6 sm:px-8 overflow-hidden rounded-b-[2.5rem] shadow-[0_10px_40px_-15px_rgba(0,0,0,0.05)] border-b border-slate-200">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-blue-400/10 blur-[100px] rounded-full pointer-events-none"></div>
 
         <div className="max-w-4xl mx-auto relative z-10">
@@ -326,7 +320,6 @@ export default async function CollegePage({
 
             {isFiltered && (
               <Link 
-                // MIGRATION: Update reset link to use slug
                 href={`/college/${resolvedParams.slug}`}
                 className="inline-flex items-center text-sm font-bold text-slate-600 hover:text-slate-800 transition-colors bg-slate-100 px-5 py-2.5 rounded-full border border-slate-200 hover:bg-slate-200 shadow-sm"
               >
@@ -335,7 +328,7 @@ export default async function CollegePage({
             )}
           </div>
 
-          <h1 className="text-5xl md:text-7xl font-black tracking-tighter text-slate-900 mb-8 leading-tight">
+          <h1 className="text-4xl sm:text-5xl md:text-7xl font-black tracking-tighter text-slate-900 mb-8 leading-tight">
             {collegeData.name}
           </h1>
 
@@ -371,7 +364,7 @@ export default async function CollegePage({
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-6 -mt-16 relative z-20 space-y-10">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 -mt-16 relative z-20 space-y-10">
         
         {/* ========================================================= */}
         {/* 1. INSTITUTIONAL OVERVIEW (Academics, Cost, ROI)          */}
@@ -381,7 +374,7 @@ export default async function CollegePage({
           {(hasTuition || collegeData.acceptance_rate) && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {hasTuition && (
-                <div className="bg-white p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100">
+                <div className="bg-white p-6 sm:p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100">
                   <div className="flex items-center space-x-4 mb-6">
                     <div className="bg-blue-100 p-3 rounded-2xl shadow-inner">
                       <Landmark className="w-6 h-6 text-blue-600" />
@@ -407,11 +400,11 @@ export default async function CollegePage({
               )}
 
               {collegeData.acceptance_rate && (
-                <div className="bg-white p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100 flex flex-col justify-center text-center">
+                <div className="bg-white p-6 sm:p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100 flex flex-col justify-center text-center">
                   <h2 className="text-xl font-black text-slate-900 mb-6">What is the acceptance rate at {collegeData.name}?</h2>
-                  <div className="bg-slate-50 w-full rounded-3xl p-8 border border-slate-100 shadow-inner">
+                  <div className="bg-slate-50 w-full rounded-3xl p-6 sm:p-8 border border-slate-100 shadow-inner">
                     <span className="block text-sm font-black text-slate-400 mb-3 uppercase tracking-widest">Acceptance Rate</span>
-                    <span className="text-6xl font-black text-slate-900 tracking-tighter">{collegeData.acceptance_rate}</span>
+                    <span className="text-4xl sm:text-6xl font-black text-slate-900 tracking-tighter">{collegeData.acceptance_rate}</span>
                   </div>
                 </div>
               )}
@@ -420,7 +413,7 @@ export default async function CollegePage({
 
           {/* 10-Yr Salary ROI Card */}
           {collegeData.median_earnings && (
-            <div className="bg-white p-10 md:p-12 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100 flex flex-col md:flex-row items-center justify-between gap-8">
+            <div className="bg-white p-6 sm:p-10 md:p-12 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100 flex flex-col md:flex-row items-center justify-between gap-8">
               <div className="flex-1">
                 <div className="flex items-center space-x-4 mb-4">
                   <div className="bg-green-100 p-3.5 rounded-2xl shadow-inner">
@@ -433,9 +426,9 @@ export default async function CollegePage({
                   The median salary of alumni 10 years after enrolling is <strong>{formatCurrency(collegeData.median_earnings)}</strong>. This metric serves as a powerful indicator of the networking opportunities, degree strength, and long-term financial security provided by this institution.
                 </p>
               </div>
-              <div className="bg-green-50 border border-green-100 p-8 rounded-3xl text-center shrink-0 w-full md:w-auto shadow-sm">
+              <div className="bg-green-50 border border-green-100 p-6 sm:p-8 rounded-3xl text-center shrink-0 w-full md:w-auto shadow-sm">
                 <span className="block text-sm font-bold text-green-600 mb-2 uppercase tracking-wider">10-Year Median Salary</span>
-                <span className="text-5xl font-black text-green-700 tracking-tighter">{formatCurrency(collegeData.median_earnings)}</span>
+                <span className="text-4xl sm:text-5xl font-black text-green-700 tracking-tighter">{formatCurrency(collegeData.median_earnings)}</span>
               </div>
             </div>
           )}
@@ -451,7 +444,6 @@ export default async function CollegePage({
               <h3 className="text-2xl font-black text-slate-900 mb-2 tracking-tight">No programs match this filter</h3>
               <p className="text-slate-500 font-medium mb-6">This school does not offer this specific sport or gender combination.</p>
               <Link 
-                // MIGRATION: Update reset link to use slug
                 href={`/college/${resolvedParams.slug}`}
                 className="inline-block px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-colors shadow-lg shadow-blue-600/30"
               >
@@ -475,7 +467,7 @@ export default async function CollegePage({
                   
                   {/* TOP: RECRUITING STANDARDS */}
                   {program.recruiting_standards?.length > 0 && (
-                    <div className="bg-white p-10 md:p-14 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100">
+                    <div className="bg-white p-6 sm:p-10 md:p-14 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100">
                       <div className="mb-10 pb-8 border-b border-slate-100 text-center max-w-2xl mx-auto">
                         <h2 className="text-3xl font-black text-slate-900 mb-4 tracking-tight">
                           What are the athletic recruiting standards for {collegeData.name}?
@@ -487,21 +479,21 @@ export default async function CollegePage({
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {program.recruiting_standards.map((standard: any) => (
-                          <div key={standard.id} className="group p-8 bg-slate-50 hover:bg-blue-50/50 border border-slate-100 hover:border-blue-200 rounded-[2rem] transition-all duration-300 shadow-sm hover:shadow-md">
+                          <div key={standard.id} className="group p-6 sm:p-8 bg-slate-50 hover:bg-blue-50/50 border border-slate-100 hover:border-blue-200 rounded-[2rem] transition-all duration-300 shadow-sm hover:shadow-md">
                             <span className="block font-black text-2xl text-slate-800 tracking-tight mb-6 text-center">{standard.event}</span>
                             
                             <div className="space-y-4">
-                              <div className="flex justify-between items-center bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
-                                <span className="text-sm font-black text-slate-400 uppercase tracking-widest">Recruit Target</span>
-                                <span className="font-black text-3xl text-blue-600 group-hover:scale-105 transition-transform drop-shadow-sm">
+                              <div className="flex justify-between items-center bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-100">
+                                <span className="text-xs sm:text-sm font-black text-slate-400 uppercase tracking-widest">Recruit Target</span>
+                                <span className="font-black text-2xl sm:text-3xl text-blue-600 group-hover:scale-105 transition-transform drop-shadow-sm">
                                   {formatTimeSeconds(standard.target_time_seconds)}
                                 </span>
                               </div>
 
                               {standard.walk_on_time_seconds && (
-                                <div className="flex justify-between items-center px-5 py-2">
-                                  <span className="text-sm font-bold text-slate-400 uppercase tracking-widest">Walk-On Target</span>
-                                  <span className="font-black text-xl text-slate-600">
+                                <div className="flex justify-between items-center px-4 sm:px-5 py-2">
+                                  <span className="text-xs sm:text-sm font-bold text-slate-400 uppercase tracking-widest">Walk-On Target</span>
+                                  <span className="font-black text-lg sm:text-xl text-slate-600">
                                     {formatTimeSeconds(standard.walk_on_time_seconds)}
                                   </span>
                                 </div>
@@ -515,31 +507,31 @@ export default async function CollegePage({
 
                   {/* BOTTOM: BUDGET TIER CARD */}
                   {tier && (
-                    <div className={`relative overflow-hidden rounded-[2.5rem] border p-10 md:p-14 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.1)] transition-all ${tier.bgClass} ${tier.glow}`}>
+                    <div className={`relative overflow-hidden rounded-[2.5rem] border p-6 sm:p-10 md:p-14 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.1)] transition-all ${tier.bgClass} ${tier.glow}`}>
                       <div className="absolute top-0 right-0 -mt-20 -mr-20 w-96 h-96 bg-white/40 rounded-full blur-3xl pointer-events-none"></div>
                       
                       <div className="relative z-10 flex flex-col md:flex-row md:items-end justify-between gap-8">
                         <div className="space-y-6">
-                          <div className="inline-flex items-center space-x-3 bg-white/60 backdrop-blur-md px-5 py-2.5 rounded-full border border-white shadow-sm">
+                          <div className="inline-flex items-center space-x-3 bg-white/60 backdrop-blur-md px-4 sm:px-5 py-2 sm:py-2.5 rounded-full border border-white shadow-sm">
                             <tier.Icon className={`w-5 h-5 ${tier.textAccent}`} />
-                            <span className={`text-sm font-black tracking-widest uppercase ${tier.textAccent}`}>
+                            <span className={`text-xs sm:text-sm font-black tracking-widest uppercase ${tier.textAccent}`}>
                               {tier.label}
                             </span>
                           </div>
                           
                           <div>
-                            <h3 className="text-4xl md:text-5xl font-black text-slate-900 tracking-tighter mb-2">
+                            <h3 className="text-3xl sm:text-4xl md:text-5xl font-black text-slate-900 tracking-tighter mb-2">
                               {program.gender} {program.sport}
                             </h3>
-                            <p className="text-slate-600 font-medium max-w-md text-lg leading-relaxed">
+                            <p className="text-slate-600 font-medium max-w-md text-base sm:text-lg leading-relaxed">
                               {tier.desc}
                             </p>
                           </div>
                         </div>
 
-                        <div className="bg-white/60 backdrop-blur-md border border-white rounded-3xl p-8 shrink-0 w-full md:w-auto text-center shadow-md">
-                          <span className="block text-sm font-black text-slate-400 uppercase tracking-widest mb-2">Operating Budget</span>
-                          <span className={`block text-5xl font-black tracking-tighter mb-6 ${tier.textAccent}`}>
+                        <div className="bg-white/60 backdrop-blur-md border border-white rounded-3xl p-6 sm:p-8 shrink-0 w-full md:w-auto text-center shadow-md">
+                          <span className="block text-xs sm:text-sm font-black text-slate-400 uppercase tracking-widest mb-2">Operating Budget</span>
+                          <span className={`block text-3xl sm:text-4xl lg:text-5xl font-black tracking-tighter mb-6 break-words ${tier.textAccent}`}>
                             {formatCurrency(budget)}
                           </span>
                           
@@ -575,14 +567,14 @@ export default async function CollegePage({
         {/* ========================================================= */}
         {/* 3. RANKINGS MATRIX (Benchmarks & Percentiles - Bottom)    */}
         {/* ========================================================= */}
-        <div className="bg-white/80 backdrop-blur-xl border border-white rounded-[2.5rem] p-8 md:p-10 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.05)] relative overflow-hidden">
+        <div className="bg-white/80 backdrop-blur-xl border border-white rounded-[2.5rem] p-6 sm:p-8 md:p-10 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.05)] relative overflow-hidden">
           
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-8 mb-8 border-b border-slate-100 relative z-10">
             <div>
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-100 text-blue-600 text-xs font-black uppercase tracking-widest mb-2 shadow-sm">
                 <BarChart3 className="w-3.5 h-3.5" /> Benchmarks & Percentiles
               </div>
-              <h2 className="text-3xl font-black text-slate-900 tracking-tight">Institutional Rankings</h2>
+              <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">Institutional Rankings</h2>
               <p className="text-xs font-semibold text-slate-500 mt-1 uppercase tracking-wider">
                 Overall placement across the country
               </p>
@@ -600,7 +592,7 @@ export default async function CollegePage({
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 relative z-10">
             
             {/* 1. SALARY / ROI RANK CARD */}
-            <div className="bg-white border border-slate-200 hover:border-emerald-300 transition-all rounded-3xl p-6 flex flex-col justify-between group shadow-lg shadow-slate-200/50">
+            <div className="bg-white border border-slate-200 hover:border-emerald-300 transition-all rounded-3xl p-5 sm:p-6 flex flex-col justify-between group shadow-lg shadow-slate-200/50">
               <div>
                 <div className="flex justify-between items-start mb-4">
                   <div className="bg-emerald-50 border border-emerald-100 p-2.5 rounded-xl shadow-inner">
@@ -612,7 +604,7 @@ export default async function CollegePage({
                 </div>
                 
                 <h3 className="text-sm font-black text-slate-400 uppercase tracking-wider mb-1">Post-Grad Salary</h3>
-                <p className="text-2xl font-black text-slate-900 mb-6 tracking-tight">
+                <p className="text-xl sm:text-2xl font-black text-slate-900 mb-6 tracking-tight">
                   {collegeData.median_earnings ? formatCurrency(collegeData.median_earnings) : 'N/A'}
                 </p>
               </div>
@@ -625,7 +617,7 @@ export default async function CollegePage({
             </div>
 
             {/* 2. TUITION COST VALUE RANK CARD */}
-            <div className="bg-white border border-slate-200 hover:border-blue-300 transition-all rounded-3xl p-6 flex flex-col justify-between group shadow-lg shadow-slate-200/50">
+            <div className="bg-white border border-slate-200 hover:border-blue-300 transition-all rounded-3xl p-5 sm:p-6 flex flex-col justify-between group shadow-lg shadow-slate-200/50">
               <div>
                 <div className="flex justify-between items-start mb-4">
                   <div className="bg-blue-50 border border-blue-100 p-2.5 rounded-xl shadow-inner">
@@ -637,7 +629,7 @@ export default async function CollegePage({
                 </div>
                 
                 <h3 className="text-sm font-black text-slate-400 uppercase tracking-wider mb-1">In-State Cost</h3>
-                <p className="text-2xl font-black text-slate-900 mb-6 tracking-tight">
+                <p className="text-xl sm:text-2xl font-black text-slate-900 mb-6 tracking-tight">
                   {collegeData.tuition_in_state ? formatCurrency(collegeData.tuition_in_state) : 'N/A'}
                 </p>
               </div>
@@ -650,7 +642,7 @@ export default async function CollegePage({
             </div>
 
             {/* 3. SELECTIVITY / ACCEPTANCE RANK CARD */}
-            <div className="bg-white border border-slate-200 hover:border-purple-300 transition-all rounded-3xl p-6 flex flex-col justify-between group shadow-lg shadow-slate-200/50">
+            <div className="bg-white border border-slate-200 hover:border-purple-300 transition-all rounded-3xl p-5 sm:p-6 flex flex-col justify-between group shadow-lg shadow-slate-200/50">
               <div>
                 <div className="flex justify-between items-start mb-4">
                   <div className="bg-purple-50 border border-purple-100 p-2.5 rounded-xl shadow-inner">
@@ -662,7 +654,7 @@ export default async function CollegePage({
                 </div>
                 
                 <h3 className="text-sm font-black text-slate-400 uppercase tracking-wider mb-1">Acceptance Rate</h3>
-                <p className="text-2xl font-black text-slate-900 mb-6 tracking-tight">
+                <p className="text-xl sm:text-2xl font-black text-slate-900 mb-6 tracking-tight">
                   {collegeData.acceptance_rate || 'N/A'}
                 </p>
               </div>

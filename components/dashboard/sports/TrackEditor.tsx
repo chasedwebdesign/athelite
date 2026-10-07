@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Activity, Plus, X, ChevronDown, Info, RefreshCw, Timer, ShieldCheck } from 'lucide-react';
+import { Activity, Plus, ChevronDown, RefreshCw, Timer, Save, Check, Trash2 } from 'lucide-react';
 import { evaluateMetric } from '@/utils/constants/RecruitingStandards'; 
 
 const TRACK_EVENTS = [
@@ -23,30 +23,34 @@ export interface TrackEditorProps {
 }
 
 export default function TrackEditor({ trackStats, genderKey, onSync, showToast, displayRating = 0 }: TrackEditorProps) {
-  const [newEvent, setNewEvent] = useState('');
-  const [newMark, setNewMark] = useState('');
+  const initialMetrics = trackStats.metrics && trackStats.metrics.length > 0 
+    ? trackStats.metrics.map((m: any, idx: number) => ({ ...m, id: `metric-${idx}`, isEditing: false }))
+    : [{ id: 'init', name: '100 Meters', value: '', isEditing: true }];
+
+  const [metricList, setMetricList] = useState<{id: string; name: string; value: string; isEditing: boolean}[]>(initialMetrics);
   const [isSaving, setIsSaving] = useState(false);
 
-  const isDistanceEvent = ['Long Jump', 'Triple Jump', 'High Jump', 'Pole Vault', 'Shot Put', 'Discus', 'Javelin'].includes(newEvent);
+  const checkIsDistance = (eventName: string) => 
+    ['Long Jump', 'Triple Jump', 'High Jump', 'Pole Vault', 'Shot Put', 'Discus', 'Javelin'].includes(eventName);
 
-  const getTierLabel = (score: number) => {
-    if (score >= 95) return { text: 'Power 4 D1 Elite', color: 'from-fuchsia-500 to-indigo-500 shadow-fuchsia-500/20' };
-    if (score >= 85) return { text: 'Mid-Major D1 Priority', color: 'from-purple-500 to-blue-500 shadow-purple-500/20' };
-    if (score >= 75) return { text: 'Top D2 / D1 Walk-on', color: 'from-blue-500 to-cyan-500 shadow-blue-500/20' };
-    if (score >= 65) return { text: 'Solid D2 / High D3', color: 'from-emerald-500 to-teal-500 shadow-emerald-500/20' };
-    if (score >= 55) return { text: 'D3 / NAIA Prospect', color: 'from-amber-500 to-orange-500 shadow-amber-500/20' };
-    if (score >= 40) return { text: 'Strong Varsity', color: 'from-slate-500 to-slate-700 shadow-slate-500/20' };
-    return { text: 'Developing Varsity Track', color: 'from-slate-700 to-slate-800 shadow-slate-500/20' };
+  const sanitizeMark = (event: string, mark: string) => {
+    let sanitized = mark.trim();
+    if ((event.includes('Meters') || event.includes('Mile')) && sanitized.includes(':') && !sanitized.includes('.')) {
+      sanitized += '.00';
+    }
+    return sanitized;
   };
 
   const getCalculatedScore = (eventName: string, markValue: string) => {
-    const nativeResult = evaluateMetric(genderKey, 'Track & Field', eventName, markValue, 'Varsity');
+    if (!markValue) return 0;
+    const cleanMark = sanitizeMark(eventName, markValue);
+    const nativeResult = evaluateMetric(genderKey, 'Track & Field', eventName, cleanMark, 'Varsity');
     const nativeScore = nativeResult?.score || 10;
     
     if (nativeScore > 10) return nativeScore;
 
     if (eventName === '3000 Meters') {
-      const parts = markValue.split(':');
+      const parts = cleanMark.split(':');
       if (parts.length === 2) {
         const mins = parseInt(parts[0], 10);
         const secs = parseFloat(parts[1]);
@@ -66,11 +70,21 @@ export default function TrackEditor({ trackStats, genderKey, onSync, showToast, 
     return nativeScore;
   };
 
+  const getTierLabel = (score: number) => {
+    if (score >= 95) return { text: 'Power 4 D1 Elite', color: 'from-fuchsia-500 to-indigo-500 shadow-fuchsia-500/20', solid: 'bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-500/30' };
+    if (score >= 85) return { text: 'Mid-Major D1 Priority', color: 'from-purple-500 to-blue-500 shadow-purple-500/20', solid: 'bg-purple-500/10 text-purple-400 border-purple-500/30' };
+    if (score >= 75) return { text: 'Top D2 / D1 Walk-on', color: 'from-blue-500 to-cyan-500 shadow-blue-500/20', solid: 'bg-blue-500/10 text-blue-400 border-blue-500/30' };
+    if (score >= 65) return { text: 'Solid D2 / High D3', color: 'from-emerald-500 to-teal-500 shadow-emerald-500/20', solid: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' };
+    if (score >= 55) return { text: 'D3 / NAIA Prospect', color: 'from-amber-500 to-orange-500 shadow-amber-500/20', solid: 'bg-amber-500/10 text-amber-400 border-amber-500/30' };
+    if (score >= 40) return { text: 'Strong Varsity', color: 'from-slate-500 to-slate-700 shadow-slate-500/20', solid: 'bg-slate-500/20 text-slate-300 border-slate-400/50' };
+    return { text: 'Developing Varsity', color: 'from-slate-700 to-slate-800 shadow-slate-500/20', solid: 'bg-slate-500/10 text-slate-400 border-slate-500/30' };
+  };
+
   const getActiveScore = () => {
     if (displayRating > 0) return displayRating;
     let highest = 0;
-    (trackStats?.metrics || []).forEach((m: any) => {
-      const s = m.score || getCalculatedScore(m.name, m.value);
+    metricList.forEach((m) => {
+      const s = getCalculatedScore(m.name, m.value);
       if (s > highest) highest = s;
     });
     return highest;
@@ -79,178 +93,184 @@ export default function TrackEditor({ trackStats, genderKey, onSync, showToast, 
   const activeScore = getActiveScore();
   const activeTier = getTierLabel(activeScore);
 
-  const sanitizeMark = (event: string, mark: string) => {
-    let sanitized = mark.trim();
-    if ((event.includes('Meters') || event.includes('Mile')) && sanitized.includes(':') && !sanitized.includes('.')) {
-      sanitized += '.00';
-    }
-    return sanitized;
+  const handleUpdateEvent = (index: number, field: 'name' | 'value', newValue: string) => {
+    const updated = [...metricList];
+    updated[index][field] = newValue;
+    setMetricList(updated);
   };
 
-  const addMetric = async () => {
-    if (!newEvent || !newMark) return showToast('Event and Mark are required.', 'error');
-
-    setIsSaving(true);
-    const formattedMark = sanitizeMark(newEvent, newMark);
-    const newMetrics = [...(trackStats.metrics || [])];
-    const existingIdx = newMetrics.findIndex((m: any) => m.name === newEvent);
-
-    const calculatedScore = getCalculatedScore(newEvent, formattedMark);
-
-    if (existingIdx >= 0) {
-      newMetrics[existingIdx] = { name: newEvent, value: formattedMark, score: calculatedScore };
-    } else {
-      newMetrics.push({ name: newEvent, value: formattedMark, score: calculatedScore });
-    }
-
-    await onSync({ ...trackStats, metrics: newMetrics });
-    setNewEvent('');
-    setNewMark('');
-    setIsSaving(false);
-    showToast(`${newEvent} mark calculated and synced!`, 'success');
+  const toggleEdit = (index: number, state: boolean) => {
+    const updated = [...metricList];
+    updated[index].isEditing = state;
+    setMetricList(updated);
   };
 
-  const removeMetric = async (index: number) => {
+  const handleAddEvent = () => {
+    setMetricList([
+      ...metricList, 
+      { id: `new-${Date.now()}`, name: TRACK_EVENTS[0], value: '', isEditing: true }
+    ]);
+  };
+
+  const handleRemoveEvent = (index: number) => {
+    setMetricList(metricList.filter((_, i) => i !== index));
+  };
+
+  const handleManualSave = async () => {
     setIsSaving(true);
-    const newMetrics = [...(trackStats.metrics || [])];
-    newMetrics.splice(index, 1);
-    await onSync({ ...trackStats, metrics: newMetrics });
+    
+    const cleanedMetrics = metricList
+      .filter(m => m.value.trim() !== '')
+      .map(({ name, value }) => ({ 
+        name, 
+        value: sanitizeMark(name, value),
+        score: getCalculatedScore(name, value)
+      }));
+
+    await onSync({
+      ...trackStats,
+      metrics: cleanedMetrics,
+      calculatedRating: activeScore
+    });
+
+    setMetricList(prev => prev
+      .filter(m => m.value.trim() !== '')
+      .map(m => ({ ...m, value: sanitizeMark(m.name, m.value), isEditing: false }))
+    );
+
+    showToast("Track & Field metrics synced to database!", "success");
     setIsSaving(false);
   };
 
   return (
-    <div className="bg-gradient-to-b from-slate-900 to-slate-950 border border-slate-800 rounded-[2rem] p-6 text-white shadow-2xl relative overflow-hidden w-full animate-in fade-in duration-300">
-      <div className="absolute top-0 right-0 w-48 h-48 bg-emerald-500/5 blur-[80px] rounded-full pointer-events-none"></div>
+    <div className="bg-gradient-to-b from-slate-900 to-slate-950 border border-slate-800 rounded-[2.5rem] p-4 sm:p-6 md:p-8 text-white shadow-2xl relative w-full animate-in fade-in duration-300">
+      <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 blur-[90px] rounded-full pointer-events-none"></div>
       
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-6 border-b border-slate-800/80 relative z-10">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-5 border-b border-slate-800/80 relative z-10">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="p-2 bg-emerald-500/10 rounded-xl border border-emerald-500/20 text-emerald-400">
-              <Activity className="w-5 h-5" />
+          <div className="flex items-center gap-3">
+            <span className="p-2 sm:p-2.5 bg-emerald-500/10 rounded-xl border border-emerald-500/20 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.15)]">
+              <Activity className="w-4 h-4 sm:w-5 sm:h-5" />
             </span>
-            <h3 className="text-xl font-black tracking-tight">Track & Field Overhaul Module</h3>
+            <h3 className="text-xl sm:text-2xl font-black tracking-tight">Track & Field Engine</h3>
           </div>
-          <p className="text-xs text-slate-400 font-medium mt-1">
-            Track & Field Parameters: <strong className="text-slate-200">{genderKey} Engine Standard</strong>
-          </p>
         </div>
 
         {activeScore > 0 && (
-          <div className="flex items-center gap-3 bg-slate-900/90 backdrop-blur-md px-4 py-2.5 rounded-2xl border border-slate-800 shadow-inner w-full sm:w-auto justify-between sm:justify-start">
+          <div className="flex items-center gap-4 bg-slate-900/90 backdrop-blur-md px-4 py-2 sm:py-3 rounded-2xl border border-slate-800 shadow-inner w-full md:w-auto justify-between md:justify-start">
             <div className="text-left">
-              <span className="block text-[9px] font-black uppercase tracking-widest text-slate-500">Recruitment Rating</span>
-              <span className={`text-xs font-black bg-gradient-to-r ${activeTier.color} bg-clip-text text-transparent`}>
+              <span className="block text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500">Recruitment Rating</span>
+              <span className={`text-xs sm:text-sm font-black bg-gradient-to-r ${activeTier.color} bg-clip-text text-transparent`}>
                 {activeTier.text}
               </span>
             </div>
-            <div className={`text-2xl font-black px-3 py-1 bg-gradient-to-br ${activeTier.color} text-white rounded-xl shadow-lg shrink-0`}>
+            <div className={`text-xl sm:text-3xl font-black px-3 py-1 sm:px-4 sm:py-1.5 bg-gradient-to-br ${activeTier.color} text-white rounded-xl shadow-lg shrink-0`}>
               {activeScore}
             </div>
           </div>
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 relative z-10">
+      <div className="pt-4 pb-1 relative z-10 border-b border-slate-800/80 mb-5">
+        <p className="text-[10px] sm:text-xs text-slate-500 font-bold leading-relaxed bg-slate-900/50 p-3 rounded-xl border border-slate-800">
+          <strong className="text-emerald-400">Tip:</strong> Enter distance marks using spaces (<code className="text-emerald-300 bg-emerald-950 px-1 rounded">52 6.5</code> = 52' 6.5"). Tap any tile below to edit it.
+        </p>
+      </div>
+
+      {/* COMPACT GRID LAYOUT */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 relative z-10">
         
-        {/* Data Entry Left Side */}
-        <div className="space-y-6">
-          <div>
-            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">Select Event Discipline</label>
-            <div className="relative">
-              <select 
-                value={newEvent} 
-                onChange={(e) => setNewEvent(e.target.value)}
-                className="w-full bg-slate-900/60 border border-slate-800 focus:border-emerald-500/50 rounded-xl px-4 py-3 text-sm font-bold tracking-wide outline-none transition-all text-white placeholder-slate-600 shadow-inner appearance-none"
-              >
-                <option value="">Select Event...</option>
-                {TRACK_EVENTS.map((m: string) => <option key={m} value={m}>{m}</option>)}
-              </select>
-              <ChevronDown className="w-4 h-4 text-slate-600 absolute right-4 top-3.5 pointer-events-none" />
+        {metricList.map((metric, idx) => {
+          const isDistance = checkIsDistance(metric.name);
+          const indScore = getCalculatedScore(metric.name, metric.value);
+          const indTier = getTierLabel(indScore);
+
+          // EDIT MODE (Expands to full width on mobile)
+          if (metric.isEditing) {
+            return (
+              <div key={metric.id} className="col-span-2 sm:col-span-3 lg:col-span-4 bg-slate-900 border border-emerald-500/50 p-4 rounded-[1.25rem] shadow-[0_0_20px_rgba(16,185,129,0.1)] flex flex-col sm:flex-row items-center gap-3 animate-in zoom-in-95 duration-200">
+                <div className="relative w-full sm:w-1/3">
+                  <select 
+                    value={metric.name} 
+                    onChange={e => handleUpdateEvent(idx, 'name', e.target.value)} 
+                    className="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500/50 rounded-xl px-3 py-3 text-sm font-bold outline-none text-slate-300 shadow-inner appearance-none cursor-pointer"
+                  >
+                    {TRACK_EVENTS.map(ev => <option key={ev} value={ev}>{ev}</option>)}
+                  </select>
+                  <ChevronDown className="w-4 h-4 text-slate-600 absolute right-3 top-3.5 pointer-events-none" />
+                </div>
+                
+                <div className="relative w-full sm:w-1/3 flex-1">
+                  <input 
+                    type="text" 
+                    placeholder={isDistance ? "e.g. 52 6.5" : "e.g. 10.85"} 
+                    value={metric.value} 
+                    onChange={e => handleUpdateEvent(idx, 'value', e.target.value)} 
+                    className="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500/50 rounded-xl px-3 py-3 text-sm font-bold tracking-wide outline-none text-white placeholder-slate-600 shadow-inner"
+                  />
+                  {isDistance ? (
+                    <Activity className="w-4 h-4 text-slate-600 absolute right-3 top-3.5 pointer-events-none" />
+                  ) : (
+                    <Timer className="w-4 h-4 text-slate-600 absolute right-3 top-3.5 pointer-events-none" />
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 w-full sm:w-auto mt-1 sm:mt-0">
+                  <button 
+                    onClick={() => toggleEdit(idx, false)}
+                    className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500 hover:text-white px-4 py-3 rounded-xl transition-colors font-bold text-xs shrink-0"
+                  >
+                    <Check className="w-4 h-4" /> Done
+                  </button>
+                  <button 
+                    onClick={() => handleRemoveEvent(idx)} 
+                    className="w-11 h-11 flex items-center justify-center text-red-400 bg-red-500/10 hover:bg-red-500 hover:text-white rounded-xl transition-colors shrink-0"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            );
+          }
+
+          // VIEW MODE (Compact Tile)
+          return (
+            <div 
+              key={metric.id} 
+              onClick={() => toggleEdit(idx, true)}
+              className="bg-slate-800/50 hover:bg-slate-700 border border-slate-700/80 hover:border-emerald-500/50 p-4 rounded-2xl shadow-sm flex flex-col items-center justify-center text-center cursor-pointer transition-all relative group animate-in fade-in duration-300"
+            >
+              <div className="absolute top-2 right-2 flex items-center gap-1">
+                {indScore > 0 && <span className="text-[8px] font-black text-emerald-400">{indScore}</span>}
+                <div className={`w-1.5 h-1.5 rounded-full ${indTier.color} bg-gradient-to-r`} title={indTier.text} />
+              </div>
+              
+              <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider mb-1 line-clamp-1 break-words">{metric.name}</span>
+              <span className="text-xl sm:text-2xl font-black text-white">{metric.value || '--'}</span>
             </div>
-          </div>
+          );
+        })}
 
-          <div>
-            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">Verified Mark (MM:SS.ms or FF' II")</label>
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <input 
-                  type="text" 
-                  placeholder={isDistanceEvent ? "e.g. 52 6.5 or 150 4" : "e.g. 9:20.00 or 10.85"} 
-                  value={newMark}
-                  onChange={(e) => setNewMark(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && addMetric()}
-                  className="w-full bg-slate-900/60 border border-slate-800 focus:border-emerald-500/50 rounded-xl px-4 py-3 text-sm font-bold tracking-wide outline-none transition-all text-white placeholder-slate-600 shadow-inner"
-                />
-                {isDistanceEvent ? (
-                  <Activity className="w-4 h-4 text-slate-600 absolute right-4 top-3.5 pointer-events-none" />
-                ) : (
-                  <Timer className="w-4 h-4 text-slate-600 absolute right-4 top-3.5 pointer-events-none" />
-                )}
-              </div>
-              <button 
-                onClick={addMetric}
-                disabled={isSaving}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white px-5 rounded-xl font-bold transition-all shrink-0 flex items-center justify-center shadow-lg shadow-emerald-900/20 disabled:opacity-50"
-              >
-                {isSaving ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
-              </button>
-            </div>
-            <p className="text-[9px] text-slate-500 font-medium mt-2">
-              {isDistanceEvent 
-                ? "* Formatting tip: Enter distance marks using spaces for feet and inches (e.g., 52 6.5 equals 52' 6.5\")."
-                : "* Formatting tip: The engine auto-corrects flat times (e.g., 9:20 → 9:20.00) to ensure accurate indexing."}
-            </p>
-          </div>
-        </div>
+        {/* COMPACT ADD BUTTON */}
+        <button 
+          onClick={handleAddEvent}
+          className="col-span-1 rounded-2xl border-2 border-dashed border-slate-700 hover:border-emerald-500/50 hover:bg-emerald-500/5 flex flex-col items-center justify-center text-slate-500 hover:text-emerald-400 transition-all cursor-pointer shadow-sm group p-4 min-h-[90px]"
+        >
+          <Plus className="w-5 h-5 mb-1 group-hover:scale-110 transition-transform" />
+          <span className="text-[9px] font-black uppercase tracking-widest">Add Event</span>
+        </button>
 
-        {/* Normalization Log Trace Right Side */}
-        <div className="h-full">
-          <div className="p-4 bg-slate-900/40 rounded-2xl border border-slate-800/80 h-full flex flex-col">
-            <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-1.5 mb-3">
-              <Info className="w-3.5 h-3.5" /> Normalization Log Trace
-            </h4>
-            
-            {(!trackStats?.metrics || trackStats.metrics.length === 0) ? (
-              <div className="flex-1 flex flex-col items-center justify-center text-center p-6 border border-dashed border-slate-800 rounded-xl opacity-60">
-                <ShieldCheck className="w-8 h-8 text-slate-600 mb-2" />
-                <p className="text-xs font-bold text-slate-400">No verified marks indexed.</p>
-                <p className="text-[10px] text-slate-500 mt-1">Add marks to populate the tier breakdown matrix.</p>
-              </div>
-            ) : (
-              <div className="space-y-3 overflow-y-auto custom-scrollbar flex-1 pr-2 max-h-[400px]">
-                {trackStats.metrics.map((metric: any, i: number) => {
-                  const metricScore = metric.score || getCalculatedScore(metric.name, metric.value);
-                  const tier = getTierLabel(metricScore);
+      </div>
 
-                  return (
-                    <div key={i} className="bg-slate-950/80 border border-slate-900 p-3 rounded-xl flex justify-between items-center text-xs group transition-all hover:border-slate-700">
-                      <div className="min-w-0 pr-2">
-                        <span className="font-black text-slate-200 block text-sm truncate">{metric.name}</span>
-                        <span className="text-slate-500 font-medium text-[11px] block mt-0.5">
-                          Raw Mark: <strong className="text-slate-400">{metric.value}</strong>
-                        </span>
-                      </div>
-                      <div className="text-right flex items-center gap-3 shrink-0">
-                        <div className="flex flex-col items-end gap-0.5">
-                          <span className={`text-[10px] font-black uppercase tracking-widest bg-gradient-to-r ${tier.color} bg-clip-text text-transparent`}>
-                            {tier.text}
-                          </span>
-                          <span className="text-[10px] font-black text-slate-500 tracking-wider uppercase">
-                            Score: {metricScore}/99
-                          </span>
-                        </div>
-                        <button onClick={() => removeMetric(i)} disabled={isSaving} className="text-slate-600 hover:text-red-500 p-1.5 bg-slate-900 rounded-md hover:bg-red-500/10 transition-colors shrink-0">
-                          <X className="w-4 h-4"/>
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-
+      <div className="pt-6 relative z-10 flex flex-col sm:flex-row justify-end border-t border-slate-800/80 mt-6">
+        <button 
+          onClick={handleManualSave}
+          disabled={isSaving}
+          className="w-full sm:w-auto h-12 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black px-8 rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.3)] transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed hover:scale-[1.02] active:scale-[0.98]"
+        >
+          {isSaving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} 
+          {isSaving ? 'Syncing Profile...' : 'Save & Sync Metrics'}
+        </button>
       </div>
     </div>
   );

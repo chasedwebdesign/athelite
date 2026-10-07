@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, Suspense } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Search, Mail, MailOpen, School, Send, Clock, ChevronLeft, UserCircle2, CheckCircle2, AlertCircle, Ban, Bell, MessageSquare, Archive, SendHorizontal, GraduationCap, Users, ShieldAlert, Check } from 'lucide-react';
+import { Search, Mail, MailOpen, School, Send, Clock, ChevronLeft, ChevronRight, Lock, UserCircle2, CheckCircle2, AlertCircle, Ban, Bell, MessageSquare, Archive, SendHorizontal, GraduationCap, Users, ShieldAlert, Check } from 'lucide-react';
 import Link from 'next/link';
 import { AvatarWithBorder } from '@/components/AnimatedBorders';
 
@@ -26,8 +26,8 @@ interface Message {
   created_at: string;
   chat_history: ChatMessage[] | null;
   status: 'pending' | 'active' | 'ended' | 'delivered'; 
-  is_draft?: boolean; // 🚨 New flag for initial composition
-  target_coach?: any; // 🚨 Temporary storage for coach details during draft mode
+  is_draft?: boolean;
+  target_coach?: any; 
   athletes?: {
     first_name: string;
     last_name: string;
@@ -50,6 +50,7 @@ function InboxContent() {
   
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [viewerRole, setViewerRole] = useState<'athlete' | 'coach'>('athlete');
+  const [trustLevel, setTrustLevel] = useState<number | null>(null); // 🚨 Track verification status
   
   const [replyText, setReplyText] = useState('');
   const [initialPitch, setInitialPitch] = useState('');
@@ -110,11 +111,23 @@ function InboxContent() {
         const userId = session.user.id;
         setCurrentUserId(userId);
 
-        // Determine Role
+        // Determine Role & Fetch Trust Level
         let vRole: 'athlete' | 'coach' = 'athlete';
+        let tLevel = 0;
+        
         const { data: cData } = await supabase.from('coaches').select('id').eq('id', userId).maybeSingle();
-        if (cData) vRole = 'coach';
+        if (cData) {
+            vRole = 'coach';
+            tLevel = 1; // Coaches bypass verification lock
+        } else {
+            const { data: aData } = await supabase.from('athletes').select('trust_level').eq('id', userId).maybeSingle();
+            if (aData) {
+                tLevel = aData.trust_level || 0;
+            }
+        }
+        
         setViewerRole(vRole);
+        setTrustLevel(tLevel);
 
         const { data, error } = await supabase
           .from('messages')
@@ -133,7 +146,7 @@ function InboxContent() {
           setMessages(sortedData);
         }
 
-        // 🚨 COMPOSITION ENGINE: Check if we are composing a new message or jumping to an existing one
+        // COMPOSITION ENGINE
         if (composeId) {
             const existingThread = sortedData.find(m => 
                 (vRole === 'athlete' && m.coach_id === composeId) || 
@@ -141,11 +154,9 @@ function InboxContent() {
             );
 
             if (existingThread) {
-                // Thread exists! Jump to it.
                 setSelectedMessage(existingThread);
                 router.replace('/dashboard/messages'); 
             } else {
-                // Thread does not exist. Spin up a draft state.
                 let draftTargetCoach = null;
                 let draftTargetAthlete = null;
 
@@ -192,7 +203,6 @@ function InboxContent() {
               'postgres_changes',
               { event: '*', schema: 'public', table: 'messages' },
               () => {
-                 // Re-fetch lightly if needed, but for now full re-load is safe for the scale.
                  loadMessages();
               }
             )
@@ -285,7 +295,6 @@ function InboxContent() {
     }
   };
 
-  // 🚨 CREATE A BRAND NEW THREAD (INSERT)
   const handleSendInitialPitch = async (e: React.FormEvent) => {
       e.preventDefault();
       if (!initialPitch.trim() || !selectedMessage || !currentUserId || !selectedMessage.is_draft) return;
@@ -296,7 +305,6 @@ function InboxContent() {
           let sName = '';
           let sSchool = '';
 
-          // Fetch sender details to attach to the root message
           if (viewerRole === 'athlete') {
               const { data: aData } = await supabase.from('athletes').select('first_name, last_name, high_school').eq('id', currentUserId).single();
               if (aData) {
@@ -331,7 +339,6 @@ function InboxContent() {
 
           if (error) throw error;
 
-          // Transition smoothly from draft to active thread
           setMessages(prev => [insertedMsg, ...prev]);
           setSelectedMessage(insertedMsg);
           setInitialPitch('');
@@ -344,7 +351,6 @@ function InboxContent() {
       }
   };
 
-  // 🚨 REPLY TO AN EXISTING THREAD (UPDATE array)
   const handleSendReply = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!replyText.trim() || !selectedMessage || !currentUserId || selectedMessage.is_draft) return;
@@ -474,7 +480,7 @@ function InboxContent() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-8 h-[calc(100vh-80px)] flex flex-col">
       
-      {/* 🚨 CUSTOM INLINE TOAST SYSTEM 🚨 */}
+      {/* CUSTOM INLINE TOAST SYSTEM */}
       {actionError && (
           <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-top-5 fade-in duration-300">
               <div className="bg-red-500 text-white px-6 py-3 rounded-2xl shadow-2xl font-bold flex items-center gap-3">
@@ -501,9 +507,27 @@ function InboxContent() {
         </div>
       </div>
 
-      {/* UNIFIED APP LAYOUT */}
-      <div className="bg-white rounded-[2rem] border border-slate-200 shadow-xl overflow-hidden flex flex-col lg:flex-row flex-1 min-h-[500px]">
+      {/* UNIFIED APP LAYOUT (With Relative Positioning for Modal Override) */}
+      <div className="bg-white rounded-[2rem] border border-slate-200 shadow-xl overflow-hidden flex flex-col lg:flex-row flex-1 min-h-[500px] relative">
         
+        {/* 🚨 UNVERIFIED ATHLETE OVERLAY 🚨 */}
+        {viewerRole === 'athlete' && trustLevel !== 1 && (
+            <div className="absolute inset-0 z-[100] bg-slate-50/60 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-300">
+                <div className="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl border border-slate-200 flex flex-col items-center">
+                    <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mb-5 border border-amber-200">
+                        <Lock className="w-7 h-7 text-amber-500" />
+                    </div>
+                    <h2 className="text-2xl font-black text-slate-900 mb-2 tracking-tight">Verification Required</h2>
+                    <p className="text-sm text-slate-500 font-medium mb-8 leading-relaxed">
+                        To protect college coaches from spam and maintain a trusted ecosystem, you must verify your identity before accessing the message center.
+                    </p>
+                    <Link href="/dashboard/profile" className="bg-slate-900 hover:bg-slate-800 text-white font-black py-3.5 px-6 rounded-xl transition-all shadow-md active:scale-[0.98] flex items-center justify-center gap-2 w-full">
+                        Verify My Account <ChevronRight className="w-4 h-4" />
+                    </Link>
+                </div>
+            </div>
+        )}
+
         {/* ========================================== */}
         {/* COLUMN 1: SIDEBAR (FOLDERS & LIST)           */}
         {/* ========================================== */}
@@ -535,7 +559,7 @@ function InboxContent() {
               </div>
             ) : (
               <div className="flex flex-col">
-                {/* 🚨 DRAFT RENDER IN SIDEBAR 🚨 */}
+                {/* DRAFT RENDER IN SIDEBAR */}
                 {selectedMessage?.is_draft && (
                    <button className="w-full text-left p-4 transition-all border-b border-slate-100 flex flex-col gap-1.5 bg-blue-50/50 border-l-4 border-l-blue-500">
                      <div className="flex justify-between items-start w-full">
@@ -593,7 +617,7 @@ function InboxContent() {
                 )}
               </div>
 
-              {/* 🚨 NCAA COMPLIANCE WARNING BANNER 🚨 */}
+              {/* NCAA COMPLIANCE WARNING BANNER */}
               {isNCAARestricted && (selectedMessage.status === 'active' || selectedMessage.is_draft) && (
                 <div className="bg-red-50 border-b border-red-200 p-4 flex items-start gap-3 shadow-inner shrink-0">
                   <ShieldAlert className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
@@ -606,7 +630,7 @@ function InboxContent() {
                 </div>
               )}
 
-              {/* 🚨 DRAFT COMPOSITION VIEW 🚨 */}
+              {/* DRAFT COMPOSITION VIEW */}
               {selectedMessage.is_draft ? (
                  <div className="flex-1 overflow-y-auto p-6 md:p-10 flex flex-col bg-slate-50">
                     <div className="max-w-2xl w-full mx-auto bg-white border border-slate-200 p-6 md:p-8 rounded-[2rem] shadow-sm">
@@ -634,7 +658,7 @@ function InboxContent() {
                     </div>
                  </div>
               ) : (
-                /* 🚨 ACTIVE CHAT BUBBLES VIEW 🚨 */
+                /* ACTIVE CHAT BUBBLES VIEW */
                 <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 bg-slate-50">
                   
                   {/* Initial Pitch Card */}

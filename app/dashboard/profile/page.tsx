@@ -554,11 +554,32 @@ export default function ProfilePage() {
       ? 'border-emerald-500 focus-within:border-emerald-600 bg-emerald-50/20'
       : 'border-red-500 focus-within:border-red-600 bg-red-50/20';
 
+  // --- DYNAMIC AVATAR PLACEHOLDER FIX ---
+  // Safely generates initials based on profile form data if avatar_url is missing or broken.
+  const avatarFallback = `https://ui-avatars.com/api/?name=${encodeURIComponent(profileForm.first_name || 'New')}+${encodeURIComponent(profileForm.last_name || 'Athlete')}&background=e2e8f0&color=64748b&size=300&font-weight=bold`;
+  const displayAvatar = (athleteProfile?.avatar_url && !athleteProfile.avatar_url.includes('image_0ec6b4')) 
+    ? athleteProfile.avatar_url 
+    : avatarFallback;
+
   // --- ACTION HANDLERS ---
   const publicPortfolioUrl = `/athlete/${athleteProfile?.custom_slug || athleteProfile?.id}`;
 
   const handlePreviewCooldownClick = (e: React.MouseEvent) => {
     e.preventDefault();
+
+    // Verification check intercept
+    if (athleteProfile?.trust_level !== 1) {
+      showToast("Verify email to view portfolio.", "error"); // Cleaned up toast message for mobile
+      setIsEmailVerificationModalOpen(true);
+      return;
+    }
+
+    // Strict requirements lock check
+    if (!isProfileComplete) {
+      showToast("Please complete all required red profile fields before accessing your portfolio.", "error");
+      return;
+    }
+
     if (slugStatus === 'checking') {
       showToast("Please wait for username availability check to complete.", "error");
       return;
@@ -831,16 +852,17 @@ export default function ProfilePage() {
         <div className="w-full bg-red-600 text-white px-4 py-3 flex items-center justify-center gap-4 relative z-40 mb-6 shadow-md rounded-2xl max-w-6xl mx-auto">
           <AlertCircle className="w-5 h-5 shrink-0" />
           <p className="text-sm font-medium">
-            <strong className="font-black">Profile Incomplete:</strong> Please fill out all red highlighted boxes below to unlock dashboard navigation.
+            <strong className="font-black">Profile Incomplete:</strong> Please fill out all red highlighted boxes below to unlock full dashboard access.
           </p>
         </div>
       )}
 
-      {/* Toast System */}
+      {/* Toast System (Updated to rounded-2xl to fix mobile wrapping circle UI bug) */}
       {toast && (
-        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[9999] animate-in slide-in-from-top-5 fade-in duration-300">
-          <div className={`rounded-full px-6 py-3 shadow-2xl flex items-center gap-3 font-bold text-sm border ${toast.type === 'error' ? 'bg-red-900 text-white border-red-700' : 'bg-slate-900 text-white border-slate-700'}`}>
-            {toast.type === 'error' ? <X className="w-4 h-4 text-red-400" /> : <Check className="w-4 h-4 text-emerald-400" />} {toast.message}
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[9999] animate-in slide-in-from-top-5 fade-in duration-300 w-full max-w-sm px-4">
+          <div className={`rounded-2xl px-6 py-4 shadow-2xl flex items-center gap-3 font-bold text-sm border mx-auto ${toast.type === 'error' ? 'bg-red-900 text-white border-red-700' : 'bg-slate-900 text-white border-slate-700'}`}>
+            {toast.type === 'error' ? <X className="w-5 h-5 text-red-400 shrink-0" /> : <Check className="w-5 h-5 text-emerald-400 shrink-0" />} 
+            <span className="leading-tight">{toast.message}</span>
           </div>
         </div>
       )}
@@ -855,10 +877,18 @@ export default function ProfilePage() {
           >
             <UserCircle2 className="w-4 h-4" /> My Profile
           </button>
+          
           <button 
-            onClick={() => setActiveTab('social_media')} 
-            className={`pb-3 text-sm font-black transition-all border-b-2 flex items-center gap-2 whitespace-nowrap ${activeTab === 'social_media' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
+            onClick={() => {
+              if (!isProfileComplete) {
+                showToast("Complete all required identity fields before accessing Social Media tools.", "error");
+                return;
+              }
+              setActiveTab('social_media');
+            }} 
+            className={`pb-3 text-sm font-black transition-all border-b-2 flex items-center gap-2 whitespace-nowrap ${activeTab === 'social_media' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800'} ${!isProfileComplete ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
+            {!isProfileComplete && <Lock className="w-3.5 h-3.5" />}
             <ImageIcon className="w-4 h-4" /> Social Media
           </button>
         </div>
@@ -872,29 +902,41 @@ export default function ProfilePage() {
                 
                 {/* Avatar & Quick Action Card */}
                 <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-200">
-                   <div 
-                     className="aspect-square rounded-2xl overflow-hidden relative group cursor-pointer mb-4" 
-                     onClick={() => !isUploadingAvatar && fileInputRef.current?.click()}
-                   >
-                     {isUploadingAvatar ? (
-                        <div className="w-full h-full bg-slate-100 flex items-center justify-center">
-                          <RefreshCw className="w-8 h-8 animate-spin text-slate-400" />
-                        </div>
-                     ) : (
-                        <img 
-                          src={athleteProfile?.avatar_url || 'https://via.placeholder.com/300'} 
-                          alt="Athlete Avatar" 
-                          className="w-full h-full object-cover border border-slate-100 rounded-2xl"
-                        />
-                     )}
-                     <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                        <span className="text-white text-sm font-bold flex items-center gap-2"><Camera className="w-4 h-4"/> Change photo</span>
+                   {/* 📸 Updated Avatar Block with Persistent Camera Badge 📸 */}
+                   <div className="relative mb-4">
+                     <div 
+                       className="aspect-square rounded-2xl overflow-hidden relative group cursor-pointer border border-slate-100 bg-slate-50" 
+                       onClick={() => !isUploadingAvatar && fileInputRef.current?.click()}
+                     >
+                       {isUploadingAvatar ? (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <RefreshCw className="w-8 h-8 animate-spin text-slate-400" />
+                          </div>
+                       ) : (
+                          <img 
+                            src={displayAvatar} 
+                            alt="Athlete Avatar" 
+                            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                          />
+                       )}
+                       {/* Desktop Hover Overlay */}
+                       <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"></div>
                      </div>
+                     
+                     {/* Always Visible Floating Camera Icon (Mobile-friendly) */}
+                     <button 
+                       onClick={() => !isUploadingAvatar && fileInputRef.current?.click()}
+                       className="absolute -bottom-3 -right-3 bg-blue-600 hover:bg-blue-500 text-white p-3 rounded-2xl shadow-xl ring-4 ring-white transition-transform active:scale-95 cursor-pointer z-10"
+                       title="Upload new photo"
+                     >
+                       <Camera className="w-5 h-5" />
+                     </button>
+                     
                      <input type="file" ref={fileInputRef} className="hidden" accept="image/jpeg, image/png, image/webp" onChange={handleAvatarUpload} />
                    </div>
 
                    {/* Primary Public Portfolio Action */}
-                   <div className="space-y-2">
+                   <div className="space-y-2 mt-6">
                      <button 
                         onClick={handlePreviewCooldownClick}
                         disabled={slugCooldown > 0 || slugStatus === 'checking'}
@@ -911,10 +953,14 @@ export default function ProfilePage() {
                        
                        <button 
                          onClick={() => {
+                           if (!isProfileComplete || athleteProfile?.trust_level !== 1) {
+                              showToast("Finish your profile and verification to copy your link.", "error");
+                              return;
+                           }
                            navigator.clipboard.writeText(`${window.location.origin}${publicPortfolioUrl}`);
                            showToast("Portfolio link copied to clipboard!", "success");
                          }}
-                         className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 transition-colors"
+                         className={`text-xs font-bold flex items-center gap-1 transition-colors ${!isProfileComplete || athleteProfile?.trust_level !== 1 ? 'text-slate-400 cursor-not-allowed' : 'text-blue-600 hover:text-blue-700'}`}
                          title="Copy Public Link"
                        >
                          <LinkIcon className="w-3.5 h-3.5" /> Copy Link
@@ -1336,7 +1382,7 @@ export default function ProfilePage() {
                    <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-[0.03] pointer-events-none"></div>
 
                    <div className="flex items-center gap-4 z-10 shrink-0">
-                      <AvatarWithBorder avatarUrl={athleteProfile?.avatar_url} borderId="none" sizeClasses="w-16 h-16 shadow-lg border border-slate-800 shrink-0" />
+                      <AvatarWithBorder avatarUrl={displayAvatar} borderId="none" sizeClasses="w-16 h-16 shadow-lg border border-slate-800 shrink-0" />
                       <div className="min-w-0">
                          <h2 className="text-xl sm:text-2xl font-black uppercase text-white leading-none mb-1 truncate">{athleteProfile?.first_name} <br/>{athleteProfile?.last_name}</h2>
                          <p className="text-xs font-bold text-slate-400 truncate">{athleteProfile?.high_school} {athleteProfile?.grad_year && `• CO ${athleteProfile.grad_year}`}</p>

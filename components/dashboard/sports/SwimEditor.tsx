@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Droplets, Timer, RefreshCw, Save, Activity, Plus, Trash2 } from 'lucide-react';
+import { Droplets, Timer, RefreshCw, Save, Activity, Plus, Trash2, Check, ChevronDown } from 'lucide-react';
 import { compileSwimFitScore, AVAILABLE_SWIM_EVENTS, getSwimTierLabel } from '@/utils/SwimRecruitingEngine';
 
 export interface SwimEditorProps {
@@ -12,19 +12,19 @@ export interface SwimEditorProps {
 }
 
 export default function SwimEditor({ swimStats, genderKey, onSync, showToast }: SwimEditorProps) {
-  // Map existing metrics or default to a single empty event
   const initialMetrics = swimStats.metrics && swimStats.metrics.length > 0 
-    ? swimStats.metrics 
-    : [{ name: '50 Free', value: '' }];
+    ? swimStats.metrics.map((m: any, idx: number) => ({ ...m, id: `metric-${idx}`, isEditing: false }))
+    : [{ id: 'init', name: '50 Free', value: '', isEditing: true }];
 
-  const [metricList, setMetricList] = useState<{name: string; value: string}[]>(initialMetrics);
+  const [metricList, setMetricList] = useState<{id: string; name: string; value: string; isEditing: boolean}[]>(initialMetrics);
   const [courseType, setCourseType] = useState<'SCY' | 'LCM' | 'SCM'>(swimStats.metaContext?.poolCourse || 'SCY');
   const [isSaving, setIsSaving] = useState(false);
 
-  // Compute live score using the dynamic array
+  // Compute live score using a clean version of the array (stripping UI properties)
+  const cleanMetricsForEngine = metricList.map(({ name, value }) => ({ name, value }));
   const { compositeScore, parsedMetrics } = compileSwimFitScore(
     genderKey,
-    metricList,
+    cleanMetricsForEngine,
     courseType
   );
 
@@ -36,8 +36,17 @@ export default function SwimEditor({ swimStats, genderKey, onSync, showToast }: 
     setMetricList(updated);
   };
 
+  const toggleEdit = (index: number, state: boolean) => {
+    const updated = [...metricList];
+    updated[index].isEditing = state;
+    setMetricList(updated);
+  };
+
   const handleAddEvent = () => {
-    setMetricList([...metricList, { name: AVAILABLE_SWIM_EVENTS[0], value: '' }]);
+    setMetricList([
+      ...metricList, 
+      { id: `new-${Date.now()}`, name: AVAILABLE_SWIM_EVENTS[0], value: '', isEditing: true }
+    ]);
   };
 
   const handleRemoveEvent = (index: number) => {
@@ -47,8 +56,10 @@ export default function SwimEditor({ swimStats, genderKey, onSync, showToast }: 
   const handleManualSave = async () => {
     setIsSaving(true);
     
-    // Clean out empty values before saving
-    const cleanedMetrics = metricList.filter(m => m.value.trim() !== '');
+    // Clean out empty values and UI states before pushing to DB
+    const cleanedMetrics = metricList
+      .filter(m => m.value.trim() !== '')
+      .map(({ name, value }) => ({ name, value }));
 
     await onSync({
       ...swimStats,
@@ -57,156 +68,153 @@ export default function SwimEditor({ swimStats, genderKey, onSync, showToast }: 
       metaContext: { poolCourse: courseType }
     });
 
+    // Reset all local items to view mode
+    setMetricList(prev => prev.map(m => ({ ...m, isEditing: false })));
+
     showToast("Swimming & Diving metrics synced to database!", "success");
     setIsSaving(false);
   };
 
   return (
-    <div className="bg-gradient-to-b from-slate-900 to-slate-950 border border-slate-800 rounded-[2rem] p-6 text-white shadow-2xl relative overflow-hidden w-full animate-in fade-in duration-300">
+    <div className="bg-gradient-to-b from-slate-900 to-slate-950 border border-slate-800 rounded-[2.5rem] p-4 sm:p-6 md:p-8 text-white shadow-2xl relative w-full animate-in fade-in duration-300">
       <div className="absolute top-0 right-0 w-64 h-64 bg-cyan-500/10 blur-[90px] rounded-full pointer-events-none"></div>
       
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-6 border-b border-slate-800/80 relative z-10">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-5 border-b border-slate-800/80 relative z-10">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="p-2 bg-cyan-500/10 rounded-xl border border-cyan-500/20 text-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.15)]">
-              <Droplets className="w-5 h-5" />
+          <div className="flex items-center gap-3">
+            <span className="p-2 sm:p-2.5 bg-cyan-500/10 rounded-xl border border-cyan-500/20 text-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.15)]">
+              <Droplets className="w-4 h-4 sm:w-5 sm:h-5" />
             </span>
-            <h3 className="text-xl font-black tracking-tight">Swim & Dive Engine</h3>
+            <h3 className="text-xl sm:text-2xl font-black tracking-tight">Swim & Dive Engine</h3>
           </div>
-          <p className="text-xs text-slate-400 font-medium mt-1">
-            Engine evaluates your <strong className="text-cyan-400">unweighted average</strong> composite rating.
+          <p className="text-[10px] font-black text-cyan-400 uppercase tracking-widest mt-2">
+            Unweighted Average Matrix
           </p>
         </div>
 
         {compositeScore > 0 && (
-          <div className="flex items-center gap-3 bg-slate-900/90 backdrop-blur-md px-4 py-2.5 rounded-2xl border border-slate-800 shadow-inner w-full sm:w-auto justify-between sm:justify-start">
+          <div className="flex items-center gap-4 bg-slate-900/90 backdrop-blur-md px-4 py-2 sm:py-3 rounded-2xl border border-slate-800 shadow-inner w-full md:w-auto justify-between md:justify-start">
             <div className="text-left">
-              <span className="block text-[9px] font-black uppercase tracking-widest text-slate-500">Recruitment Rating</span>
-              <span className={`text-xs font-black bg-gradient-to-r ${activeTier.color} bg-clip-text text-transparent`}>
+              <span className="block text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500">Recruitment Rating</span>
+              <span className={`text-xs sm:text-sm font-black bg-gradient-to-r ${activeTier.color} bg-clip-text text-transparent`}>
                 {activeTier.text}
               </span>
             </div>
-            <div className={`text-2xl font-black px-3 py-1 bg-gradient-to-br ${activeTier.color} text-white rounded-xl shadow-lg shrink-0`}>
+            <div className={`text-xl sm:text-3xl font-black px-3 py-1 sm:px-4 sm:py-1.5 bg-gradient-to-br ${activeTier.color} text-white rounded-xl shadow-lg shrink-0`}>
               {compositeScore}
             </div>
           </div>
         )}
       </div>
 
-      <div className="pt-6 pb-2 relative z-10 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 border-b border-slate-800/80 mb-6">
-        <div className="w-full sm:w-1/3">
-          <label className="text-[10px] font-black uppercase tracking-widest text-cyan-400 block mb-2 px-1">Pool Length Modifier</label>
+      <div className="pt-4 pb-1 relative z-10 border-b border-slate-800/80 mb-5 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
+        <p className="text-[10px] sm:text-xs text-slate-500 font-bold leading-relaxed bg-slate-900/50 p-3 rounded-xl border border-slate-800 flex-1">
+          <strong className="text-cyan-400">Tip:</strong> The engine automatically converts LCM/SCM times. Tap any tile below to edit your marks.
+        </p>
+        <div className="w-full sm:w-64 shrink-0 relative">
+          <label className="text-[9px] font-black uppercase tracking-widest text-cyan-400 block mb-1.5 px-1">Pool Length</label>
           <select 
             value={courseType} 
             onChange={e => setCourseType(e.target.value as any)} 
-            className="w-full bg-slate-950 border border-cyan-500/30 text-cyan-100 rounded-xl px-4 py-3 text-sm font-bold outline-none shadow-inner cursor-pointer appearance-none"
+            className="w-full bg-slate-950 border border-slate-700 focus:border-cyan-500/50 text-white rounded-xl px-4 py-3 text-sm font-bold outline-none shadow-inner cursor-pointer appearance-none transition-colors"
           >
-            <option value="SCY">SCY (Short Course Yards) - Base</option>
-            <option value="LCM">LCM (Long Course Meters) - Auto Conv.</option>
-            <option value="SCM">SCM (Short Course Meters) - Auto Conv.</option>
+            <option value="SCY">SCY (Short Course Yards)</option>
+            <option value="LCM">LCM (Long Course Meters)</option>
+            <option value="SCM">SCM (Short Course Meters)</option>
           </select>
+          <ChevronDown className="w-4 h-4 text-slate-500 absolute right-4 top-[26px] sm:top-7 pointer-events-none" />
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 relative z-10">
+      {/* COMPACT TAP-TO-EDIT GRID */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 relative z-10">
         
-        {metricList.map((metric, idx) => (
-          <div key={idx} className="bg-slate-900/40 p-4 rounded-2xl border border-slate-800/80 backdrop-blur-sm group transition-all hover:border-slate-700">
-             <div className="flex justify-between items-center mb-3">
-               <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Event {idx + 1}</label>
-               {metricList.length > 1 && (
-                 <button 
-                   onClick={() => handleRemoveEvent(idx)} 
-                   className="text-slate-500 hover:text-red-400 transition-colors p-1 bg-slate-900 rounded-md hover:bg-red-500/10 opacity-100 md:opacity-0 group-hover:opacity-100"
-                   title="Remove Event"
-                 >
-                   <Trash2 className="w-3.5 h-3.5" />
-                 </button>
-               )}
-             </div>
-             
-             <select 
-               value={metric.name} 
-               onChange={e => handleUpdateEvent(idx, 'name', e.target.value)} 
-               className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500/50 rounded-xl px-3 py-2.5 text-sm font-bold outline-none text-slate-300 shadow-inner mb-3 transition-colors appearance-none cursor-pointer"
-             >
-               {AVAILABLE_SWIM_EVENTS.map(ev => <option key={ev} value={ev}>{ev}</option>)}
-             </select>
-             
-             <div className="relative">
-               <input 
-                 type="text" 
-                 placeholder="e.g. 17:01.50" 
-                 value={metric.value} 
-                 onChange={e => handleUpdateEvent(idx, 'value', e.target.value)} 
-                 className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500/50 rounded-xl px-4 py-3 text-sm font-bold tracking-wide outline-none text-white placeholder-slate-600 shadow-inner transition-colors"
-               />
-               <Timer className="w-4 h-4 text-slate-600 absolute right-4 top-3.5 pointer-events-none" />
-             </div>
-          </div>
-        ))}
+        {metricList.map((metric, idx) => {
+          const indScore = parsedMetrics.find(pm => pm.name === metric.name)?.score || 0;
+          const indTier = getSwimTierLabel(indScore);
 
+          // EDIT MODE (Expands to full width on mobile)
+          if (metric.isEditing) {
+            return (
+              <div key={metric.id} className="col-span-2 sm:col-span-3 lg:col-span-4 bg-slate-900 border border-cyan-500/50 p-4 rounded-[1.25rem] shadow-[0_0_20px_rgba(6,182,212,0.1)] flex flex-col sm:flex-row items-center gap-3 animate-in zoom-in-95 duration-200">
+                <div className="relative w-full sm:w-1/3">
+                  <select 
+                    value={metric.name} 
+                    onChange={e => handleUpdateEvent(idx, 'name', e.target.value)} 
+                    className="w-full bg-slate-950 border border-slate-700 focus:border-cyan-500/50 rounded-xl px-3 py-3 text-sm font-bold outline-none text-slate-300 shadow-inner appearance-none cursor-pointer"
+                  >
+                    {AVAILABLE_SWIM_EVENTS.map(ev => <option key={ev} value={ev}>{ev}</option>)}
+                  </select>
+                  <ChevronDown className="w-4 h-4 text-slate-600 absolute right-3 top-3.5 pointer-events-none" />
+                </div>
+                
+                <div className="relative w-full sm:w-1/3 flex-1">
+                  <input 
+                    type="text" 
+                    placeholder="e.g. 17:01.50" 
+                    value={metric.value} 
+                    onChange={e => handleUpdateEvent(idx, 'value', e.target.value)} 
+                    className="w-full bg-slate-950 border border-slate-700 focus:border-cyan-500/50 rounded-xl px-3 py-3 text-sm font-bold tracking-wide outline-none text-white placeholder-slate-600 shadow-inner"
+                  />
+                  <Timer className="w-4 h-4 text-slate-600 absolute right-3 top-3.5 pointer-events-none" />
+                </div>
+
+                <div className="flex items-center gap-2 w-full sm:w-auto mt-1 sm:mt-0">
+                  <button 
+                    onClick={() => toggleEdit(idx, false)}
+                    className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500 hover:text-white px-4 py-3 rounded-xl transition-colors font-bold text-xs shrink-0"
+                  >
+                    <Check className="w-4 h-4" /> Done
+                  </button>
+                  <button 
+                    onClick={() => handleRemoveEvent(idx)} 
+                    className="w-11 h-11 flex items-center justify-center text-red-400 bg-red-500/10 hover:bg-red-500 hover:text-white rounded-xl transition-colors shrink-0"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            );
+          }
+
+          // VIEW MODE (Compact Tile)
+          return (
+            <div 
+              key={metric.id} 
+              onClick={() => toggleEdit(idx, true)}
+              className="bg-slate-800/50 hover:bg-slate-700 border border-slate-700/80 hover:border-cyan-500/50 p-4 rounded-2xl shadow-sm flex flex-col items-center justify-center text-center cursor-pointer transition-all relative group animate-in fade-in duration-300 min-h-[90px]"
+            >
+              <div className="absolute top-2 right-2 flex items-center gap-1">
+                {indScore > 0 && <span className="text-[8px] font-black text-cyan-400">{indScore}</span>}
+                <div className={`w-1.5 h-1.5 rounded-full ${indTier?.color || 'bg-slate-500'} bg-gradient-to-r`} title={indTier?.text || 'Unranked'} />
+              </div>
+              
+              <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider mb-1 line-clamp-1 break-words">{metric.name}</span>
+              <span className="text-xl sm:text-2xl font-black text-white">{metric.value || '--'}</span>
+            </div>
+          );
+        })}
+
+        {/* COMPACT ADD BUTTON */}
         <button 
           onClick={handleAddEvent}
-          className="h-full min-h-[140px] rounded-2xl border-2 border-dashed border-slate-800 hover:border-cyan-500/50 hover:bg-cyan-500/5 flex flex-col items-center justify-center gap-2 text-slate-500 hover:text-cyan-400 transition-all cursor-pointer shadow-sm group"
+          className="col-span-1 rounded-2xl border-2 border-dashed border-slate-700 hover:border-cyan-500/50 hover:bg-cyan-500/5 flex flex-col items-center justify-center text-slate-500 hover:text-cyan-400 transition-all cursor-pointer shadow-sm group p-4 min-h-[90px]"
         >
-          <div className="w-10 h-10 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center group-hover:scale-110 transition-transform">
-            <Plus className="w-5 h-5" />
-          </div>
-          <span className="text-[10px] font-black uppercase tracking-widest mt-1">Add Event</span>
+          <Plus className="w-5 h-5 mb-1 group-hover:scale-110 transition-transform" />
+          <span className="text-[9px] font-black uppercase tracking-widest">Add Event</span>
         </button>
 
       </div>
 
-      <div className="pt-6 relative z-10 flex flex-col xl:flex-row gap-6 items-start xl:items-end justify-between border-t border-slate-800/80 mt-6">
-        <div className="w-full xl:w-2/3">
-          {parsedMetrics.length > 0 && (
-            <div className="p-4 bg-slate-900/40 rounded-2xl border border-slate-800/80 space-y-4 backdrop-blur-md">
-              <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-1.5 mb-2">
-                <Activity className="w-3.5 h-3.5" /> Individual Event Scores
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {parsedMetrics.map((metric, i) => {
-                  const indTier = getSwimTierLabel(metric.score);
-                  const rawMark = metricList.find(m => m.name === metric.name)?.value || '--';
-                  
-                  return (
-                    <div key={i} className={`bg-slate-950/80 border p-3.5 rounded-xl flex justify-between items-center group transition-all hover:border-slate-700 ${i === 0 ? 'border-cyan-500/50 shadow-[0_0_15px_rgba(6,182,212,0.15)]' : 'border-slate-800'}`}>
-                      <div className="min-w-0 pr-2">
-                        <span className={`font-black text-sm block truncate ${i === 0 ? 'text-cyan-400' : 'text-slate-200'}`}>
-                          {metric.name}
-                        </span>
-                        <span className="text-slate-500 font-medium text-[11px] block mt-0.5">
-                          Raw Mark: <strong className="text-slate-400">{rawMark}</strong>
-                        </span>
-                      </div>
-                      
-                      <div className="text-right shrink-0 flex flex-col items-end gap-0.5">
-                        <span className={`text-[10px] font-black uppercase tracking-widest ${indTier.solid}`}>
-                          {indTier.text}
-                        </span>
-                        <span className="text-[10px] font-black text-slate-500 tracking-wider uppercase">
-                          Score: {metric.score}/99
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-        
-        <div className="w-full xl:w-auto shrink-0 flex">
-          <button 
-            onClick={handleManualSave}
-            disabled={isSaving}
-            className="w-full xl:w-auto h-14 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-black px-8 rounded-xl shadow-[0_0_20px_rgba(6,182,212,0.3)] transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed hover:scale-[1.02] active:scale-[0.98]"
-          >
-            {isSaving ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />} 
-            {isSaving ? 'Syncing Profile...' : 'Save & Sync Metrics'}
-          </button>
-        </div>
+      <div className="pt-6 relative z-10 flex flex-col sm:flex-row justify-end border-t border-slate-800/80 mt-6">
+        <button 
+          onClick={handleManualSave}
+          disabled={isSaving}
+          className="w-full sm:w-auto h-12 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-black px-8 rounded-xl shadow-[0_0_20px_rgba(6,182,212,0.3)] transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed hover:scale-[1.02] active:scale-[0.98]"
+        >
+          {isSaving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} 
+          {isSaving ? 'Syncing Profile...' : 'Save & Sync Metrics'}
+        </button>
       </div>
     </div>
   );
