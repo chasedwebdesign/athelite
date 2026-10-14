@@ -4,10 +4,11 @@ import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import { 
-  CheckCircle2, MapPin, Mail, X, Send, Lock, Trophy,
+  CheckCircle2, MapPin, X, Send, Lock,
   Share2, ArrowLeft, Activity, School, UserCircle2, 
   Clock, Star, ShieldCheck, AlertTriangle, Search, BookOpen, 
-  Link as LinkIcon, FileText, GraduationCap, Medal, Target, RefreshCw, ChevronRight, MessageSquare
+  Link as LinkIcon, FileText, GraduationCap, Medal, Target, RefreshCw, ChevronRight, MessageSquare,
+  Video, Crown, Upload, Trash2, Sparkles
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -44,6 +45,15 @@ interface AthleteProfile {
   saved_resume?: string | null;
   custom_slug?: string | null;
   is_founder?: boolean;
+  is_premium?: boolean;
+}
+
+interface SavedHighlightPost {
+  postId: string;
+  cloudflareUid: string;
+  sport: string;
+  caption: string;
+  createdAt: string;
 }
 
 const EARNED_TITLES = [
@@ -63,6 +73,98 @@ const getOrdinal = (n: number | string) => {
   const s = ["th", "st", "nd", "rd"];
   const v = num % 100;
   return num + (s[(v - 20) % 10] || s[v] || s[0]);
+};
+
+// 🚨 CLOUDFLARE STREAM PORTFOLIO VIDEO PLAYER 🚨
+const CloudflareStreamVideo = ({ uid }: { uid: string }) => {
+  const [isReady, setIsReady] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  useEffect(() => {
+    let attempts = 0;
+    let timeoutId: NodeJS.Timeout;
+    let isMounted = true;
+
+    const checkReady = async () => {
+      if (!isMounted) return;
+      attempts++;
+      
+      try {
+        const response = await fetch(`https://customer-4lk9yxcqvek697fx.cloudflarestream.com/${uid}/manifest/video.m3u8`);
+        if (response.ok) {
+          setTimeout(() => {
+            if (isMounted) setIsReady(true);
+          }, 800);
+        } else {
+          throw new Error("Manifest not ready");
+        }
+      } catch (e) {
+        if (attempts < 60) {
+          timeoutId = setTimeout(checkReady, 2500);
+        }
+      }
+    };
+
+    checkReady();
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timeoutId);
+    };
+  }, [uid]);
+
+  useEffect(() => {
+    const handleFullscreenSync = () => {
+      const activeFullscreen = !!(document.fullscreenElement || (document as any).webkitFullscreenElement);
+      setIsFullscreen(activeFullscreen);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenSync);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenSync);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenSync);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenSync);
+    };
+  }, []);
+
+  return (
+    <div
+      ref={containerRef}
+      className={`relative overflow-hidden transition-all duration-300 ${
+        isFullscreen
+          ? 'fixed inset-0 z-[99999] w-screen h-[100dvh] bg-black flex items-center justify-center rounded-none border-none'
+          : 'w-full aspect-video rounded-2xl border border-white/15 bg-[#0B0F19] shadow-2xl'
+      }`}
+    >
+      {!isReady && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/90 backdrop-blur-xl z-20">
+          <div className="relative w-12 h-12 flex items-center justify-center mb-3">
+            <div className="absolute inset-0 border-2 border-cyan-500/20 border-t-cyan-400 rounded-full animate-spin"></div>
+            <Video className="w-5 h-5 text-cyan-400 animate-pulse" />
+          </div>
+          <span className="text-[10px] font-black text-cyan-300 uppercase tracking-widest animate-pulse">
+            Processing Highlight Film...
+          </span>
+          <p className="text-[11px] font-medium text-slate-400 mt-1.5 text-center px-4">
+            Optimizing HD stream for college coaches. Usually ready in under 60 seconds.
+          </p>
+        </div>
+      )}
+
+      {isReady && (
+        <iframe
+          ref={iframeRef}
+          src={`https://customer-4lk9yxcqvek697fx.cloudflarestream.com/${uid}/iframe?controls=true&autoplay=false&loop=true&preload=auto&letterboxColor=transparent`}
+          className="border-none absolute inset-0 h-full w-full bg-transparent"
+          allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen"
+          allowFullScreen
+        ></iframe>
+      )}
+    </div>
+  );
 };
 
 // 🚨 THEME ENGINE 🚨
@@ -186,6 +288,7 @@ export default function AthleteClient() {
   
   const [athlete, setAthlete] = useState<AthleteProfile | null>(null);
   const [athleteSports, setAthleteSports] = useState<AthleteSport[]>([]);
+  const [highlightPost, setHighlightPost] = useState<SavedHighlightPost | null>(null);
   const [loading, setLoading] = useState(true);
 
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -199,6 +302,12 @@ export default function AthleteClient() {
   const [isSaved, setIsSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
+  // PRO Direct Highlight Video Upload State
+  const [isUploadingVideo, setIsUploadingVideo] = useState(false);
+  const [uploadProgressText, setUploadProgressText] = useState('');
+  const [isDeletingVideo, setIsDeletingVideo] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   // Message Modal State
   const [isMessageModalOpen, setIsMessageModalOpen] = useState(false);
   const [showVerificationRequired, setShowVerificationRequired] = useState(false);
@@ -209,8 +318,8 @@ export default function AthleteClient() {
   const [messageContent, setMessageContent] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [sendSuccess, setSendSuccess] = useState(false);
-  const [charCount, setCharCount] = useState(0); // 🚨 Added Character Counter
-  const MAX_MESSAGE_LENGTH = 500; // Limit for clean DB storage and concise pitches
+  const [charCount, setCharCount] = useState(0);
+  const MAX_MESSAGE_LENGTH = 500;
 
   const [copySuccess, setCopySuccess] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -220,7 +329,7 @@ export default function AthleteClient() {
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
+    setTimeout(() => setToast(null), 3500);
   };
 
   useEffect(() => {
@@ -240,6 +349,7 @@ export default function AthleteClient() {
         setAthlete(athleteData as AthleteProfile);
         const resolvedAthleteId = athleteData.id;
 
+        // 1. Fetch active sports
         const { data: sportsData } = await supabase
           .from('athlete_sports')
           .select('*')
@@ -248,6 +358,34 @@ export default function AthleteClient() {
           .order('created_at', { ascending: false });
         if (sportsData) setAthleteSports(sportsData as AthleteSport[]);
 
+        // 2. Fetch athlete's posts to find any saved Cloudflare Highlight Video
+        const { data: athletePosts } = await supabase
+          .from('posts')
+          .select('id, content, created_at')
+          .eq('athlete_id', resolvedAthleteId)
+          .order('created_at', { ascending: false });
+
+        if (athletePosts && athletePosts.length > 0) {
+          for (const p of athletePosts) {
+            try {
+              const parsed = JSON.parse(p.content);
+              if (parsed && parsed.cloudflareUid) {
+                setHighlightPost({
+                  postId: p.id,
+                  cloudflareUid: String(parsed.cloudflareUid),
+                  sport: parsed.sport || 'Highlight Film',
+                  caption: parsed.text || '',
+                  createdAt: p.created_at
+                });
+                break;
+              }
+            } catch (e) {
+              // Ignore plain-text posts
+            }
+          }
+        }
+
+        // 3. Check current logged-in viewer
         const { data: { session } } = await supabase.auth.getSession();
         
         if (session) {
@@ -256,7 +394,11 @@ export default function AthleteClient() {
 
           if (session.user.id === resolvedAthleteId) setIsSelf(true);
 
-          const { data: cData } = await supabase.from('coaches').select('id, first_name, last_name, school_name, coach_type').eq('id', session.user.id).maybeSingle();
+          const { data: cData } = await supabase
+            .from('coaches')
+            .select('id, first_name, last_name, school_name, coach_type')
+            .eq('id', session.user.id)
+            .maybeSingle();
 
           if (cData) {
             setViewerRole('coach');
@@ -267,20 +409,28 @@ export default function AthleteClient() {
             setSenderSchool(cData.school_name || 'Unknown University');
             setSenderEmail(session.user.email || '');
 
-            const { data: savedData } = await supabase.from('saved_recruits').select('id').eq('coach_id', session.user.id).eq('athlete_id', resolvedAthleteId).maybeSingle();
+            const { data: savedData } = await supabase
+              .from('saved_recruits')
+              .select('id')
+              .eq('coach_id', session.user.id)
+              .eq('athlete_id', resolvedAthleteId)
+              .maybeSingle();
             if (savedData) setIsSaved(true);
 
             if (!hasLoggedView.current && session.user.id !== resolvedAthleteId) {
-               hasLoggedView.current = true;
-               const { error: rpcError } = await supabase.rpc('log_profile_view', {
-                 target_athlete_id: resolvedAthleteId,
-                 viewing_coach_id: session.user.id
-               });
-               if (rpcError) console.error("❌ RPC ERROR:", rpcError);
+              hasLoggedView.current = true;
+              const { error: rpcError } = await supabase.rpc('log_profile_view', {
+                target_athlete_id: resolvedAthleteId,
+                viewing_coach_id: session.user.id
+              });
+              if (rpcError) console.error("❌ RPC ERROR:", rpcError);
             }
-
           } else {
-            const { data: aData } = await supabase.from('athletes').select('id, trust_level, first_name, last_name, high_school').eq('id', session.user.id).maybeSingle();
+            const { data: aData } = await supabase
+              .from('athletes')
+              .select('id, trust_level, first_name, last_name, high_school')
+              .eq('id', session.user.id)
+              .maybeSingle();
             if (aData) {
               setViewerRole('athlete');
               setIsVerifiedAthlete(aData.trust_level === 1);
@@ -296,6 +446,170 @@ export default function AthleteClient() {
 
     if (rawIdParam) fetchProfileAndUser();
   }, [rawIdParam, supabase]);
+
+  // 🚨 DIRECT PRO PORTFOLIO HIGHLIGHT VIDEO UPLOADER (MAX 60S) 🚨
+  const handlePortfolioVideoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !athlete || !isSelf || !athlete.is_premium) return;
+
+    if (file.size > 50 * 1024 * 1024) {
+      e.target.value = '';
+      return showToast("Highlight video must be under 50MB.", "error");
+    }
+
+    const videoEl = document.createElement('video');
+    videoEl.preload = 'metadata';
+    videoEl.onloadedmetadata = async () => {
+      window.URL.revokeObjectURL(videoEl.src);
+      if (Math.ceil(videoEl.duration) > 60) {
+        e.target.value = '';
+        return showToast("Highlight video must be 60 seconds or less.", "error");
+      }
+
+      setIsUploadingVideo(true);
+      setUploadProgressText('Securing stream channel...');
+
+      try {
+        const urlRes = await fetch('/api/stream/upload-url', { method: 'POST' });
+        const { uploadURL, uid, error: streamErr } = await urlRes.json();
+        if (streamErr || !uploadURL || !uid) {
+          throw new Error(streamErr || 'Could not generate upload link.');
+        }
+
+        setUploadProgressText('Uploading HD highlight video...');
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const uploadRes = await fetch(uploadURL, {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!uploadRes.ok) {
+          throw new Error('Video upload to Cloudflare failed.');
+        }
+
+        setUploadProgressText('Pinning to PRO portfolio...');
+        const defaultSport = athleteSports[0]?.sport_name || 'Track & Field';
+
+        // If the athlete already has an active post, update its cloudflareUid; otherwise insert a portfolio highlight post
+        if (highlightPost?.postId) {
+          const { data: existingPost } = await supabase
+            .from('posts')
+            .select('content')
+            .eq('id', highlightPost.postId)
+            .maybeSingle();
+
+          let updatedPayload: Record<string, any> = {
+            text: highlightPost.caption || `Official ${defaultSport} Highlight Film`,
+            sport: highlightPost.sport || defaultSport,
+            cloudflareUid: uid
+          };
+
+          if (existingPost?.content) {
+            try {
+              const parsed = JSON.parse(existingPost.content);
+              updatedPayload = { ...parsed, cloudflareUid: uid };
+            } catch (err) {}
+          }
+
+          const { error: updateErr } = await supabase
+            .from('posts')
+            .update({ content: JSON.stringify(updatedPayload) })
+            .eq('id', highlightPost.postId);
+
+          if (updateErr) throw updateErr;
+
+          setHighlightPost({
+            ...highlightPost,
+            cloudflareUid: uid,
+            createdAt: new Date().toISOString()
+          });
+        } else {
+          const payload = {
+            text: `Official ${defaultSport} Highlight Film`,
+            sport: defaultSport,
+            honors: 'PRO Highlight Film',
+            score: athleteSports[0]?.custom_fit_score || null,
+            stats: athleteSports[0]?.metrics || [],
+            gpa: null,
+            otherSports: [],
+            cloudflareUid: uid
+          };
+
+          const { data: newPost, error: insertErr } = await supabase
+            .from('posts')
+            .insert({
+              athlete_id: athlete.id,
+              content: JSON.stringify(payload),
+              channel: 'highlight',
+              is_boosted: false,
+              boosted_until: new Date().toISOString()
+            })
+            .select('id, created_at')
+            .single();
+
+          if (insertErr) throw insertErr;
+
+          setHighlightPost({
+            postId: newPost.id,
+            cloudflareUid: uid,
+            sport: defaultSport,
+            caption: payload.text,
+            createdAt: newPost.created_at
+          });
+        }
+
+        showToast("Highlight video pinned to your PRO portfolio!", "success");
+      } catch (err: any) {
+        showToast(err.message || "Failed to upload highlight video.", "error");
+      } finally {
+        setIsUploadingVideo(false);
+        setUploadProgressText('');
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+    };
+
+    videoEl.onerror = () => {
+      e.target.value = '';
+      showToast("Invalid or corrupted video file.", "error");
+    };
+    videoEl.src = URL.createObjectURL(file);
+  };
+
+  const handleRemoveHighlightVideo = async () => {
+    if (!highlightPost || !isSelf || !athlete) return;
+    setIsDeletingVideo(true);
+
+    try {
+      const { data: existingPost } = await supabase
+        .from('posts')
+        .select('channel, content')
+        .eq('id', highlightPost.postId)
+        .maybeSingle();
+
+      if (existingPost?.channel === 'highlight') {
+        const { error } = await supabase.from('posts').delete().eq('id', highlightPost.postId);
+        if (error) throw error;
+      } else if (existingPost?.content) {
+        // If it's an active featured post on /feed, keep the post but remove the video UID
+        const parsed = JSON.parse(existingPost.content);
+        parsed.cloudflareUid = null;
+        const { error } = await supabase
+          .from('posts')
+          .update({ content: JSON.stringify(parsed) })
+          .eq('id', highlightPost.postId);
+        if (error) throw error;
+      }
+
+      setHighlightPost(null);
+      showToast("Highlight video removed from portfolio.", "success");
+    } catch (err: any) {
+      showToast("Failed to remove highlight video.", "error");
+    } finally {
+      setIsDeletingVideo(false);
+    }
+  };
 
   const handleBackNavigation = () => {
     if (typeof window !== 'undefined') {
@@ -348,7 +662,6 @@ export default function AthleteClient() {
     setModalMode(mode);
     setIsMessageModalOpen(true);
     
-    // Auto focus the input after modal opens
     setTimeout(() => messageInputRef.current?.focus(), 100);
   };
 
@@ -447,7 +760,7 @@ export default function AthleteClient() {
     }
     
     const levelText = acc.level || 'Rank';
-    const fullContext = context ? `${levelText} • ${context}` : levelText;
+    const fullContext = context ? `${levelText} ${context}` : levelText;
 
     return (
       <div key={idx} className={`inline-flex items-center ${theme.accoladeBg} border ${theme.accoladeBorder} rounded-xl pl-1.5 pr-3 py-1.5 gap-2 shadow-sm transition-all hover:shadow-md`}>
@@ -455,14 +768,14 @@ export default function AthleteClient() {
           {fullContext}
         </span>
         <div className="flex flex-col">
-           <span className={`text-xs sm:text-sm font-bold ${theme.accoladeText} leading-tight`}>
-              {placementText}
-           </span>
-           {acc.contribution && (
-              <span className={`text-[9px] font-bold ${theme.textMuted} uppercase tracking-widest mt-0.5 leading-none`}>
-                 {acc.contribution}
-              </span>
-           )}
+          <span className={`text-xs sm:text-sm font-bold ${theme.accoladeText} leading-tight`}>
+            {placementText}
+          </span>
+          {acc.contribution && (
+            <span className={`text-[9px] font-bold ${theme.textMuted} uppercase tracking-widest mt-0.5 leading-none`}>
+              {acc.contribution}
+            </span>
+          )}
         </div>
       </div>
     );
@@ -491,6 +804,7 @@ export default function AthleteClient() {
 
   const activeTitle = EARNED_TITLES.find(t => t.id === athlete.equipped_title) || EARNED_TITLES[6];
   const isVerified = athlete.trust_level > 0;
+  const isProAthlete = Boolean(athlete.is_premium);
   
   const theme = getThemeConfig(athlete.equipped_card);
 
@@ -499,9 +813,9 @@ export default function AthleteClient() {
     try {
       const parsed = JSON.parse(athlete.saved_resume);
       parsedResume = {
-         gpa: parsed.gpa || '',
-         accolades: parsed.accolades || [],
-         schoolPrefs: parsed.schoolPrefs || ''
+        gpa: parsed.gpa || '',
+        accolades: parsed.accolades || [],
+        schoolPrefs: parsed.schoolPrefs || ''
       };
     } catch (e) {
       parsedResume.schoolPrefs = athlete.saved_resume;
@@ -524,9 +838,9 @@ export default function AthleteClient() {
     <main className={`min-h-screen ${theme.pageBg} font-sans pb-32 relative overflow-hidden transition-colors duration-500`} itemScope itemType="https://schema.org/ProfilePage">
       
       <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
-         <div className={`absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] ${theme.pagePattern}`}></div>
-         <div className={`absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] ${theme.isDark ? 'bg-blue-900/10' : 'bg-blue-400/10'} blur-[120px] rounded-full transition-colors duration-500`}></div>
-         <div className={`absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] ${theme.isDark ? 'bg-indigo-900/10' : 'bg-indigo-400/10'} blur-[120px] rounded-full transition-colors duration-500`}></div>
+        <div className={`absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] ${theme.pagePattern}`}></div>
+        <div className={`absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] ${theme.isDark ? 'bg-blue-900/10' : 'bg-blue-400/10'} blur-[120px] rounded-full transition-colors duration-500`}></div>
+        <div className={`absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] ${theme.isDark ? 'bg-indigo-900/10' : 'bg-indigo-400/10'} blur-[120px] rounded-full transition-colors duration-500`}></div>
       </div>
 
       <style dangerouslySetInnerHTML={{__html: `
@@ -601,21 +915,21 @@ export default function AthleteClient() {
 
       {showVerificationRequired && (
         <div className="fixed inset-0 z-[200] bg-slate-950/80 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-300">
-            <div className="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl border border-slate-200 flex flex-col items-center relative">
-                <button onClick={() => setShowVerificationRequired(false)} className="absolute top-4 right-4 p-2 hover:bg-slate-100 rounded-full transition-colors">
-                    <X className="w-5 h-5 text-slate-500" />
-                </button>
-                <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mb-5 border border-amber-200">
-                    <Lock className="w-7 h-7 text-amber-500" />
-                </div>
-                <h2 className="text-2xl font-black text-slate-900 mb-2 tracking-tight">Verification Required</h2>
-                <p className="text-sm text-slate-500 font-medium mb-8 leading-relaxed">
-                    To protect the community from spam and maintain a trusted ecosystem, you must verify your identity before sending direct messages.
-                </p>
-                <Link href="/dashboard/profile" className="bg-slate-900 hover:bg-slate-800 text-white font-black py-3.5 px-6 rounded-xl transition-all shadow-md active:scale-[0.98] flex items-center justify-center gap-2 w-full">
-                    Verify My Account <ChevronRight className="w-4 h-4" />
-                </Link>
+          <div className="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl border border-slate-200 flex flex-col items-center relative">
+            <button onClick={() => setShowVerificationRequired(false)} className="absolute top-4 right-4 p-2 hover:bg-slate-100 rounded-full transition-colors">
+              <X className="w-5 h-5 text-slate-500" />
+            </button>
+            <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mb-5 border border-amber-200">
+              <Lock className="w-7 h-7 text-amber-500" />
             </div>
+            <h2 className="text-2xl font-black text-slate-900 mb-2 tracking-tight">Verification Required</h2>
+            <p className="text-sm text-slate-500 font-medium mb-8 leading-relaxed">
+              To protect the community from spam and maintain a trusted ecosystem, you must verify your identity before sending direct messages.
+            </p>
+            <Link href="/dashboard/profile" className="bg-slate-900 hover:bg-slate-800 text-white font-black py-3.5 px-6 rounded-xl transition-all shadow-md active:scale-[0.98] flex items-center justify-center gap-2 w-full">
+              Verify My Account <ChevronRight className="w-4 h-4" />
+            </Link>
+          </div>
         </div>
       )}
 
@@ -637,24 +951,25 @@ export default function AthleteClient() {
                 <span className="text-xs font-bold uppercase tracking-widest">{athlete.profile_views || 0} <span className="hidden sm:inline">Profile Clicks</span></span>
               </div>
               <Link 
-                 href="/dashboard/profile"
-                 className={`font-black py-2 px-4 rounded-xl shadow-[0_0_15px_rgba(79,70,229,0.3)] transition-all flex items-center gap-2 text-xs uppercase tracking-widest ${theme.isDark ? 'bg-indigo-500 hover:bg-indigo-400 text-white' : 'bg-indigo-600 hover:bg-indigo-500 text-white'}`}
+                href="/dashboard/profile"
+                className={`font-black py-2 px-4 rounded-xl shadow-[0_0_15px_rgba(79,70,229,0.3)] transition-all flex items-center gap-2 text-xs uppercase tracking-widest ${theme.isDark ? 'bg-indigo-500 hover:bg-indigo-400 text-white' : 'bg-indigo-600 hover:bg-indigo-500 text-white'}`}
               >
-                 <LinkIcon className="w-4 h-4" /> Edit Public URL
+                <LinkIcon className="w-4 h-4" /> Edit Public URL
               </Link>
             </div>
           )}
         </div>
 
-        <section itemScope itemProp="mainEntity" itemType="https://schema.org/Person" className={`rounded-[2.5rem] p-6 sm:p-8 md:p-12 border relative overflow-hidden mb-10 transition-all duration-500 ${theme.heroCard}`}>
+        {/* HERO CARD */}
+        <section itemScope itemProp="mainEntity" itemType="https://schema.org/Person" className={`rounded-[2.5rem] p-6 sm:p-8 md:p-12 border relative overflow-hidden mb-8 transition-all duration-500 ${theme.heroCard}`}>
           {backgroundEffects}
           
           <div className="relative z-10 flex flex-col md:flex-row items-center md:items-start gap-6 md:gap-8">
             
             <AvatarWithBorder 
-                avatarUrl={athlete.avatar_url || null} 
-                borderId={athlete.equipped_border} 
-                sizeClasses="w-28 h-28 sm:w-32 sm:h-32 md:w-40 md:h-40 shadow-xl"
+              avatarUrl={athlete.avatar_url || null} 
+              borderId={athlete.equipped_border} 
+              sizeClasses="w-28 h-28 sm:w-32 sm:h-32 md:w-40 md:h-40 shadow-xl"
             />
 
             <div className="flex-1 text-center md:text-left w-full flex flex-col">
@@ -670,30 +985,38 @@ export default function AthleteClient() {
                   <span itemProp="givenName">{athlete.first_name}</span> <span itemProp="familyName">{athlete.last_name}</span>
                 </h1>
                 
-                {isVerified ? (
-                  <div className={`inline-flex items-center border px-3 py-1 rounded-full w-max mx-auto md:mx-0 ${theme.badgeVerified}`}>
-                    <ShieldCheck className="w-4 h-4 mr-1.5" />
-                    <span className="text-xs font-bold uppercase tracking-widest">Verified Indexed</span>
-                  </div>
-                ) : (
-                  <div className={`inline-flex items-center border px-3 py-1 rounded-full w-max mx-auto md:mx-0 ${theme.badgeUnverified}`}>
-                    <span title="This profile's results are self-reported and not officially indexed.">
-                      <AlertTriangle className="w-4 h-4 mr-1.5 inline" />
-                    </span>
-                    <span className="text-xs font-bold uppercase tracking-widest">Unverified</span>
-                  </div>
-                )}
+                <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
+                  {isVerified ? (
+                    <div className={`inline-flex items-center border px-3 py-1 rounded-full w-max ${theme.badgeVerified}`}>
+                      <ShieldCheck className="w-4 h-4 mr-1.5" />
+                      <span className="text-xs font-bold uppercase tracking-widest">Verified Indexed</span>
+                    </div>
+                  ) : (
+                    <div className={`inline-flex items-center border px-3 py-1 rounded-full w-max ${theme.badgeUnverified}`}>
+                      <span title="This profile's results are self-reported and not officially indexed.">
+                        <AlertTriangle className="w-4 h-4 mr-1.5 inline" />
+                      </span>
+                      <span className="text-xs font-bold uppercase tracking-widest">Unverified</span>
+                    </div>
+                  )}
+
+                  {isProAthlete && (
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black uppercase tracking-widest bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500 text-white shadow-[0_0_15px_rgba(168,85,247,0.4)]">
+                      <Crown className="w-3.5 h-3.5" /> PRO
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="mb-4">
-                  <span className={`inline-block px-3 py-1 rounded-lg text-[10px] font-black tracking-widest uppercase text-white shadow-sm ${activeTitle.badgeClass}`}>
-                    {activeTitle.name} Rank
+                <span className={`inline-block px-3 py-1 rounded-lg text-[10px] font-black tracking-widest uppercase text-white shadow-sm ${activeTitle.badgeClass}`}>
+                  {activeTitle.name} Rank
+                </span>
+                {athlete.is_founder && (
+                  <span className="ml-2 inline-block px-3 py-1 rounded-lg text-[10px] font-black tracking-widest uppercase text-amber-950 bg-gradient-to-r from-amber-300 to-yellow-400 shadow-sm border border-yellow-200">
+                    Founder's Club
                   </span>
-                  {athlete.is_founder && (
-                    <span className="ml-2 inline-block px-3 py-1 rounded-lg text-[10px] font-black tracking-widest uppercase text-amber-950 bg-gradient-to-r from-amber-300 to-yellow-400 shadow-sm border border-yellow-200">
-                      Founder's Club
-                    </span>
-                  )}
+                )}
               </div>
               
               <p className={`text-sm sm:text-base md:text-lg mb-8 flex flex-col md:flex-row items-center gap-2 md:gap-4 justify-center md:justify-start text-balance ${theme.heroMeta}`}>
@@ -751,14 +1074,155 @@ export default function AthleteClient() {
         </section>
 
         {viewerRole === 'coach' && !isVerified && (
-           <div className={`border p-5 rounded-2xl mb-8 flex items-start gap-4 shadow-sm animate-in fade-in slide-in-from-top-4 ${theme.isDark ? 'bg-amber-950/30 border-amber-500/50 text-amber-200' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
-             <AlertTriangle className={`w-6 h-6 shrink-0 mt-0.5 ${theme.isDark ? 'text-amber-400' : 'text-amber-500'}`} />
-             <div>
-               <h4 className="font-black text-sm">Unofficial Data Notice</h4>
-               <p className="text-sm font-medium mt-1">This athlete has not yet linked their Athletic.net profile. The times listed below are self-reported and have not been indexed by our verified scraping engine.</p>
-             </div>
-           </div>
+          <div className={`border p-5 rounded-2xl mb-8 flex items-start gap-4 shadow-sm animate-in fade-in slide-in-from-top-4 ${theme.isDark ? 'bg-amber-950/30 border-amber-500/50 text-amber-200' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
+            <AlertTriangle className={`w-6 h-6 shrink-0 mt-0.5 ${theme.isDark ? 'text-amber-400' : 'text-amber-500'}`} />
+            <div>
+              <h4 className="font-black text-sm">Unofficial Data Notice</h4>
+              <p className="text-sm font-medium mt-1">This athlete has not yet linked their Athletic.net profile. The times listed below are self-reported and have not been indexed by our verified scraping engine.</p>
+            </div>
+          </div>
         )}
+
+        {/* 🚨 HIGHLIGHT VIDEOS SECTION (PRO VS. NOT PRO) 🚨 */}
+        <section className={`${theme.sectionBg} p-6 sm:p-8 rounded-[2rem] border ${theme.sectionBorder} ${theme.sectionShadow} mb-8 relative overflow-hidden transition-all duration-500`}>
+          {/* Hidden file input for PRO self uploads */}
+          {isSelf && isProAthlete && (
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="video/mp4,video/quicktime,video/webm"
+              onChange={handlePortfolioVideoSelect}
+              className="hidden"
+            />
+          )}
+
+          {isProAthlete ? (
+            /* ✅ PRO ATHLETE HIGHLIGHT VIDEO VIEW */
+            <div>
+              <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b ${theme.isDark ? 'border-white/10' : 'border-slate-100'} pb-4 mb-6`}>
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-cyan-400 via-purple-500 to-pink-500 flex items-center justify-center text-white shadow-md shrink-0">
+                    <Video className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h2 className={`text-xl font-black ${theme.textHeader}`}>
+                        Highlight Videos
+                      </h2>
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest bg-gradient-to-r from-cyan-500/20 to-purple-500/20 border border-cyan-400/40 text-cyan-400">
+                        <Crown className="w-3 h-3" /> PRO Saved Film
+                      </span>
+                    </div>
+                    <p className={`text-xs font-medium ${theme.textSub} mt-0.5`}>
+                      Pinned to portfolio for college recruiting evaluation
+                    </p>
+                  </div>
+                </div>
+
+                {isSelf && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={isUploadingVideo}
+                      onClick={() => fileInputRef.current?.click()}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider bg-gradient-to-r from-cyan-500 to-purple-600 hover:opacity-95 text-white shadow-md transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      {isUploadingVideo ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>{uploadProgressText || 'Uploading...'}</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>{highlightPost ? 'Replace Video' : 'Upload Highlight'}</span>
+                        </>
+                      )}
+                    </button>
+
+                    {highlightPost && !isUploadingVideo && (
+                      <button
+                        type="button"
+                        disabled={isDeletingVideo}
+                        onClick={handleRemoveHighlightVideo}
+                        className="inline-flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30 transition-colors cursor-pointer"
+                        title="Remove Highlight Video"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {highlightPost ? (
+                <div className="space-y-3">
+                  <CloudflareStreamVideo uid={highlightPost.cloudflareUid} />
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                    <div className="flex items-center gap-2">
+                      <span className={`${theme.statBadge} px-3 py-1 rounded-lg text-[11px] font-black uppercase tracking-wider border`}>
+                        {highlightPost.sport}
+                      </span>
+                      {highlightPost.caption && (
+                        <p className={`text-xs font-semibold italic ${theme.textSub} truncate max-w-md`}>
+                          "{highlightPost.caption}"
+                        </p>
+                      )}
+                    </div>
+                    <span className={`text-[11px] font-bold ${theme.textMuted}`}>
+                      Pinned via ChasedSports PRO
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className={`${theme.subCardBg} border ${theme.subCardBorder} border-dashed rounded-2xl p-8 text-center`}>
+                  <Video className={`w-10 h-10 ${theme.textMuted} mx-auto mb-2.5 opacity-60`} />
+                  <p className={`text-sm font-black ${theme.textHeader} mb-1`}>
+                    No Highlight Video Uploaded Yet
+                  </p>
+                  <p className={`text-xs font-medium ${theme.textSub} max-w-md mx-auto`}>
+                    {isSelf
+                      ? 'Upload a 60-second race or game highlight above—or post a video on the Featured Feed—and it will stay pinned to your portfolio for your entire PRO membership.'
+                      : `${athlete.first_name} has unlocked PRO Highlight Hosting but hasn't pinned a video clip yet.`}
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : (
+            /* 🔒 NOT PRO ATHLETE VIEW ("Highlight Videos — Not PRO") */
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-3.5 text-center sm:text-left flex-col sm:flex-row">
+                <div className={`w-12 h-12 rounded-2xl ${theme.subCardBg} border ${theme.subCardBorder} flex items-center justify-center shrink-0`}>
+                  <Lock className={`w-5 h-5 ${theme.textMuted}`} />
+                </div>
+                <div>
+                  <div className="flex items-center justify-center sm:justify-start gap-2 flex-wrap">
+                    <h2 className={`text-lg font-black ${theme.textHeader}`}>
+                      Highlight Videos
+                    </h2>
+                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest border ${theme.isDark ? 'bg-white/5 border-white/15 text-slate-400' : 'bg-slate-100 border-slate-200 text-slate-500'}`}>
+                      Not PRO
+                    </span>
+                  </div>
+                  <p className={`text-xs font-medium ${theme.textSub} mt-0.5`}>
+                    {isSelf
+                      ? 'Upgrade to ChasedSports PRO to save highlight videos directly to your recruiting portfolio.'
+                      : 'Highlight Videos — Not PRO. Permanent portfolio video hosting is only active for PRO athletes.'}
+                  </p>
+                </div>
+              </div>
+
+              {isSelf && (
+                <Link
+                  href="/pro"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider bg-gradient-to-r from-cyan-400 via-purple-500 to-pink-500 text-white shadow-[0_0_20px_rgba(168,85,247,0.35)] hover:opacity-95 transition-all shrink-0 whitespace-nowrap"
+                >
+                  <Sparkles className="w-4 h-4" /> Unlock PRO Video Hosting
+                </Link>
+              )}
+            </div>
+          )}
+        </section>
 
         <div className="animate-in fade-in duration-500 delay-150">
           
@@ -769,29 +1233,29 @@ export default function AthleteClient() {
               </h2>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                 {parsedResume.gpa && (
-                   <div className={`${theme.subCardBg} border ${theme.subCardBorder} rounded-2xl p-6`}>
-                     <p className={`text-[10px] font-bold ${theme.textMuted} uppercase tracking-widest mb-2 flex items-center gap-1.5`}><GraduationCap className={`w-4 h-4 ${theme.isDark ? 'text-emerald-400' : 'text-emerald-500'}`} /> Unweighted GPA</p>
-                     <p className={`text-4xl font-black ${theme.textHeader}`}>{parsedResume.gpa}</p>
-                   </div>
-                 )}
-                 {parsedResume.accolades.length > 0 && (
-                   <div>
-                     <p className={`text-[10px] font-bold ${theme.textMuted} uppercase tracking-widest mb-3 flex items-center gap-1.5`}><Medal className={`w-4 h-4 ${theme.isDark ? 'text-amber-400' : 'text-amber-500'}`} /> Academic Honors</p>
-                     <div className="flex flex-wrap gap-2.5">
-                       {parsedResume.accolades.map((acc, i) => (
-                         <span key={i} className={`${theme.isDark ? 'bg-blue-500/10 text-blue-300 border-blue-500/30' : 'bg-blue-50 text-blue-700 border-blue-200'} border px-4 py-2 rounded-xl text-xs font-bold shadow-sm`}>{acc}</span>
-                       ))}
-                     </div>
-                   </div>
-                 )}
+                {parsedResume.gpa && (
+                  <div className={`${theme.subCardBg} border ${theme.subCardBorder} rounded-2xl p-6`}>
+                    <p className={`text-[10px] font-bold ${theme.textMuted} uppercase tracking-widest mb-2 flex items-center gap-1.5`}><GraduationCap className={`w-4 h-4 ${theme.isDark ? 'text-emerald-400' : 'text-emerald-500'}`} /> Unweighted GPA</p>
+                    <p className={`text-4xl font-black ${theme.textHeader}`}>{parsedResume.gpa}</p>
+                  </div>
+                )}
+                {parsedResume.accolades.length > 0 && (
+                  <div>
+                    <p className={`text-[10px] font-bold ${theme.textMuted} uppercase tracking-widest mb-3 flex items-center gap-1.5`}><Medal className={`w-4 h-4 ${theme.isDark ? 'text-amber-400' : 'text-amber-500'}`} /> Academic Honors</p>
+                    <div className="flex flex-wrap gap-2.5">
+                      {parsedResume.accolades.map((acc, i) => (
+                        <span key={i} className={`${theme.isDark ? 'bg-blue-500/10 text-blue-300 border-blue-500/30' : 'bg-blue-50 text-blue-700 border-blue-200'} border px-4 py-2 rounded-xl text-xs font-bold shadow-sm`}>{acc}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {parsedResume.schoolPrefs && (
-                 <div className={`pt-6 border-t ${theme.isDark ? 'border-white/10' : 'border-slate-100'} mt-2`}>
-                   <p className={`text-[10px] font-bold ${theme.textMuted} uppercase tracking-widest mb-3 flex items-center gap-1.5`}><School className={`w-4 h-4 ${theme.isDark ? 'text-indigo-400' : 'text-indigo-500'}`} /> Culture Preferences</p>
-                   <p className={`text-sm font-medium ${theme.textSub} leading-relaxed whitespace-pre-wrap ${theme.subCardBg} border ${theme.subCardBorder} p-5 rounded-2xl`}>{parsedResume.schoolPrefs}</p>
-                 </div>
+                <div className={`pt-6 border-t ${theme.isDark ? 'border-white/10' : 'border-slate-100'} mt-2`}>
+                  <p className={`text-[10px] font-bold ${theme.textMuted} uppercase tracking-widest mb-3 flex items-center gap-1.5`}><School className={`w-4 h-4 ${theme.isDark ? 'text-indigo-400' : 'text-indigo-500'}`} /> Culture Preferences</p>
+                  <p className={`text-sm font-medium ${theme.textSub} leading-relaxed whitespace-pre-wrap ${theme.subCardBg} border ${theme.subCardBorder} p-5 rounded-2xl`}>{parsedResume.schoolPrefs}</p>
+                </div>
               )}
             </section>
           )}
@@ -852,12 +1316,12 @@ export default function AthleteClient() {
                         </div>
                       </div>
                     ) : (
-                       <div className={`${theme.subCardBg} border ${theme.subCardBorder} border-dashed rounded-2xl p-6 text-center mt-6`}>
-                         <p className={`text-sm font-bold ${theme.textSub}`}>No raw metrics logged for this sport.</p>
-                       </div>
+                      <div className={`${theme.subCardBg} border ${theme.subCardBorder} border-dashed rounded-2xl p-6 text-center mt-6`}>
+                        <p className={`text-sm font-bold ${theme.textSub}`}>No raw metrics logged for this sport.</p>
+                      </div>
                     )}
                   </section>
-                )
+                );
               })}
             </div>
           ) : (
@@ -875,22 +1339,17 @@ export default function AthleteClient() {
       {/* 📱 ENHANCED MESSAGING MODAL / BOTTOM SHEET 📱 */}
       {isMessageModalOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 animate-in fade-in duration-300">
-          
-          {/* Backdrop (clickable to dismiss) */}
           <div 
-             className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" 
-             onClick={() => !isSending && setIsMessageModalOpen(false)}
-             aria-hidden="true"
+            className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" 
+            onClick={() => !isSending && setIsMessageModalOpen(false)}
+            aria-hidden="true"
           />
 
-          {/* Drawer / Modal Container */}
           <div 
-             className="relative w-full sm:max-w-lg bg-white rounded-t-[2rem] sm:rounded-[2rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in slide-in-from-bottom-full sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-300 ease-out" 
-             role="dialog" 
-             aria-modal="true"
+            className="relative w-full sm:max-w-lg bg-white rounded-t-[2rem] sm:rounded-[2rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in slide-in-from-bottom-full sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-300 ease-out" 
+            role="dialog" 
+            aria-modal="true"
           >
-            
-            {/* Mobile Drag Indicator */}
             <div className="w-full flex justify-center pt-3 pb-1 sm:hidden cursor-grab active:cursor-grabbing" onClick={() => setIsMessageModalOpen(false)}>
               <div className="w-12 h-1.5 bg-slate-200 rounded-full"></div>
             </div>
@@ -923,7 +1382,6 @@ export default function AthleteClient() {
               </div>
             ) : (
               <form onSubmit={handleSendMessage} className="p-6 sm:p-8 space-y-6 overflow-y-auto custom-scrollbar">
-                
                 <p className="text-[10px] sm:text-xs font-black text-amber-700 bg-amber-50 rounded-xl px-4 py-3 text-center uppercase tracking-widest border border-amber-200 flex items-center justify-center gap-2 shadow-sm">
                   <Clock className="w-4 h-4 shrink-0 text-amber-500" /> Daily Limit: 10 Pitches/Requests
                 </p>
@@ -942,15 +1400,14 @@ export default function AthleteClient() {
 
                 <div className="space-y-2 group">
                   <div className="flex justify-between items-end">
-                     <label className="text-xs font-black text-slate-700 uppercase tracking-widest flex items-center gap-2">
-                       <MessageSquare className="w-4 h-4 text-slate-400" /> Message
-                     </label>
-                     <span className={`text-[10px] font-bold ${charCount >= MAX_MESSAGE_LENGTH ? 'text-red-500' : 'text-slate-400'} uppercase tracking-widest`}>
-                       {charCount} / {MAX_MESSAGE_LENGTH}
-                     </span>
+                    <label className="text-xs font-black text-slate-700 uppercase tracking-widest flex items-center gap-2">
+                      <MessageSquare className="w-4 h-4 text-slate-400" /> Message
+                    </label>
+                    <span className={`text-[10px] font-bold ${charCount >= MAX_MESSAGE_LENGTH ? 'text-red-500' : 'text-slate-400'} uppercase tracking-widest`}>
+                      {charCount} / {MAX_MESSAGE_LENGTH}
+                    </span>
                   </div>
                   
-                  {/* Note: text-base is required here to prevent iOS Safari auto-zoom on input focus */}
                   <textarea 
                     ref={messageInputRef}
                     required 
@@ -973,9 +1430,9 @@ export default function AthleteClient() {
                   }`}
                 >
                   {isSending ? (
-                     <><RefreshCw className="w-5 h-5 animate-spin" /> Sending Securely...</>
+                    <><RefreshCw className="w-5 h-5 animate-spin" /> Sending Securely...</>
                   ) : (
-                     <><Send className="w-5 h-5" /> Send {modalMode === 'pitch' ? 'Pitch' : 'Request'}</>
+                    <><Send className="w-5 h-5" /> Send {modalMode === 'pitch' ? 'Pitch' : 'Request'}</>
                   )}
                 </button>
               </form>

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
-import { Paintbrush, Crown, Zap, Save, CheckCircle2, AlertCircle, ShieldCheck, Trophy, Lock, ChevronRight, ArrowLeft, ChevronUp, ChevronDown } from 'lucide-react';
+import { Paintbrush, Crown, Zap, Save, CheckCircle2, AlertCircle, ShieldCheck, Trophy, Lock, ChevronRight, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { AvatarWithBorder } from '@/components/AnimatedBorders';
 
@@ -13,21 +13,10 @@ interface AthleteProfile {
   last_name: string;
   avatar_url: string | null;
   equipped_border: string | null;
-  equipped_title: string | null;
   equipped_card: string | null;
   is_premium: boolean;
   trust_level: number;
 }
-
-const EARNED_TITLES = [
-  { id: 'legend', name: 'Legend', reqPercentile: 0.01, badgeClass: 'legend-badge', unlockText: 'Reach Top 1%' },
-  { id: 'champion', name: 'Champion', reqPercentile: 0.05, badgeClass: 'champion-badge', unlockText: 'Reach Top 5%' },
-  { id: 'elite', name: 'Elite', reqPercentile: 0.15, badgeClass: 'elite-badge', unlockText: 'Reach Top 15%' },
-  { id: 'master', name: 'Master', reqPercentile: 0.30, badgeClass: 'bg-blue-100 text-blue-800 border border-blue-300', unlockText: 'Reach Top 30%' },
-  { id: 'contender', name: 'Contender', reqPercentile: 0.50, badgeClass: 'bg-emerald-100 text-emerald-800 border border-emerald-300', unlockText: 'Reach Top 50%' },
-  { id: 'challenger', name: 'Challenger', reqPercentile: 0.75, badgeClass: 'bg-orange-100 text-orange-800 border border-orange-300', unlockText: 'Reach Top 75%' },
-  { id: 'prospect', name: 'Prospect', reqPercentile: 1.0, badgeClass: 'bg-slate-100 text-slate-600 border border-slate-300', unlockText: 'Standard Rank' },
-];
 
 const CARD_STYLES = [
   { id: 'base', name: 'Standard Slate', price: 0, desc: 'The clean, minimal starting layout.', isPremium: false, gradient: 'bg-slate-800 border-slate-700' },
@@ -67,18 +56,16 @@ export default function CustomizePage() {
 
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<AthleteProfile | null>(null);
+  const [previewMetric, setPreviewMetric] = useState<{name: string, value: string} | null>(null);
+  
   const [isSaving, setIsSaving] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'error' | 'success' } | null>(null);
 
   const [stagedCard, setStagedCard] = useState('base');
   const [stagedBorder, setStagedBorder] = useState('none');
-  const [stagedTitle, setStagedTitle] = useState('prospect');
   
   const [unlockedCards, setUnlockedCards] = useState<string[]>(['base']);
   const [unlockedBorders, setUnlockedBorders] = useState<string[]>(['none']);
-  
-  const [isTitleDropdownOpen, setIsTitleDropdownOpen] = useState(false);
-  const [highestPercentile, setHighestPercentile] = useState<number>(1.0);
 
   const showToast = (message: string, type: 'error' | 'success' = 'error') => {
     setToast({ message, type });
@@ -90,34 +77,49 @@ export default function CustomizePage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { router.push('/login'); return; }
 
-      const { data, error } = await supabase
+      // 1. Fetch core athlete customizations (removed 'prs' query)
+      const { data: athleteData, error: athleteError } = await supabase
         .from('athletes')
-        .select('id, first_name, last_name, avatar_url, equipped_border, equipped_title, equipped_card, unlocked_borders, unlocked_cards, is_premium, trust_level, prs')
+        .select('id, first_name, last_name, avatar_url, equipped_border, equipped_card, unlocked_borders, unlocked_cards, is_premium, trust_level')
         .eq('id', session.user.id)
         .single();
 
-      if (error) {
+      if (athleteError) {
         showToast('Failed to load customization data.');
-      } else if (data) {
-        setProfile(data);
+      } else if (athleteData) {
+        setProfile(athleteData);
         
-        let dbCard = data.equipped_card || 'base';
+        let dbCard = athleteData.equipped_card || 'base';
         if (dbCard === 'default') dbCard = 'base'; 
         
         setStagedCard(dbCard);
-        setStagedBorder(data.equipped_border || 'none');
-        setStagedTitle(data.equipped_title || 'prospect');
+        setStagedBorder(athleteData.equipped_border || 'none');
         
-        let dbUnlockedCards = data.unlocked_cards || ['base'];
+        let dbUnlockedCards = athleteData.unlocked_cards || ['base'];
         if (dbUnlockedCards.includes('default')) dbUnlockedCards = dbUnlockedCards.map((c: string) => c === 'default' ? 'base' : c);
         setUnlockedCards(dbUnlockedCards);
         
-        setUnlockedBorders(data.unlocked_borders || ['none']);
+        setUnlockedBorders(athleteData.unlocked_borders || ['none']);
+        
+        // 2. Fetch real stats from athlete_sports to populate the Live Preview card
+        const { data: sportsData } = await supabase
+          .from('athlete_sports')
+          .select('metrics')
+          .eq('athlete_id', session.user.id)
+          .eq('is_active', true)
+          .order('created_at', { ascending: false });
 
-        // Temporarily default to 0.01 for demo, or connect to actual rank calculation
-        if (data.prs && data.prs.length > 0) {
-          setHighestPercentile(0.01); 
+        // Grab the first available metric to display as the preview flex
+        let foundMetric = null;
+        if (sportsData && sportsData.length > 0) {
+          for (const sport of sportsData) {
+            if (sport.metrics && sport.metrics.length > 0) {
+              foundMetric = sport.metrics[0];
+              break;
+            }
+          }
         }
+        setPreviewMetric(foundMetric);
       }
       setLoading(false);
     }
@@ -131,8 +133,7 @@ export default function CustomizePage() {
     try {
       const { error } = await supabase.from('athletes').update({
         equipped_card: stagedCard,
-        equipped_border: stagedBorder,
-        equipped_title: stagedTitle
+        equipped_border: stagedBorder
       }).eq('id', profile.id);
 
       if (error) throw error;
@@ -140,10 +141,9 @@ export default function CustomizePage() {
       setProfile({ 
         ...profile, 
         equipped_card: stagedCard, 
-        equipped_border: stagedBorder,
-        equipped_title: stagedTitle
+        equipped_border: stagedBorder
       });
-      showToast("Locker Room updated successfully!", "success");
+      showToast("Customizations saved successfully!", "success");
     } catch (err: any) {
       showToast(err.message, "error");
     } finally {
@@ -155,7 +155,7 @@ export default function CustomizePage() {
     return (
       <div className="min-h-screen bg-[#06090F] flex flex-col items-center justify-center">
         <div className="w-12 h-12 border-2 border-white/10 border-t-blue-500 rounded-full animate-spin mb-4"></div>
-        <p className="text-slate-500 font-bold uppercase tracking-widest text-[10px] animate-pulse">Entering Locker Room</p>
+        <p className="text-slate-500 font-bold uppercase tracking-widest text-[10px] animate-pulse">Loading Customize...</p>
       </div>
     );
   }
@@ -170,28 +170,22 @@ export default function CustomizePage() {
   };
 
   const currentStyles = getCardStyles(stagedCard);
-  const activeTitle = EARNED_TITLES.find(t => t.id === stagedTitle) || EARNED_TITLES[6];
 
   const hasUnsavedChanges = stagedCard !== profile?.equipped_card || 
-                            stagedBorder !== profile?.equipped_border || 
-                            stagedTitle !== profile?.equipped_title;
+                            stagedBorder !== profile?.equipped_border;
 
   return (
     <main className="min-h-screen bg-[#06090F] text-white font-sans pb-32 relative overflow-hidden">
       
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-blue-600/10 blur-[120px] rounded-full pointer-events-none z-0"></div>
+      <div className="absolute top-[-10%] left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-blue-600/5 blur-[100px] rounded-full pointer-events-none z-0"></div>
 
-      {/* 🚨 THE OVERHAULED TEXTURE ENGINE 🚨 */}
+      {/* 🚨 TEXTURE ENGINE 🚨 */}
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes foilShift { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
         @keyframes shimmerGlare { 0% { background-position: -200% center; } 100% { background-position: 200% center; } }
         @keyframes cyberScan { 0% { transform: translateY(-100%); opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { transform: translateY(1000%); opacity: 0; } }
         @keyframes voidPulse { 0%, 100% { background-size: 100% 100%; filter: brightness(1); } 50% { background-size: 120% 120%; filter: brightness(1.2); } }
         
-        .legend-badge { background: linear-gradient(90deg, #6b21a8 0%, #d946ef 20%, #6b21a8 40%, #d946ef 60%, #6b21a8 80%); background-size: 200% auto; animation: shimmerSlow 4s linear infinite; color: white; border: 1px solid #e879f9; box-shadow: 0 0 15px rgba(217, 70, 239, 0.5); font-weight: 900; }
-        .champion-badge { background: linear-gradient(90deg, #991b1b 0%, #ef4444 20%, #991b1b 40%, #ef4444 60%, #991b1b 80%); background-size: 200% auto; animation: shimmerSlow 4s linear infinite; color: white; border: 1px solid #f87171; box-shadow: 0 0 15px rgba(239, 68, 68, 0.5); font-weight: 900; }
-        .elite-badge { background: linear-gradient(90deg, #0f172a 0%, #475569 20%, #0f172a 40%, #475569 60%, #0f172a 80%); background-size: 200% auto; animation: shimmerSlow 4s linear infinite; color: white; border: 1px solid #94a3b8; box-shadow: 0 0 15px rgba(148, 163, 184, 0.3); font-weight: 900; }
-
         .holo-card-base { background: transparent; }
         .holo-card-obsidian { background: linear-gradient(135deg, #0f172a 0%, #334155 25%, #000000 50%, #0f172a 75%, #1e293b 100%); background-size: 300% 300%; }
         .holo-card-crimson { background: linear-gradient(135deg, #450a0a 0%, #dc2626 50%, #450a0a 100%); background-size: 300% 300%; }
@@ -265,9 +259,9 @@ export default function CustomizePage() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12">
           <div>
             <h1 className="text-4xl md:text-5xl font-black tracking-tight mb-2 text-white flex items-center gap-3">
-              The <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300">Locker Room</span>
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300">Customize</span>
             </h1>
-            <p className="text-slate-400 font-medium text-sm md:text-base">Equip your hard-earned gear and flex your rank.</p>
+            <p className="text-slate-400 font-medium text-sm md:text-base">Equip your hard-earned gear and modify your profile.</p>
           </div>
           <button 
             onClick={handleSave} 
@@ -282,7 +276,7 @@ export default function CustomizePage() {
           
           {/* LIVE PREVIEW WIDGET */}
           <div className="lg:col-span-5 lg:order-last">
-            <div className="sticky top-10">
+            <div className="sticky top-24">
               <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4">Live Feed Preview</h3>
               
               <div className="relative group z-10">
@@ -290,7 +284,6 @@ export default function CustomizePage() {
                 
                 <div className={`${currentStyles.bgClass} ${currentStyles.isAnimated ? 'animate-foil border-white/20' : 'border-slate-700/50'} rounded-[2rem] p-6 text-white relative overflow-hidden border shadow-2xl transition-all duration-300`}>
                     
-                    {/* Conditionally Render Flashy Elements */}
                     {['hype', 'premium'].includes(stagedCard) && <div className="holo-glare rounded-[2rem]"></div>}
                     
                     {currentStyles.isAnimated && (
@@ -313,25 +306,22 @@ export default function CustomizePage() {
 
                             <div className="flex-1 min-w-0">
                                 <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest mb-2 shadow-sm ${currentStyles.isAnimated ? 'bg-white/10 border border-white/20 text-white backdrop-blur-md' : 'bg-slate-700/50 border border-slate-600 text-slate-300'}`}>
-                                    <Zap className={`w-3 h-3 ${currentStyles.isAnimated ? 'text-yellow-300 animate-pulse' : 'text-slate-400'}`}/> New Verified PR
+                                    <Zap className={`w-3 h-3 ${currentStyles.isAnimated ? 'text-yellow-300 animate-pulse' : 'text-slate-400'}`}/> New Verified Stat
                                 </div>
-                                <div className="text-2xl font-black tracking-tight leading-none mb-2 flex items-center gap-2 truncate">
+                                <div className="text-2xl font-black tracking-tight leading-none flex items-center gap-2 truncate">
                                     {profile?.first_name} {profile?.last_name}
                                     {profile?.is_premium && <Crown className="w-4 h-4 text-yellow-400 shrink-0" />}
-                                </div>
-                                {/* 🚨 INJECTED STAGED TITLE PREVIEW 🚨 */}
-                                <div>
-                                  <span className={`inline-block px-2 py-0.5 rounded text-[9px] font-black tracking-widest uppercase text-white shadow-sm w-max ${activeTitle.badgeClass}`}>
-                                    {activeTitle.name} Rank
-                                  </span>
                                 </div>
                             </div>
                         </div>
 
+                        {/* DYNAMIC REAL STAT OR PLACEHOLDER */}
                         <div className={`${currentStyles.isAnimated ? 'bg-black/20 border-white/20' : 'bg-black/40 border-slate-700/50'} backdrop-blur-md border p-6 rounded-[1.5rem] flex flex-col items-center justify-center shadow-inner w-full`}>
-                            <span className={`text-[10px] font-black uppercase tracking-widest mb-1 text-center ${currentStyles.isAnimated ? 'text-white/70' : 'text-slate-400'}`}>100 Meters</span>
-                            <span className="text-5xl leading-none font-black tracking-tighter text-white drop-shadow-md text-center whitespace-nowrap">
-                                10.42
+                            <span className={`text-[10px] font-black uppercase tracking-widest mb-1 text-center truncate w-full px-2 ${currentStyles.isAnimated ? 'text-white/70' : 'text-slate-400'}`}>
+                              {previewMetric ? previewMetric.name : 'Primary Metric'}
+                            </span>
+                            <span className="text-4xl sm:text-5xl leading-none font-black tracking-tighter text-white drop-shadow-md text-center whitespace-nowrap">
+                              {previewMetric ? previewMetric.value : '--'}
                             </span>
                         </div>
                     </div>
@@ -341,77 +331,22 @@ export default function CustomizePage() {
           </div>
 
           {/* SELECTION MENUS */}
-          <div className="lg:col-span-7 space-y-10">
+          <div className="lg:col-span-7 space-y-12">
             
-            {/* 🚨 RANK TITLES (MOVED HERE) 🚨 */}
-            <section>
-              <div className="flex items-center gap-3 mb-6">
-                <Trophy className="w-5 h-5 text-yellow-400" />
-                <h2 className="text-xl font-black text-white tracking-tight">Rank Titles</h2>
-              </div>
-              <div className="relative mb-6">
-                <button 
-                  onClick={() => setIsTitleDropdownOpen(!isTitleDropdownOpen)}
-                  className="w-full flex items-center justify-between p-4 rounded-2xl transition-all text-left bg-white/[0.02] border border-white/10 hover:border-white/20 shadow-sm group"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className={`px-3 py-1.5 rounded-lg text-[10px] font-black tracking-widest uppercase text-white ${activeTitle.badgeClass}`}>
-                      {activeTitle.name}
-                    </div>
-                    <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider group-hover:text-white transition-colors">Currently Selected</span>
-                  </div>
-                  {isTitleDropdownOpen ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
-                </button>
-
-                {isTitleDropdownOpen && (
-                  <div className="absolute top-full left-0 right-0 mt-2 bg-slate-900 rounded-2xl border border-slate-700 shadow-2xl z-20 overflow-hidden animate-in fade-in slide-in-from-top-2">
-                    <div className="max-h-64 overflow-y-auto p-2 space-y-1 custom-scrollbar">
-                      {EARNED_TITLES.map((title) => {
-                        const isUnlocked = highestPercentile <= title.reqPercentile;
-                        const isEquipped = stagedTitle === title.id;
-
-                        return (
-                          <button 
-                            key={title.id}
-                            disabled={!isUnlocked}
-                            onClick={() => {
-                              setStagedTitle(title.id);
-                              setIsTitleDropdownOpen(false);
-                            }}
-                            className={`w-full flex items-center justify-between p-3 rounded-xl transition-all text-left ${
-                              isEquipped 
-                                ? 'bg-blue-500/10 border border-blue-500/30' 
-                                : isUnlocked 
-                                  ? 'hover:bg-white/5 border border-transparent' 
-                                  : 'opacity-40 cursor-not-allowed border border-transparent'
-                            }`}
-                          >
-                            <div className="flex items-center gap-3">
-                              <div className={`px-2 py-1 rounded text-[9px] font-black tracking-widest uppercase text-white ${isUnlocked ? title.badgeClass : 'bg-slate-700 text-slate-400 border border-slate-600'}`}>
-                                {title.name}
-                              </div>
-                              {!isUnlocked && <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider flex items-center"><Lock className="w-2.5 h-2.5 inline mr-1 -mt-0.5" />{title.unlockText}</span>}
-                            </div>
-                            {isEquipped && <CheckCircle2 className="w-4 h-4 text-blue-400" />}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </section>
-
             {/* CARD STYLES */}
             <section>
               <div className="flex items-center gap-3 mb-6">
-                <Paintbrush className="w-5 h-5 text-blue-400" />
+                <div className="p-2 bg-blue-500/10 rounded-lg">
+                  <Paintbrush className="w-5 h-5 text-blue-400" />
+                </div>
                 <h2 className="text-xl font-black text-white tracking-tight">Post Cards</h2>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {CARD_STYLES.map(card => {
                   const isSelected = stagedCard === card.id;
-                  const isUnlocked = unlockedCards.includes(card.id) || card.price === 0 || (card.isPremium && profile?.is_premium);
+                  const isUnlocked = card.isPremium 
+                    ? profile?.is_premium 
+                    : (unlockedCards.includes(card.id) || card.price === 0);
                   const isLocked = !isUnlocked;
 
                   return (
@@ -439,8 +374,8 @@ export default function CustomizePage() {
                       
                       {isLocked && (
                         <div className="mt-3 pt-3 border-t border-white/5">
-                          <Link href="/shop" className="text-[10px] font-black text-amber-500 uppercase tracking-widest hover:text-amber-400 flex items-center gap-1">
-                            Go to Shop <ChevronRight className="w-3 h-3" />
+                          <Link href="/pro" className="text-[10px] font-black text-amber-500 uppercase tracking-widest hover:text-amber-400 flex items-center gap-1">
+                            {card.isPremium ? 'Upgrade to Pro' : 'Go to Shop'} <ChevronRight className="w-3 h-3" />
                           </Link>
                         </div>
                       )}
@@ -453,7 +388,9 @@ export default function CustomizePage() {
             {/* AVATAR BORDERS */}
             <section>
               <div className="flex items-center gap-3 mb-6">
-                <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                <div className="p-2 bg-emerald-500/10 rounded-lg">
+                  <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                </div>
                 <h2 className="text-xl font-black text-white tracking-tight">Avatar Borders</h2>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -476,14 +413,14 @@ export default function CustomizePage() {
                       <div className="shrink-0">
                         <AvatarWithBorder avatarUrl={profile?.avatar_url || null} borderId={border.id} sizeClasses="w-12 h-12" />
                       </div>
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between">
-                          <h4 className="font-black text-white text-base truncate pr-2">{border.name}</h4>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <h4 className="font-black text-white text-base truncate">{border.name}</h4>
                           {isLocked && <Lock className="w-3.5 h-3.5 text-slate-500 shrink-0" />}
+                          {isSelected && <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />}
                         </div>
-                        <p className="text-[10px] font-medium text-slate-400 mt-0.5 line-clamp-2 pr-2">{border.desc}</p>
+                        <p className="text-[10px] font-medium text-slate-400 mt-0.5 line-clamp-2">{border.desc}</p>
                       </div>
-                      {isSelected && <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />}
                     </button>
                   );
                 })}

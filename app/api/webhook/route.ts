@@ -6,8 +6,6 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2023-10-16' as any,
 });
 
-// We must use the SERVICE_ROLE_KEY here to bypass Row Level Security.
-// Webhooks aren't "logged in" as the user, they are logged in as the system.
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -30,21 +28,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Webhook Error' }, { status: 400 });
   }
 
-  // Handle the specific event when a checkout is successfully completed
+  // 1. Upgrade Athlete to PRO on Checkout Completion
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object as Stripe.Checkout.Session;
-    
-    // Remember when we attached this in the checkout API? Here is where we read it back.
     const athleteId = session.metadata?.athlete_id;
 
     if (athleteId) {
-      console.log(`✅ Payment successful for Athlete ID: ${athleteId}. Upgrading to Pro...`);
-
-      // Calculate 30 days from now
       const expiryDate = new Date();
       expiryDate.setDate(expiryDate.getDate() + 30);
 
-      // Fetch their current boosts so we can add 5
       const { data: currentData } = await supabaseAdmin
         .from('athletes')
         .select('boosts_available')
@@ -53,7 +45,6 @@ export async function POST(req: Request) {
         
       const currentBoosts = currentData?.boosts_available || 0;
 
-      // Force the database update as an Admin
       const { error } = await supabaseAdmin
         .from('athletes')
         .update({
@@ -64,9 +55,45 @@ export async function POST(req: Request) {
         .eq('id', athleteId);
 
       if (error) {
-        console.error('🔴 Error updating athlete in Supabase:', error);
-      } else {
-        console.log('🎉 Athlete successfully upgraded in Supabase!');
+        console.error('🔴 Error upgrading athlete in Supabase:', error);
+      }
+    }
+  }
+
+  // 2. Downgrade Athlete when Subscription Ends/Cancels (So Cron Cleans Up PRO Video)
+  if (event.type === 'customer.subscription.deleted') {
+    const subscription = event.data.object as Stripe.Subscription;
+    const athleteId = subscription.metadata?.athlete_id;
+
+    if (athleteId) {
+      await supabaseAdmin
+        .from('athletes')
+        .update({
+          is_premium: false,
+          premium_expires_at: new Date().toISOString(),
+        })
+        .eq('id', athleteId);
+    } else if (subscription.customer) {
+      // Fallback: look up customer email from Stripe if metadata wasn't on subscription object
+      try {
+        const customer = await stripe.customers.retrieve(subscription.customer as string);
+        if (!customer.deleted && customer.email) {
+          const { data: users } = await supabaseAdmin.auth.admin.listUsers();
+          const matchedUser = users?.users?.find(
+            (u) => u.email?.toLowerCase() === customer.email?.toLowerCase()
+          );
+          if (matchedUser) {
+            await supabaseAdmin
+              .from('athletes')
+              .update({
+                is_premium: false,
+                premium_expires_at: new Date().toISOString(),
+              })
+              .eq('id', matchedUser.id);
+          }
+        }
+      } catch (e) {
+        console.error('🔴 Error resolving customer on subscription delete:', e);
       }
     }
   }

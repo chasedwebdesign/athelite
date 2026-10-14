@@ -3,9 +3,12 @@
 import { useEffect, useState, useRef, Suspense } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Search, Mail, MailOpen, School, Send, Clock, ChevronLeft, ChevronRight, Lock, UserCircle2, CheckCircle2, AlertCircle, Ban, Bell, MessageSquare, Archive, SendHorizontal, GraduationCap, Users, ShieldAlert, Check } from 'lucide-react';
+import { 
+  Mail, MailOpen, School, Send, Clock, ChevronLeft, ChevronRight, 
+  Lock, UserCircle2, CheckCircle2, AlertCircle, Ban, Archive, 
+  GraduationCap, Users, ShieldAlert 
+} from 'lucide-react';
 import Link from 'next/link';
-import { AvatarWithBorder } from '@/components/AnimatedBorders';
 
 interface ChatMessage {
   sender_id: string;
@@ -42,6 +45,7 @@ function InboxContent() {
   const searchParams = useSearchParams();
   
   const composeId = searchParams.get('compose');
+  const threadId = searchParams.get('thread');
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
@@ -50,7 +54,7 @@ function InboxContent() {
   
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [viewerRole, setViewerRole] = useState<'athlete' | 'coach'>('athlete');
-  const [trustLevel, setTrustLevel] = useState<number | null>(null); // 🚨 Track verification status
+  const [trustLevel, setTrustLevel] = useState<number | null>(null);
   
   const [replyText, setReplyText] = useState('');
   const [initialPitch, setInitialPitch] = useState('');
@@ -96,6 +100,15 @@ function InboxContent() {
     return false;
   };
 
+  const isUnreadForUser = (msg: Message, userId: string | null) => {
+    if (!userId || msg.is_draft || msg.is_read) return false;
+    const history = msg.chat_history || [];
+    if (history.length > 0) {
+      return history[history.length - 1].sender_id !== userId;
+    }
+    return msg.sender_id !== userId;
+  };
+
   useEffect(() => {
     let channel: any;
 
@@ -111,19 +124,18 @@ function InboxContent() {
         const userId = session.user.id;
         setCurrentUserId(userId);
 
-        // Determine Role & Fetch Trust Level
         let vRole: 'athlete' | 'coach' = 'athlete';
         let tLevel = 0;
         
         const { data: cData } = await supabase.from('coaches').select('id').eq('id', userId).maybeSingle();
         if (cData) {
-            vRole = 'coach';
-            tLevel = 1; // Coaches bypass verification lock
+          vRole = 'coach';
+          tLevel = 1;
         } else {
-            const { data: aData } = await supabase.from('athletes').select('trust_level').eq('id', userId).maybeSingle();
-            if (aData) {
-                tLevel = aData.trust_level || 0;
-            }
+          const { data: aData } = await supabase.from('athletes').select('trust_level').eq('id', userId).maybeSingle();
+          if (aData) {
+            tLevel = aData.trust_level || 0;
+          }
         }
         
         setViewerRole(vRole);
@@ -146,52 +158,63 @@ function InboxContent() {
           setMessages(sortedData);
         }
 
-        // COMPOSITION ENGINE
-        if (composeId) {
-            const existingThread = sortedData.find(m => 
-                (vRole === 'athlete' && m.coach_id === composeId) || 
-                (vRole === 'coach' && m.athlete_id === composeId)
-            );
-
-            if (existingThread) {
-                setSelectedMessage(existingThread);
-                router.replace('/dashboard/messages'); 
-            } else {
-                let draftTargetCoach = null;
-                let draftTargetAthlete = null;
-
-                if (vRole === 'athlete') {
-                    const { data: targetCoach } = await supabase.from('coaches').select('first_name, last_name, school_name').eq('id', composeId).single();
-                    if (targetCoach) draftTargetCoach = targetCoach;
-                } else {
-                    const { data: targetAthlete } = await supabase.from('athletes').select('first_name, last_name, avatar_url, grad_year').eq('id', composeId).single();
-                    if (targetAthlete) draftTargetAthlete = targetAthlete;
-                }
-
-                if (draftTargetCoach || draftTargetAthlete) {
-                    const newDraft: Message = {
-                        id: `draft-${composeId}`,
-                        athlete_id: vRole === 'athlete' ? userId : composeId,
-                        coach_id: vRole === 'coach' ? userId : composeId,
-                        sender_id: userId,
-                        sender_name: 'You', 
-                        sender_school: '', 
-                        sender_email: '', 
-                        content: '',
-                        is_read: true,
-                        created_at: new Date().toISOString(),
-                        chat_history: [],
-                        status: 'pending',
-                        is_draft: true,
-                        target_coach: draftTargetCoach,
-                        athletes: draftTargetAthlete
-                    };
-                    setSelectedMessage(newDraft);
-                }
+        // 1. Deep-Link to a Specific Thread from Notification Center (?thread=...)
+        if (threadId) {
+          const targetThread = sortedData.find(m => m.id === threadId);
+          if (targetThread) {
+            setSelectedMessage({ ...targetThread, is_read: true });
+            if (isUnreadForUser(targetThread, userId)) {
+              await supabase.from('messages').update({ is_read: true }).eq('id', targetThread.id);
+              setMessages(prev => prev.map(m => m.id === targetThread.id ? { ...m, is_read: true } : m));
             }
+          }
+          router.replace('/dashboard/messages');
+        } else if (composeId) {
+          // 2. Composition Engine (?compose=...)
+          const existingThread = sortedData.find(m => 
+            (vRole === 'athlete' && m.coach_id === composeId) || 
+            (vRole === 'coach' && m.athlete_id === composeId)
+          );
+
+          if (existingThread) {
+            setSelectedMessage(existingThread);
+            router.replace('/dashboard/messages'); 
+          } else {
+            let draftTargetCoach = null;
+            let draftTargetAthlete = null;
+
+            if (vRole === 'athlete') {
+              const { data: targetCoach } = await supabase.from('coaches').select('first_name, last_name, school_name').eq('id', composeId).single();
+              if (targetCoach) draftTargetCoach = targetCoach;
+            } else {
+              const { data: targetAthlete } = await supabase.from('athletes').select('first_name, last_name, avatar_url, grad_year').eq('id', composeId).single();
+              if (targetAthlete) draftTargetAthlete = targetAthlete;
+            }
+
+            if (draftTargetCoach || draftTargetAthlete) {
+              const newDraft: Message = {
+                id: `draft-${composeId}`,
+                athlete_id: vRole === 'athlete' ? userId : composeId,
+                coach_id: vRole === 'coach' ? userId : composeId,
+                sender_id: userId,
+                sender_name: 'You', 
+                sender_school: '', 
+                sender_email: '', 
+                content: '',
+                is_read: true,
+                created_at: new Date().toISOString(),
+                chat_history: [],
+                status: 'pending',
+                is_draft: true,
+                target_coach: draftTargetCoach,
+                athletes: draftTargetAthlete
+              };
+              setSelectedMessage(newDraft);
+            }
+          }
         } else if (selectedMessage && !selectedMessage.is_draft) {
-             const updated = sortedData.find(m => m.id === selectedMessage.id);
-             setSelectedMessage(updated || selectedMessage);
+          const updated = sortedData.find(m => m.id === selectedMessage.id);
+          setSelectedMessage(updated || selectedMessage);
         }
         
         setLoading(false);
@@ -203,7 +226,7 @@ function InboxContent() {
               'postgres_changes',
               { event: '*', schema: 'public', table: 'messages' },
               () => {
-                 loadMessages();
+                loadMessages();
               }
             )
             .subscribe();
@@ -219,17 +242,9 @@ function InboxContent() {
     return () => {
       if (channel) supabase.removeChannel(channel);
     };
-  }, [supabase, router, composeId]);
+  }, [supabase, router, composeId, threadId]);
 
-  const isUnreadForMe = (msg: Message) => {
-    if (msg.is_draft) return false;
-    if (msg.is_read) return false;
-    const history = msg.chat_history || [];
-    if (history.length > 0) {
-      return history[history.length - 1].sender_id !== currentUserId;
-    }
-    return msg.sender_id !== currentUserId;
-  };
+  const isUnreadForMe = (msg: Message) => isUnreadForUser(msg, currentUserId);
 
   const isExpired = (msg: Message) => {
     if (msg.is_draft) return false;
@@ -244,7 +259,7 @@ function InboxContent() {
       return athleteData ? `${athleteData.first_name} ${athleteData.last_name}` : 'Athlete';
     } else {
       if (msg.is_draft && msg.target_coach) {
-          return `Coach ${msg.target_coach.last_name} (${msg.target_coach.school_name})`;
+        return `Coach ${msg.target_coach.last_name} (${msg.target_coach.school_name})`;
       }
       if (msg.sender_id !== currentUserId) {
         return msg.sender_school ? `${msg.sender_school} (${msg.sender_name})` : msg.sender_name;
@@ -296,59 +311,59 @@ function InboxContent() {
   };
 
   const handleSendInitialPitch = async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!initialPitch.trim() || !selectedMessage || !currentUserId || !selectedMessage.is_draft) return;
+    e.preventDefault();
+    if (!initialPitch.trim() || !selectedMessage || !currentUserId || !selectedMessage.is_draft) return;
 
-      setIsSending(true);
+    setIsSending(true);
 
-      try {
-          let sName = '';
-          let sSchool = '';
+    try {
+      let sName = '';
+      let sSchool = '';
 
-          if (viewerRole === 'athlete') {
-              const { data: aData } = await supabase.from('athletes').select('first_name, last_name, high_school').eq('id', currentUserId).single();
-              if (aData) {
-                  sName = `${aData.first_name} ${aData.last_name}`;
-                  sSchool = aData.high_school || '';
-              }
-          } else {
-              const { data: cData } = await supabase.from('coaches').select('first_name, last_name, school_name').eq('id', currentUserId).single();
-              if (cData) {
-                  sName = `Coach ${cData.last_name}`;
-                  sSchool = cData.school_name || '';
-              }
-          }
-
-          const newRow = {
-              athlete_id: selectedMessage.athlete_id,
-              coach_id: selectedMessage.coach_id,
-              sender_id: currentUserId,
-              sender_name: sName,
-              sender_school: sSchool,
-              content: initialPitch.trim(),
-              status: 'pending',
-              is_read: false,
-              chat_history: []
-          };
-
-          const { data: insertedMsg, error } = await supabase
-              .from('messages')
-              .insert(newRow)
-              .select('*, athletes(first_name, last_name, avatar_url, grad_year)')
-              .single();
-
-          if (error) throw error;
-
-          setMessages(prev => [insertedMsg, ...prev]);
-          setSelectedMessage(insertedMsg);
-          setInitialPitch('');
-          router.replace('/dashboard/messages');
-
-      } catch (err: any) {
-          showError("Failed to send message: " + err.message);
-      } finally {
-          setIsSending(false);
+      if (viewerRole === 'athlete') {
+        const { data: aData } = await supabase.from('athletes').select('first_name, last_name, high_school').eq('id', currentUserId).single();
+        if (aData) {
+          sName = `${aData.first_name} ${aData.last_name}`;
+          sSchool = aData.high_school || '';
+        }
+      } else {
+        const { data: cData } = await supabase.from('coaches').select('first_name, last_name, school_name').eq('id', currentUserId).single();
+        if (cData) {
+          sName = `Coach ${cData.last_name}`;
+          sSchool = cData.school_name || '';
+        }
       }
+
+      const newRow = {
+        athlete_id: selectedMessage.athlete_id,
+        coach_id: selectedMessage.coach_id,
+        sender_id: currentUserId,
+        sender_name: sName,
+        sender_school: sSchool,
+        content: initialPitch.trim(),
+        status: 'pending',
+        is_read: false,
+        chat_history: []
+      };
+
+      const { data: insertedMsg, error } = await supabase
+        .from('messages')
+        .insert(newRow)
+        .select('*, athletes(first_name, last_name, avatar_url, grad_year)')
+        .single();
+
+      if (error) throw error;
+
+      setMessages(prev => [insertedMsg, ...prev]);
+      setSelectedMessage(insertedMsg);
+      setInitialPitch('');
+      router.replace('/dashboard/messages');
+
+    } catch (err: any) {
+      showError("Failed to send message: " + err.message);
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const handleSendReply = async (e: React.FormEvent) => {
@@ -482,12 +497,12 @@ function InboxContent() {
       
       {/* CUSTOM INLINE TOAST SYSTEM */}
       {actionError && (
-          <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-top-5 fade-in duration-300">
-              <div className="bg-red-500 text-white px-6 py-3 rounded-2xl shadow-2xl font-bold flex items-center gap-3">
-                  <AlertCircle className="w-5 h-5 text-red-200" />
-                  {actionError}
-              </div>
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-top-5 fade-in duration-300">
+          <div className="bg-red-500 text-white px-6 py-3 rounded-2xl shadow-2xl font-bold flex items-center gap-3">
+            <AlertCircle className="w-5 h-5 text-red-200" />
+            {actionError}
           </div>
+        </div>
       )}
 
       {/* HEADER */}
@@ -507,33 +522,30 @@ function InboxContent() {
         </div>
       </div>
 
-      {/* UNIFIED APP LAYOUT (With Relative Positioning for Modal Override) */}
+      {/* UNIFIED APP LAYOUT */}
       <div className="bg-white rounded-[2rem] border border-slate-200 shadow-xl overflow-hidden flex flex-col lg:flex-row flex-1 min-h-[500px] relative">
         
         {/* 🚨 UNVERIFIED ATHLETE OVERLAY 🚨 */}
         {viewerRole === 'athlete' && trustLevel !== 1 && (
-            <div className="absolute inset-0 z-[100] bg-slate-50/60 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-300">
-                <div className="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl border border-slate-200 flex flex-col items-center">
-                    <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mb-5 border border-amber-200">
-                        <Lock className="w-7 h-7 text-amber-500" />
-                    </div>
-                    <h2 className="text-2xl font-black text-slate-900 mb-2 tracking-tight">Verification Required</h2>
-                    <p className="text-sm text-slate-500 font-medium mb-8 leading-relaxed">
-                        To protect college coaches from spam and maintain a trusted ecosystem, you must verify your identity before accessing the message center.
-                    </p>
-                    <Link href="/dashboard/profile" className="bg-slate-900 hover:bg-slate-800 text-white font-black py-3.5 px-6 rounded-xl transition-all shadow-md active:scale-[0.98] flex items-center justify-center gap-2 w-full">
-                        Verify My Account <ChevronRight className="w-4 h-4" />
-                    </Link>
-                </div>
+          <div className="absolute inset-0 z-[100] bg-slate-50/60 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-300">
+            <div className="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl border border-slate-200 flex flex-col items-center">
+              <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mb-5 border border-amber-200">
+                <Lock className="w-7 h-7 text-amber-500" />
+              </div>
+              <h2 className="text-2xl font-black text-slate-900 mb-2 tracking-tight">Verification Required</h2>
+              <p className="text-sm text-slate-500 font-medium mb-8 leading-relaxed">
+                To protect college coaches from spam and maintain a trusted ecosystem, you must verify your identity before accessing the message center.
+              </p>
+              <Link href="/dashboard/profile" className="bg-slate-900 hover:bg-slate-800 text-white font-black py-3.5 px-6 rounded-xl transition-all shadow-md active:scale-[0.98] flex items-center justify-center gap-2 w-full">
+                Verify My Account <ChevronRight className="w-4 h-4" />
+              </Link>
             </div>
+          </div>
         )}
 
-        {/* ========================================== */}
-        {/* COLUMN 1: SIDEBAR (FOLDERS & LIST)           */}
-        {/* ========================================== */}
+        {/* COLUMN 1: SIDEBAR */}
         <div className={`w-full lg:w-[340px] xl:w-[400px] bg-white border-r border-slate-200 flex flex-col h-full ${selectedMessage ? 'hidden lg:flex' : 'flex'}`}>
           
-          {/* Folder Tabs */}
           <div className="p-4 border-b border-slate-200 bg-slate-50 shrink-0">
             <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
               <button onClick={() => setActiveFolder('inbox')} className={`px-4 py-2 rounded-xl text-xs font-black transition-colors whitespace-nowrap ${activeFolder === 'inbox' ? 'bg-slate-900 text-white' : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-100'}`}>
@@ -559,23 +571,22 @@ function InboxContent() {
               </div>
             ) : (
               <div className="flex flex-col">
-                {/* DRAFT RENDER IN SIDEBAR */}
                 {selectedMessage?.is_draft && (
-                   <button className="w-full text-left p-4 transition-all border-b border-slate-100 flex flex-col gap-1.5 bg-blue-50/50 border-l-4 border-l-blue-500">
-                     <div className="flex justify-between items-start w-full">
-                       <div className="flex items-center gap-2 overflow-hidden pr-2">
-                         <span className="font-bold text-sm truncate text-slate-900">
-                           Draft to: {getConversationTitle(selectedMessage)}
-                         </span>
-                       </div>
-                       <span className="text-[10px] font-bold text-blue-500 whitespace-nowrap mt-0.5 shrink-0 bg-blue-100 px-2 py-0.5 rounded-md">NEW</span>
-                     </div>
-                     <div className="flex items-center gap-2 w-full pl-0.5">
-                       <div className="text-xs truncate font-medium text-slate-500 italic">
-                         Click to finish composing...
-                       </div>
-                     </div>
-                   </button>
+                  <button className="w-full text-left p-4 transition-all border-b border-slate-100 flex flex-col gap-1.5 bg-blue-50/50 border-l-4 border-l-blue-500">
+                    <div className="flex justify-between items-start w-full">
+                      <div className="flex items-center gap-2 overflow-hidden pr-2">
+                        <span className="font-bold text-sm truncate text-slate-900">
+                          Draft to: {getConversationTitle(selectedMessage)}
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-bold text-blue-500 whitespace-nowrap mt-0.5 shrink-0 bg-blue-100 px-2 py-0.5 rounded-md">NEW</span>
+                    </div>
+                    <div className="flex items-center gap-2 w-full pl-0.5">
+                      <div className="text-xs truncate font-medium text-slate-500 italic">
+                        Click to finish composing...
+                      </div>
+                    </div>
+                  </button>
                 )}
                 {displayedMessages.map(renderSidebarItem)}
               </div>
@@ -583,13 +594,10 @@ function InboxContent() {
           </div>
         </div>
 
-        {/* ========================================== */}
-        {/* COLUMN 2: ACTIVE CHAT THREAD                 */}
-        {/* ========================================== */}
+        {/* COLUMN 2: ACTIVE CHAT THREAD */}
         <div className={`flex-1 bg-slate-50 flex flex-col h-full relative ${!selectedMessage ? 'hidden lg:flex' : 'flex'}`}>
           {selectedMessage ? (
             <>
-              {/* Chat Header */}
               <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between shadow-sm z-10 shrink-0 bg-white">
                 <div className="flex items-center gap-4">
                   <button onClick={() => setSelectedMessage(null)} className="lg:hidden p-2 -ml-2 bg-slate-50 rounded-full hover:bg-slate-100 transition-colors">
@@ -600,7 +608,7 @@ function InboxContent() {
                   </div>
                   <div>
                     <h2 className="text-base font-black text-slate-900 leading-tight">
-                        {selectedMessage.is_draft ? `New Message to ${getConversationTitle(selectedMessage)}` : getConversationTitle(selectedMessage)}
+                      {selectedMessage.is_draft ? `New Message to ${getConversationTitle(selectedMessage)}` : getConversationTitle(selectedMessage)}
                     </h2>
                     <p className="text-[11px] font-bold text-slate-400 mt-0.5 uppercase tracking-wider flex items-center gap-1">
                       {selectedMessage.is_draft ? <span className="text-blue-500 flex items-center gap-1"><Clock className="w-3 h-3" /> Draft</span> : (selectedMessage.status === 'pending' || selectedMessage.status === 'delivered') ? <span className="text-amber-500">Pending Request</span> : selectedMessage.status === 'ended' ? 'Archived' : 'Active Connection'}
@@ -609,7 +617,6 @@ function InboxContent() {
                   </div>
                 </div>
                 
-                {/* End Chat Button */}
                 {selectedMessage.status === 'active' && !selectedMessage.is_draft && (
                   <button onClick={() => handleUpdateStatus('ended')} className="text-xs font-bold text-slate-400 hover:text-red-500 transition-colors flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-red-50">
                     <Ban className="w-3.5 h-3.5" /> End Chat
@@ -617,7 +624,6 @@ function InboxContent() {
                 )}
               </div>
 
-              {/* NCAA COMPLIANCE WARNING BANNER */}
               {isNCAARestricted && (selectedMessage.status === 'active' || selectedMessage.is_draft) && (
                 <div className="bg-red-50 border-b border-red-200 p-4 flex items-start gap-3 shadow-inner shrink-0">
                   <ShieldAlert className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
@@ -630,38 +636,35 @@ function InboxContent() {
                 </div>
               )}
 
-              {/* DRAFT COMPOSITION VIEW */}
               {selectedMessage.is_draft ? (
-                 <div className="flex-1 overflow-y-auto p-6 md:p-10 flex flex-col bg-slate-50">
-                    <div className="max-w-2xl w-full mx-auto bg-white border border-slate-200 p-6 md:p-8 rounded-[2rem] shadow-sm">
-                        <h3 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight mb-2">Compose Initial Pitch</h3>
-                        <p className="text-sm text-slate-500 font-medium mb-6">
-                            Make your first impression count. This message will be sent as a new connection request to {getConversationTitle(selectedMessage)}.
-                        </p>
+                <div className="flex-1 overflow-y-auto p-6 md:p-10 flex flex-col bg-slate-50">
+                  <div className="max-w-2xl w-full mx-auto bg-white border border-slate-200 p-6 md:p-8 rounded-[2rem] shadow-sm">
+                    <h3 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight mb-2">Compose Initial Pitch</h3>
+                    <p className="text-sm text-slate-500 font-medium mb-6">
+                      Make your first impression count. This message will be sent as a new connection request to {getConversationTitle(selectedMessage)}.
+                    </p>
 
-                        <form onSubmit={handleSendInitialPitch} className="flex flex-col gap-4">
-                            <textarea 
-                                required
-                                value={initialPitch}
-                                onChange={(e) => setInitialPitch(e.target.value)}
-                                placeholder={`Hi ${getConversationTitle(selectedMessage)},\n\nI wanted to connect because...`}
-                                className="w-full bg-slate-50 border border-slate-200 rounded-[1.5rem] p-5 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 min-h-[200px] resize-none font-medium text-slate-800 placeholder:text-slate-400 transition-all"
-                            />
-                            <button 
-                                type="submit"
-                                disabled={isSending || !initialPitch.trim() || isNCAARestricted}
-                                className="self-end bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:hover:bg-blue-600 text-white font-black py-3.5 px-8 rounded-2xl flex items-center justify-center gap-2 transition-all shadow-md shadow-blue-500/20 w-full sm:w-auto"
-                            >
-                                {isSending ? 'Sending...' : 'Send Pitch'} <Send className="w-4 h-4" />
-                            </button>
-                        </form>
-                    </div>
-                 </div>
+                    <form onSubmit={handleSendInitialPitch} className="flex flex-col gap-4">
+                      <textarea 
+                        required
+                        value={initialPitch}
+                        onChange={(e) => setInitialPitch(e.target.value)}
+                        placeholder={`Hi ${getConversationTitle(selectedMessage)},\n\nI wanted to connect because...`}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-[1.5rem] p-5 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 min-h-[200px] resize-none font-medium text-slate-800 placeholder:text-slate-400 transition-all"
+                      />
+                      <button 
+                        type="submit"
+                        disabled={isSending || !initialPitch.trim() || isNCAARestricted}
+                        className="self-end bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:hover:bg-blue-600 text-white font-black py-3.5 px-8 rounded-2xl flex items-center justify-center gap-2 transition-all shadow-md shadow-blue-500/20 w-full sm:w-auto"
+                      >
+                        {isSending ? 'Sending...' : 'Send Pitch'} <Send className="w-4 h-4" />
+                      </button>
+                    </form>
+                  </div>
+                </div>
               ) : (
-                /* ACTIVE CHAT BUBBLES VIEW */
                 <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 bg-slate-50">
                   
-                  {/* Initial Pitch Card */}
                   <div className="flex flex-col w-full items-center mb-4">
                     <div className="w-full max-w-lg bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
                       <div className="flex items-center gap-2 mb-3 pb-3 border-b border-slate-100">
@@ -674,7 +677,6 @@ function InboxContent() {
                     </div>
                   </div>
 
-                  {/* Reply Bubbles */}
                   {selectedMessage.chat_history?.map((reply, idx) => {
                     const isMyMessage = reply.sender_id === currentUserId;
                     return (
@@ -684,13 +686,12 @@ function InboxContent() {
                           {reply.content}
                         </div>
                       </div>
-                    )
+                    );
                   })}
                   <div ref={messagesEndRef} />
                 </div>
               )}
 
-              {/* DYNAMIC FOOTER CONTROLS */}
               {!selectedMessage.is_draft && (
                 <div className="shrink-0 bg-white border-t border-slate-200">
                   {isExpired(selectedMessage) ? (
@@ -702,8 +703,7 @@ function InboxContent() {
                       <Ban className="w-4 h-4" /> This conversation has been ended.
                     </div>
                   ) : (selectedMessage.status === 'pending' || selectedMessage.status === 'delivered') ? (
-                    selectedMessage.coach_id === currentUserId || selectedMessage.athlete_id === currentUserId && selectedMessage.sender_id !== currentUserId ? (
-                      // RECEIVER SEES: Accept / Decline
+                    selectedMessage.coach_id === currentUserId || (selectedMessage.athlete_id === currentUserId && selectedMessage.sender_id !== currentUserId) ? (
                       <div className="p-6 flex flex-col items-center justify-center gap-3">
                         <h4 className="font-black text-slate-900 text-base">Accept this connection request?</h4>
                         <div className="flex gap-3 w-full max-w-sm">
@@ -714,7 +714,6 @@ function InboxContent() {
                         </div>
                       </div>
                     ) : (
-                      // SENDER SEES: Waiting state for Sent Requests!
                       <div className="p-6 flex flex-col items-center justify-center gap-2">
                         <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center border border-slate-200 mb-1">
                           <Clock className="w-5 h-5 text-slate-400 animate-pulse" />
@@ -726,7 +725,6 @@ function InboxContent() {
                       </div>
                     )
                   ) : (
-                    // ACTIVE CHAT: Show Textbox
                     <div className="p-4">
                       <form onSubmit={handleSendReply} className="flex gap-3">
                         <textarea 
@@ -756,7 +754,6 @@ function InboxContent() {
               )}
             </>
           ) : (
-            /* NO MESSAGE SELECTED EMPTY STATE */
             <div className="flex-1 flex flex-col items-center justify-center text-center p-10 bg-slate-50">
               <div className="w-24 h-24 bg-white border border-slate-200 shadow-sm rounded-full flex items-center justify-center mb-6">
                 <MailOpen className="w-10 h-10 text-slate-300" />
@@ -774,14 +771,13 @@ function InboxContent() {
   );
 }
 
-// Wrap in Suspense to prevent Next.js from de-opting the entire route from static rendering due to useSearchParams
 export default function InboxPage() {
   return (
     <main className="min-h-screen bg-[#F8FAFC] font-sans pb-10">
       <Suspense fallback={
         <div className="min-h-screen flex flex-col items-center justify-center space-y-4">
-            <div className="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
-            <p className="text-slate-500 font-bold animate-pulse">Loading Inbox...</p>
+          <div className="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+          <p className="text-slate-500 font-bold animate-pulse">Loading Inbox...</p>
         </div>
       }>
         <InboxContent />

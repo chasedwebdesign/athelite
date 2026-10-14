@@ -5,7 +5,24 @@ import { createClient } from '@/utils/supabase/client';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter, usePathname } from 'next/navigation';
-import { Mail, Search, LogOut, LayoutDashboard, User, School, Medal, Menu, X, ShoppingCart, Crown, Zap, Shield, Calculator, Flame } from 'lucide-react'; 
+import { 
+  Mail, 
+  Search, 
+  LogOut, 
+  LayoutDashboard, 
+  User, 
+  School, 
+  Medal, 
+  Menu, 
+  X, 
+  ShoppingCart, 
+  Crown, 
+  Zap, 
+  Shield, 
+  Calculator, 
+  Flame, 
+  Bell 
+} from 'lucide-react'; 
 
 export default function Navbar() {
   const [supabase] = useState(() => createClient());
@@ -16,6 +33,7 @@ export default function Navbar() {
   const [session, setSession] = useState<any>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [notificationBadgeCount, setNotificationBadgeCount] = useState(0);
   
   // --- ROLE & BILLING STATE ---
   const [isAthlete, setIsAthlete] = useState(false);
@@ -69,7 +87,6 @@ export default function Navbar() {
       }
       if (isMounted) setIsSearching(true);
 
-      // Added custom_slug to the select payload
       let query = supabase
         .from('athletes')
         .select('id, first_name, last_name, avatar_url, high_school, custom_slug')
@@ -98,15 +115,15 @@ export default function Navbar() {
         setSearchResults(data);
         
         if (viewerRole === 'coach' && data.length > 0) {
-           const idsToUpdate = data.map((athlete: any) => athlete.id);
-           
-           const { error: rpcError } = await supabase.rpc('increment_search_appearances', { 
-             athlete_ids: idsToUpdate 
-           });
-           
-           if (rpcError) {
-             console.error("Failed to increment search appearances:", rpcError.message);
-           }
+          const idsToUpdate = data.map((athlete: any) => athlete.id);
+          
+          const { error: rpcError } = await supabase.rpc('increment_search_appearances', { 
+            athlete_ids: idsToUpdate 
+          });
+          
+          if (rpcError) {
+            console.error("Failed to increment search appearances:", rpcError.message);
+          }
         }
       }
       
@@ -128,6 +145,7 @@ export default function Navbar() {
       setSession(null);
       setIsAthlete(false);
       setViewerRole('guest');
+      setNotificationBadgeCount(0);
       return;
     }
 
@@ -135,10 +153,26 @@ export default function Navbar() {
     const userId = currentSession.user.id;
     const userEmail = currentSession.user.email;
 
-    const [athleteRes, messagesRes] = await Promise.all([
-      supabase.from('athletes').select('avatar_url, is_premium, is_founder').eq('id', userId).maybeSingle(),
-      supabase.from('messages').select('id, athlete_id, chat_history').or(`athlete_id.eq.${userId},sender_email.eq.${userEmail}`).eq('is_read', false)
+    const [athleteRes, messagesRes, postsLikesRes, viewLogsRes] = await Promise.all([
+      supabase.from('athletes').select('avatar_url, is_premium, is_founder, profile_views').eq('id', userId).maybeSingle(),
+      supabase.from('messages').select('id, athlete_id, sender_id, chat_history, status').or(`athlete_id.eq.${userId},sender_email.eq.${userEmail}`).eq('is_read', false),
+      supabase.from('posts').select('likes').eq('athlete_id', userId),
+      supabase.from('profile_view_logs').select('id', { count: 'exact', head: true }).eq('athlete_id', userId)
     ]);
+
+    let realUnreadCount = 0;
+    if (messagesRes.data) {
+      realUnreadCount = messagesRes.data.filter((msg: any) => {
+        if (msg.status === 'ended') return false;
+        const history = msg.chat_history || [];
+        if (history.length > 0) {
+          return history[history.length - 1].sender_id !== userId;
+        }
+        return msg.sender_id !== userId;
+      }).length;
+      
+      setUnreadCount(realUnreadCount);
+    }
 
     if (athleteRes.data) {
       setIsAthlete(true);
@@ -146,6 +180,24 @@ export default function Navbar() {
       setAvatarUrl(athleteRes.data.avatar_url);
       setIsPremium(athleteRes.data.is_premium || false);
       setIsFounder(athleteRes.data.is_founder || false);
+
+      // Compute unseen likes + unseen coach profile views + unread messages
+      const computedTotalLikes = (postsLikesRes.data || []).reduce((sum: number, post: any) => {
+        return sum + (Array.isArray(post.likes) ? post.likes.length : 0);
+      }, 0);
+
+      const computedTotalViews = Math.max(viewLogsRes.count || 0, athleteRes.data.profile_views || 0);
+
+      const seenLikesRaw = typeof window !== 'undefined' ? localStorage.getItem(`chased_seen_likes_${userId}`) : null;
+      const seenViewsRaw = typeof window !== 'undefined' ? localStorage.getItem(`chased_seen_views_${userId}`) : null;
+
+      const seenLikes = seenLikesRaw ? parseInt(seenLikesRaw, 10) : 0;
+      const seenViews = seenViewsRaw ? parseInt(seenViewsRaw, 10) : 0;
+
+      const unseenLikes = Math.max(0, computedTotalLikes - (isNaN(seenLikes) ? 0 : seenLikes));
+      const unseenViews = Math.max(0, computedTotalViews - (isNaN(seenViews) ? 0 : seenViews));
+
+      setNotificationBadgeCount(unseenLikes + unseenViews + realUnreadCount);
     } else {
       const { data: coachProfile } = await supabase
         .from('coaches')
@@ -159,18 +211,6 @@ export default function Navbar() {
         setIsFounder(coachProfile.is_founder || false);
         setIsAthlete(false);
       }
-    }
-
-    if (messagesRes.data) {
-      const realUnreadCount = messagesRes.data.filter((msg: any) => {
-        const history = msg.chat_history || [];
-        if (history.length > 0) {
-          return history[history.length - 1].sender_id !== userId;
-        }
-        return msg.athlete_id === userId;
-      }).length;
-      
-      setUnreadCount(realUnreadCount);
     }
   }, [supabase]);
 
@@ -188,10 +228,10 @@ export default function Navbar() {
     });
 
     return () => {
-        isMounted = false;
-        data?.subscription?.unsubscribe();
+      isMounted = false;
+      data?.subscription?.unsubscribe();
     };
-  }, [supabase, loadNavData]);
+  }, [supabase, loadNavData, pathname]);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -200,6 +240,7 @@ export default function Navbar() {
     setViewerRole('guest');
     setAvatarUrl(null);
     setUnreadCount(0);
+    setNotificationBadgeCount(0);
     setIsMobileMenuOpen(false);
     router.push('/login');
   };
@@ -219,7 +260,7 @@ export default function Navbar() {
 
   return (
     <>
-      <nav className="bg-white/90 backdrop-blur-lg border-b border-slate-200/80 shadow-sm sticky top-0 z-[60] transition-colors">
+      <nav className="bg-white/95 backdrop-blur-lg border-b border-slate-200/80 shadow-sm sticky top-0 z-[100] transition-colors">
         <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between gap-4">
           
           {/* Logo & Primary Navigation Area */}
@@ -258,14 +299,13 @@ export default function Navbar() {
               />
               
               {isSearchOpen && searchQuery.length >= 2 && (
-                <div className="absolute top-full mt-3 left-0 w-full min-w-[350px] bg-white border border-slate-200 rounded-[2rem] shadow-2xl overflow-hidden flex flex-col z-50">
+                <div className="absolute top-full mt-3 left-0 w-full min-w-[350px] bg-white border border-slate-200 rounded-[2rem] shadow-2xl overflow-hidden flex flex-col z-[110]">
                   {isSearching ? (
                     <div className="p-6 text-center text-sm font-bold text-slate-400">Searching...</div>
                   ) : searchResults.length > 0 ? (
                     searchResults.map(result => (
                       <Link 
                         key={result.id} 
-                        // Updated to dynamically route to custom_slug with ID fallback
                         href={`/athlete/${result.custom_slug || result.id}`} 
                         onClick={() => { setSearchQuery(''); setSearchResults([]); setIsSearchOpen(false); }} 
                         className="flex items-center gap-4 p-4 hover:bg-slate-50 border-b border-slate-100 last:border-0 transition-colors"
@@ -288,13 +328,13 @@ export default function Navbar() {
           </div>
 
           {/* Right Side Links & Tools */}
-          <div className="hidden md:flex flex-1 items-center justify-end space-x-3 lg:space-x-5 shrink-0">
+          <div className="hidden md:flex flex-1 items-center justify-end space-x-3 lg:space-x-4 shrink-0">
             <Link href="/division-checker" className={`text-sm font-bold flex items-center whitespace-nowrap transition-colors ${isActive('/division-checker') ? 'text-fuchsia-600' : 'text-slate-500 hover:text-fuchsia-600'}`}>
-              <Calculator className="w-4 h-4 mr-1.5" /> <span className="hidden lg:inline">Division Tracker</span>
+              <Calculator className="w-4 h-4 mr-1.5" /> <span className="hidden xl:inline">Division Tracker</span>
             </Link>
 
             <Link href="/search" className={`text-sm font-bold flex items-center whitespace-nowrap transition-colors ${isActive('/search') ? 'text-blue-600' : 'text-slate-500 hover:text-blue-600'}`}>
-              <School className="w-4 h-4 mr-1.5" /> <span className="hidden lg:inline">College Finder</span>
+              <School className="w-4 h-4 mr-1.5" /> <span className="hidden xl:inline">College Finder</span>
             </Link>
 
             <Link href="/feed" className={`text-sm font-bold flex items-center whitespace-nowrap transition-colors ${isActive('/feed') ? 'text-orange-600' : 'text-slate-500 hover:text-orange-600'}`}>
@@ -309,33 +349,58 @@ export default function Navbar() {
 
             {session ? (
               <>
-                <div className="h-6 w-px bg-slate-200 mx-1 lg:mx-2 shrink-0"></div>
+                <div className="h-6 w-px bg-slate-200 mx-1 shrink-0"></div>
                 <Link href="/dashboard" className={`text-sm font-bold flex items-center whitespace-nowrap transition-colors ${isActive('/dashboard') && !isActive('/dashboard/team') && !isActive('/dashboard/messages') ? 'text-blue-600' : 'text-slate-500 hover:text-blue-600'}`} title="Dashboard Homebase">
                   <LayoutDashboard className="w-4 h-4" /><span className="hidden lg:inline ml-1.5">Homebase</span>
                 </Link>
+
                 <Link href="/dashboard/messages" className={`text-sm font-bold flex items-center relative whitespace-nowrap transition-colors ${isActive('/dashboard/messages') ? 'text-blue-600' : 'text-slate-500 hover:text-blue-600'}`} title="Inbox">
                   <Mail className="w-4 h-4" /> <span className="hidden lg:inline ml-1.5">Inbox</span>
-                  {unreadCount > 0 && <span className="absolute -top-2.5 -right-3 bg-red-500 text-white text-[10px] leading-none font-black min-w-[18px] h-[18px] flex items-center justify-center rounded-full border-2 border-white shadow-sm px-1">{unreadCount}</span>}
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-2.5 -right-3 bg-red-500 text-white text-[10px] leading-none font-black min-w-[18px] h-[18px] flex items-center justify-center rounded-full border-2 border-white shadow-sm px-1">
+                      {unreadCount}
+                    </span>
+                  )}
                 </Link>
+
+                {/* 🔔 NOTIFICATION CENTER BUTTON (DESKTOP) 🔔 */}
+                {isAthlete && (
+                  <Link
+                    href="/notifications"
+                    title="Activity & Notifications"
+                    className={`relative flex items-center justify-center w-10 h-10 rounded-full border transition-all ${
+                      isActive('/notifications')
+                        ? 'bg-blue-50 border-blue-200 text-blue-600 shadow-sm'
+                        : 'bg-slate-50 border-slate-200 text-slate-500 hover:text-blue-600 hover:bg-blue-50 hover:border-blue-200'
+                    }`}
+                  >
+                    <Bell className="w-4 h-4" />
+                    {notificationBadgeCount > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-rose-600 text-white text-[10px] leading-none font-black min-w-[18px] h-[18px] flex items-center justify-center rounded-full border-2 border-white shadow-sm px-1">
+                        {notificationBadgeCount}
+                      </span>
+                    )}
+                  </Link>
+                )}
                 
                 {isAthlete && (
-                  <Link href="/shop" className={`flex items-center justify-center w-10 h-10 rounded-full border transition-all ml-1 lg:ml-2 ${isActive('/shop') ? 'bg-emerald-50 border-emerald-200 text-emerald-600 shadow-sm' : 'bg-slate-50 border-slate-200 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 hover:border-emerald-200'}`} title="The Shop">
-                    <ShoppingCart className="w-5 h-5" />
+                  <Link href="/shop" className={`flex items-center justify-center w-10 h-10 rounded-full border transition-all ${isActive('/shop') ? 'bg-emerald-50 border-emerald-200 text-emerald-600 shadow-sm' : 'bg-slate-50 border-slate-200 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 hover:border-emerald-200'}`} title="The Shop">
+                    <ShoppingCart className="w-4 h-4" />
                   </Link>
                 )}
 
                 {/* Main CTA */}
                 {isAthlete && (
                   isFounder ? (
-                    <Link href="/pro" title="Founder Status" className="ml-1 lg:ml-2 flex items-center gap-1.5 text-xs font-black bg-gradient-to-r from-fuchsia-500 to-indigo-600 text-white px-3 py-1.5 rounded-full hover:scale-105 transition-transform shadow-sm whitespace-nowrap">
+                    <Link href="/pro" title="Founder Status" className="flex items-center gap-1.5 text-xs font-black bg-gradient-to-r from-fuchsia-500 to-indigo-600 text-white px-3 py-1.5 rounded-full hover:scale-105 transition-transform shadow-sm whitespace-nowrap">
                       <Crown className="w-3 h-3" /> EARLY ACCESS
                     </Link>
                   ) : isPremium ? (
-                    <Link href="/pro" title="Manage Subscription" className="ml-1 lg:ml-2 flex items-center gap-1.5 text-xs font-black bg-gradient-to-r from-amber-400 to-amber-500 text-amber-950 px-3 py-1.5 rounded-full hover:scale-105 transition-transform shadow-sm whitespace-nowrap">
+                    <Link href="/pro" title="Manage Subscription" className="flex items-center gap-1.5 text-xs font-black bg-gradient-to-r from-amber-400 to-amber-500 text-amber-950 px-3 py-1.5 rounded-full hover:scale-105 transition-transform shadow-sm whitespace-nowrap">
                       <Crown className="w-3 h-3" /> PRO
                     </Link>
                   ) : (
-                    <Link href="/pro" className="ml-1 lg:ml-2 flex items-center gap-1.5 text-xs font-black bg-slate-800 text-amber-400 px-3 py-1.5 rounded-full hover:scale-105 transition-transform shadow-sm whitespace-nowrap">
+                    <Link href="/pro" className="flex items-center gap-1.5 text-xs font-black bg-slate-800 text-amber-400 px-3 py-1.5 rounded-full hover:scale-105 transition-transform shadow-sm whitespace-nowrap">
                       <Zap className="w-3 h-3" /> UPGRADE
                     </Link>
                   )
@@ -345,7 +410,7 @@ export default function Navbar() {
                 <Link 
                   href="/dashboard/profile"
                   title="My Profile" 
-                  className={`relative ml-1 lg:ml-2 w-10 h-10 rounded-full border-2 transition-all overflow-hidden flex items-center justify-center bg-slate-100 group shadow-sm shrink-0 ${isActive('/dashboard/profile') ? 'border-blue-500 ring-2 ring-blue-100' : 'border-slate-200 hover:border-blue-400'}`}
+                  className={`relative w-10 h-10 rounded-full border-2 transition-all overflow-hidden flex items-center justify-center bg-slate-100 group shadow-sm shrink-0 ${isActive('/dashboard/profile') ? 'border-blue-500 ring-2 ring-blue-100' : 'border-slate-200 hover:border-blue-400'}`}
                 >
                   {avatarUrl ? (
                     <img src={avatarUrl} alt="Profile" className="w-full h-full object-cover" />
@@ -358,7 +423,7 @@ export default function Navbar() {
                 <button 
                   onClick={handleSignOut} 
                   title="Log Out" 
-                  className="ml-1 p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-all shrink-0"
+                  className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-all shrink-0"
                 >
                   <LogOut className="w-5 h-5" />
                 </button>
@@ -371,7 +436,7 @@ export default function Navbar() {
           </div>
 
           {/* Mobile Actions */}
-          <div className="flex items-center gap-3 md:hidden">
+          <div className="flex items-center gap-1.5 sm:gap-2.5 md:hidden">
             {!session && (
               <Link 
                 href="/login?mode=signup" 
@@ -381,20 +446,41 @@ export default function Navbar() {
               </Link>
             )}
 
+            {/* 🔔 NOTIFICATION CENTER ICON (MOBILE TOP BAR) 🔔 */}
             {session && isAthlete && (
-              <Link href="/shop" className={`p-2 transition-colors rounded-full ${isActive('/shop') ? 'text-emerald-600 bg-emerald-50' : 'text-slate-500 hover:bg-slate-100 hover:text-emerald-600'}`}>
+              <Link
+                href="/notifications"
+                onClick={closeMobileMenu}
+                aria-label="Notifications"
+                className={`relative p-2 transition-colors rounded-full ${
+                  isActive('/notifications')
+                    ? 'text-blue-600 bg-blue-50'
+                    : 'text-slate-500 hover:bg-slate-100 hover:text-blue-600'
+                }`}
+              >
+                <Bell className="w-5 h-5" />
+                {notificationBadgeCount > 0 && (
+                  <span className="absolute top-0 right-0 bg-rose-600 text-white text-[10px] leading-none font-black min-w-[16px] h-[16px] flex items-center justify-center rounded-full border-2 border-white">
+                    {notificationBadgeCount}
+                  </span>
+                )}
+              </Link>
+            )}
+
+            {session && isAthlete && (
+              <Link href="/shop" onClick={closeMobileMenu} className={`p-2 transition-colors rounded-full ${isActive('/shop') ? 'text-emerald-600 bg-emerald-50' : 'text-slate-500 hover:bg-slate-100 hover:text-emerald-600'}`}>
                 <ShoppingCart className="w-5 h-5" />
               </Link>
             )}
 
             {session && (
-               <Link href="/dashboard/messages" className={`relative p-2 transition-colors rounded-full ${isActive('/dashboard/messages') ? 'text-blue-600' : 'text-slate-500 hover:text-blue-600'}`} onClick={closeMobileMenu}>
-                 <Mail className="w-5 h-5" />
-                 {unreadCount > 0 && <span className="absolute top-0 right-0 bg-red-500 text-white text-[10px] leading-none font-black min-w-[16px] h-[16px] flex items-center justify-center rounded-full border-2 border-white">{unreadCount}</span>}
-               </Link>
+              <Link href="/dashboard/messages" className={`relative p-2 transition-colors rounded-full ${isActive('/dashboard/messages') ? 'text-blue-600' : 'text-slate-500 hover:text-blue-600'}`} onClick={closeMobileMenu}>
+                <Mail className="w-5 h-5" />
+                {unreadCount > 0 && <span className="absolute top-0 right-0 bg-red-500 text-white text-[10px] leading-none font-black min-w-[16px] h-[16px] flex items-center justify-center rounded-full border-2 border-white">{unreadCount}</span>}
+              </Link>
             )}
             
-            <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 text-slate-600 hover:bg-slate-100 rounded-full transition-colors ml-1">
+            <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 text-slate-600 hover:bg-slate-100 rounded-full transition-colors ml-0.5">
               {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
           </div>
@@ -403,7 +489,7 @@ export default function Navbar() {
 
       {/* Mobile Slide-Out Menu */}
       {isMobileMenuOpen && (
-        <div className="fixed inset-0 top-[80px] z-[50] bg-white overflow-y-auto animate-in slide-in-from-top-5 duration-200 md:hidden">
+        <div className="fixed inset-0 top-[80px] z-[95] bg-white overflow-y-auto animate-in slide-in-from-top-5 duration-200 md:hidden">
           <div className="p-6 flex flex-col gap-6 min-h-full pb-32">
             
             <div className="relative w-full" ref={mobileSearchRef}>
@@ -430,7 +516,6 @@ export default function Navbar() {
                     searchResults.map(result => (
                       <Link 
                         key={result.id} 
-                        // Updated to dynamically route to custom_slug with ID fallback
                         href={`/athlete/${result.custom_slug || result.id}`} 
                         onClick={closeMobileMenu} 
                         className="flex items-center gap-4 p-4 hover:bg-slate-50 border-b border-slate-100 last:border-0"
@@ -481,11 +566,25 @@ export default function Navbar() {
                   <Link href="/dashboard" onClick={closeMobileMenu} className={`flex items-center gap-4 p-4 rounded-2xl font-bold text-lg transition-colors ${isActive('/dashboard') && !isActive('/dashboard/profile') && !isActive('/dashboard/messages') ? 'bg-blue-50 text-blue-600' : 'hover:bg-slate-50 text-slate-700'}`}>
                     <LayoutDashboard className={`w-6 h-6 ${isActive('/dashboard') ? 'text-blue-500' : 'text-slate-500'}`} /> Homebase
                   </Link>
+
+                  {isAthlete && (
+                    <Link href="/notifications" onClick={closeMobileMenu} className={`flex items-center gap-4 p-4 rounded-2xl font-bold text-lg transition-colors ${isActive('/notifications') ? 'bg-blue-50 text-blue-600' : 'hover:bg-slate-50 text-slate-700'}`}>
+                      <Bell className={`w-6 h-6 ${isActive('/notifications') ? 'text-blue-500' : 'text-slate-500'}`} />
+                      <span>Notifications</span>
+                      {notificationBadgeCount > 0 && (
+                        <span className="bg-rose-600 text-white text-xs font-black px-2.5 py-0.5 rounded-full ml-auto">
+                          {notificationBadgeCount} new
+                        </span>
+                      )}
+                    </Link>
+                  )}
+
                   {isAthlete && (
                     <Link href="/shop" onClick={closeMobileMenu} className={`flex items-center gap-4 p-4 rounded-2xl font-bold text-lg transition-colors ${isActive('/shop') ? 'bg-emerald-50 text-emerald-700' : 'hover:bg-slate-50 text-slate-700'}`}>
                       <ShoppingCart className="w-6 h-6 text-emerald-500" /> The Shop
                     </Link>
                   )}
+
                   <Link href="/dashboard/messages" onClick={closeMobileMenu} className={`flex items-center gap-4 p-4 rounded-2xl font-bold text-lg transition-colors ${isActive('/dashboard/messages') ? 'bg-blue-50 text-blue-600' : 'hover:bg-slate-50 text-slate-700'}`}>
                     <Mail className={`w-6 h-6 ${isActive('/dashboard/messages') ? 'text-blue-500' : 'text-slate-500'}`} /> Inbox {unreadCount > 0 && <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full ml-auto">{unreadCount} new</span>}
                   </Link>

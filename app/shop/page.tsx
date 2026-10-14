@@ -719,7 +719,7 @@ export default function ShopPage() {
                   : isFreeBox
                   ? 'bg-gradient-to-r from-emerald-500 to-emerald-700 hover:from-emerald-400 hover:to-emerald-600 text-white shadow-[0_0_20px_rgba(52,211,153,0.3)] active:scale-95'
                   : canAfford 
-                    ? `bg-gradient-to-r text-white ${box.theme.btnGradient} ${box.theme.btnHover} active:scale-95 shadow-[0_0_20px_rgba(255,255,255,0.1)] group-hover:shadow-[0_0_30px_rgba(255,255,255,0.2)]`
+                    ? `bg-gradient-to-r text-white ${box.theme.btnGradient}${box.theme.btnHover} active:scale-95 shadow-[0_0_20px_rgba(255,255,255,0.1)] group-hover:shadow-[0_0_30px_rgba(255,255,255,0.2)]`
                     : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
               }`}
             >
@@ -742,6 +742,10 @@ export default function ShopPage() {
     <main className="min-h-screen bg-[#020617] text-white font-sans pb-32 selection:bg-amber-500/30 overflow-hidden relative">
       
       <style dangerouslySetInnerHTML={{__html: `
+        /* HIDE SCROLLBAR FOR TABS */
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
         /* 3D CARD FLIP ENGINE */
         .perspective-1000 { perspective: 1000px; }
         .preserve-3d { transform-style: preserve-3d; }
@@ -1159,7 +1163,7 @@ export default function ShopPage() {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-24 relative z-10 animate-in fade-in slide-in-from-bottom-8 duration-1000">
         
         {/* SHOP HEADER WITH GAMIFIED WALLET CARD */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12 relative z-10">
+        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 mb-8 relative z-10">
           <div>
             <div className="inline-flex items-center px-4 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-black tracking-widest uppercase mb-4 shadow-[0_0_15px_rgba(245,158,11,0.15)] backdrop-blur-md">
               <Store className="w-4 h-4 mr-2" /> The Drop Zone
@@ -1168,7 +1172,7 @@ export default function ShopPage() {
             <p className="text-slate-400 font-medium text-lg max-w-xl">Spend your Points to unbox legendary profile borders and designer backgrounds.</p>
           </div>
           
-          <div className="flex flex-col sm:flex-row items-stretch gap-4 shrink-0 hover:-translate-y-1 transition-transform duration-500 cursor-default group">
+          <div className="w-full sm:w-auto flex flex-col sm:flex-row items-stretch gap-4 shrink-0 hover:-translate-y-1 transition-transform duration-500 cursor-default group overflow-hidden">
             <div className="bg-white/95 backdrop-blur-xl p-4 sm:p-5 rounded-[2rem] shadow-[0_15px_50px_rgba(0,0,0,0.5)] flex items-center gap-5 border border-slate-200 group-hover:shadow-[0_20px_60px_rgba(255,255,255,0.1)] transition-all duration-500">
               <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-slate-800 to-slate-950 rounded-2xl flex items-center justify-center shadow-inner relative overflow-hidden border border-slate-700 shrink-0">
                 <div className="absolute inset-0 bg-cyan-500/10 mix-blend-overlay pointer-events-none"></div>
@@ -1204,51 +1208,28 @@ export default function ShopPage() {
           </div>
         )}
 
-        {/* HOW IT WORKS INFORMATIONAL SECTION */}
-        {activeTab === 'boxes' && (
-           <div className="bg-slate-900/60 border border-slate-800 rounded-3xl p-6 md:p-8 mb-10 flex flex-col md:flex-row gap-8 backdrop-blur-md shadow-xl animate-in fade-in duration-500">
-              <div className="flex-1">
-                  <h3 className="text-lg font-black text-white flex items-center gap-2 mb-3">
-                      <ImageIcon className="w-5 h-5 text-indigo-400" /> What are Backgrounds?
-                  </h3>
-                  <p className="text-sm font-medium text-slate-400 leading-relaxed">Backgrounds completely redesign the CSS theme of your public athlete profile. Higher tier cards have animated holographic foil effects.</p>
-              </div>
-              <div className="w-px bg-slate-800 hidden md:block"></div>
-              <div className="flex-1">
-                  <h3 className="text-lg font-black text-white flex items-center gap-2 mb-3">
-                      <Shield className="w-5 h-5 text-emerald-400" /> What are Borders?
-                  </h3>
-                  <p className="text-sm font-medium text-slate-400 leading-relaxed">Borders are gamified rings that surround your profile picture everywhere across the platform. Legendary borders feature high-quality animations.</p>
-              </div>
-              <div className="w-px bg-slate-800 hidden md:block"></div>
-              <div className="flex-1">
-                  <h3 className="text-lg font-black text-white flex items-center gap-2 mb-3">
-                      <PackageSearch className="w-5 h-5 text-amber-400" /> Guaranteed Loot
-                  </h3>
-                  <p className="text-sm font-medium text-slate-400 leading-relaxed">Each box tracks its own progress. Open a specific box enough times, and you are guaranteed a Mythic+ item drop!</p>
-              </div>
-           </div>
-        )}
-
-        {/* NAVIGATION TABS */}
-        <div className="flex flex-wrap gap-3 mb-8 bg-slate-900/60 p-2 rounded-2xl border border-slate-800 w-fit backdrop-blur-md shadow-xl">
+        {/* NAVIGATION TABS (Segmented Control Style - No Scrolling) */}
+        <div className="flex w-full sm:w-fit bg-slate-900/60 p-1.5 rounded-2xl border border-slate-800 backdrop-blur-md shadow-lg relative z-20 mb-10 mx-auto sm:mx-0 gap-1 sm:gap-2">
           <button 
             onClick={() => setActiveTab('boxes')}
-            className={`px-6 py-3 rounded-xl font-black transition-all duration-300 flex items-center gap-2 text-sm active:scale-95 ${activeTab === 'boxes' ? 'bg-amber-500 text-amber-950 shadow-[0_0_20px_rgba(245,158,11,0.4)] scale-105' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+            className={`flex-1 sm:flex-none flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-6 py-2.5 sm:py-3.5 rounded-xl font-black transition-all duration-200 active:scale-95 text-[11px] sm:text-sm ${activeTab === 'boxes' ? 'bg-amber-500 text-amber-950 shadow-[0_0_15px_rgba(245,158,11,0.3)]' : 'text-slate-400 hover:text-white hover:bg-slate-800/50'}`}
           >
-            <Hexagon className="w-4 h-4" /> Get Loot Boxes
+            <Hexagon className="w-4 h-4 sm:w-4 sm:h-4 shrink-0" />
+            <span className="truncate">Loot Boxes</span>
           </button>
           <button 
             onClick={() => setActiveTab('cards')}
-            className={`px-6 py-3 rounded-xl font-black transition-all duration-300 flex items-center gap-2 text-sm active:scale-95 ${activeTab === 'cards' ? 'bg-amber-500 text-amber-950 shadow-[0_0_20px_rgba(245,158,11,0.4)] scale-105' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+            className={`flex-1 sm:flex-none flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-6 py-2.5 sm:py-3.5 rounded-xl font-black transition-all duration-200 active:scale-95 text-[11px] sm:text-sm ${activeTab === 'cards' ? 'bg-amber-500 text-amber-950 shadow-[0_0_15px_rgba(245,158,11,0.3)]' : 'text-slate-400 hover:text-white hover:bg-slate-800/50'}`}
           >
-            <ImageIcon className="w-4 h-4" /> My Backgrounds
+            <ImageIcon className="w-4 h-4 sm:w-4 sm:h-4 shrink-0" />
+            <span className="truncate">Backgrounds</span>
           </button>
           <button 
             onClick={() => setActiveTab('borders')}
-            className={`px-6 py-3 rounded-xl font-black transition-all duration-300 flex items-center gap-2 text-sm active:scale-95 ${activeTab === 'borders' ? 'bg-amber-500 text-amber-950 shadow-[0_0_20px_rgba(245,158,11,0.4)] scale-105' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+            className={`flex-1 sm:flex-none flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-6 py-2.5 sm:py-3.5 rounded-xl font-black transition-all duration-200 active:scale-95 text-[11px] sm:text-sm ${activeTab === 'borders' ? 'bg-amber-500 text-amber-950 shadow-[0_0_15px_rgba(245,158,11,0.3)]' : 'text-slate-400 hover:text-white hover:bg-slate-800/50'}`}
           >
-            <Shield className="w-4 h-4" /> My Borders
+            <Shield className="w-4 h-4 sm:w-4 sm:h-4 shrink-0" />
+            <span className="truncate">Borders</span>
           </button>
         </div>
 
@@ -1499,6 +1480,32 @@ export default function ShopPage() {
               })}
             </div>
           </div>
+        )}
+
+        {/* HOW IT WORKS INFORMATIONAL SECTION (Moved to the bottom as a footer-style guide) */}
+        {activeTab === 'boxes' && (
+           <div className="mt-16 bg-slate-900/60 border border-slate-800 rounded-3xl p-6 md:p-8 flex flex-col md:flex-row gap-8 backdrop-blur-md shadow-xl animate-in fade-in duration-500">
+              <div className="flex-1">
+                  <h3 className="text-lg font-black text-white flex items-center gap-2 mb-3">
+                      <ImageIcon className="w-5 h-5 text-indigo-400" /> What are Backgrounds?
+                  </h3>
+                  <p className="text-sm font-medium text-slate-400 leading-relaxed">Backgrounds completely redesign the CSS theme of your public athlete profile. Higher tier cards have animated holographic foil effects.</p>
+              </div>
+              <div className="w-px bg-slate-800 hidden md:block"></div>
+              <div className="flex-1">
+                  <h3 className="text-lg font-black text-white flex items-center gap-2 mb-3">
+                      <Shield className="w-5 h-5 text-emerald-400" /> What are Borders?
+                  </h3>
+                  <p className="text-sm font-medium text-slate-400 leading-relaxed">Borders are gamified rings that surround your profile picture everywhere across the platform. Legendary borders feature high-quality animations.</p>
+              </div>
+              <div className="w-px bg-slate-800 hidden md:block"></div>
+              <div className="flex-1">
+                  <h3 className="text-lg font-black text-white flex items-center gap-2 mb-3">
+                      <PackageSearch className="w-5 h-5 text-amber-400" /> Guaranteed Loot
+                  </h3>
+                  <p className="text-sm font-medium text-slate-400 leading-relaxed">Each box tracks its own progress. Open a specific box enough times, and you are guaranteed a Mythic+ item drop!</p>
+              </div>
+           </div>
         )}
 
       </div>
