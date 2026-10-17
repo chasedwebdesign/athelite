@@ -4,7 +4,8 @@ import { createClient } from '@/utils/supabase/client';
 import Link from 'next/link';
 import { 
   ArrowLeft, MapPin, Trophy, Users, Globe, Zap, Award, Gem, Shield,
-  BarChart3, Crown, TrendingUp, Landmark, Sparkles, Activity
+  BarChart3, Crown, TrendingUp, Landmark, Sparkles, Activity,
+  HelpCircle, CheckCircle2, ChevronRight, DollarSign, BookOpen
 } from 'lucide-react';
 
 // ==========================================
@@ -94,7 +95,7 @@ function getBudgetTier(expense: number | null, sportName: string) {
 }
 
 // ==========================================
-// SSG & SEO GENERATION
+// SSG & SEO / GEO METADATA GENERATION
 // ==========================================
 export async function generateStaticParams() {
   const supabase = createClient();
@@ -111,7 +112,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 
   const { data: university } = await supabase
     .from('universities')
-    .select('name, city, state, division, tuition_in_state')
+    .select('name, city, state, division, tuition_in_state, tuition_out_of_state, acceptance_rate, median_earnings')
     .eq('slug', resolvedParams.slug)
     .single();
 
@@ -120,17 +121,51 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   }
 
   const inStateCost = university.tuition_in_state ? formatCurrency(university.tuition_in_state) : 'Contact Admissions';
+  const earningsText = university.median_earnings ? formatCurrency(university.median_earnings) : 'competitive';
+  const accText = university.acceptance_rate || 'selective';
+  const locationText = university.city ? `${university.city}, ${university.state}` : university.state;
+
+  const title = `${university.name} Recruiting Standards, Tuition & ROI (${university.division || 'Athletics'}) | ChasedSports`;
+  const description = `${university.name} (${locationText}) is an ${university.division} institution with ${inStateCost} in-state tuition, a ${accText} acceptance rate, and ${earningsText} median 10-year alumni earnings. Explore official athletic recruiting standards, team operating budgets, and scholarship aid.`;
 
   return {
-    title: `How Much Is ${university.name} Tuition? (2026 Rankings & Recruiting)`,
-    description: `In-state tuition at ${university.name} is ${inStateCost}. See national & state rankings, athletic recruiting standards, average scholarships, acceptance rates, and alumni ROI.`,
+    title,
+    description,
+    keywords: [
+      `${university.name} recruiting standards`,
+      `${university.name} track and field recruiting`,
+      `${university.name} athletic scholarships`,
+      `${university.name} tuition`,
+      `${university.name} acceptance rate`,
+      `${university.name} ${university.division} athletics`,
+      `${university.name} alumni salary ROI`,
+      'ChasedSports',
+    ],
     alternates: { canonical: `https://www.chasedsports.com/college/${resolvedParams.slug}` },
+    robots: {
+      index: true,
+      follow: true,
+      googleBot: {
+        index: true,
+        follow: true,
+        'max-snippet': -1,
+        'max-image-preview': 'large',
+        'max-video-preview': -1,
+      },
+    },
     openGraph: {
-      title: `${university.name} Athletics & State/National Rankings`,
-      description: `Target recruiting standards, national rankings, state benchmarks, and ROI stats for ${university.name}.`,
+      title: `${university.name} Athletic Recruiting, Tuition & National Rankings`,
+      description,
+      url: `https://www.chasedsports.com/college/${resolvedParams.slug}`,
       siteName: 'ChasedSports',
       type: 'website',
-    }
+      locale: 'en_US',
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: `${university.name} Recruiting & ROI Profile | ChasedSports`,
+      description,
+    },
   };
 }
 
@@ -178,7 +213,7 @@ export default async function CollegePage({
 
   const stateUniversitiesList: CollegeSafetyNetData[] = stateRes.data || [];
 
-  // Safety net: Inject target college into lists if missing (Still correctly matching on ID)
+  // Safety net: Inject target college into lists if missing
   if (!universitiesList.some(u => String(u.id).trim().toLowerCase() === String(collegeData.id).trim().toLowerCase())) {
     universitiesList.push({
       id: collegeData.id, state: collegeData.state, median_earnings: collegeData.median_earnings,
@@ -297,18 +332,262 @@ export default async function CollegePage({
 
   const { data: programs } = await progQuery;
   const isFiltered = !!(resolvedSearchParams.sport || resolvedSearchParams.gender);
-  const hasTuition = collegeData.tuition_in_state || collegeData.tuition_out_of_state;
+  const hasTuition = Boolean(collegeData.tuition_in_state || collegeData.tuition_out_of_state);
   const baseTuition = collegeData.tuition_in_state || collegeData.tuition_out_of_state || 0;
+  const locationDisplay = collegeData.city ? `${collegeData.city}, ${collegeData.state}` : collegeData.state;
+
+  // Compute summary metrics for GEO & Structured Data
+  const totalProgramsCount = programs?.length || 0;
+  const highestBudgetProgram = programs?.reduce((max: any, p: any) => {
+    const b = p.operating_expense || p.budget || 0;
+    return b > (max?.operating_expense || max?.budget || 0) ? p : max;
+  }, null);
+
+  const roiMultiplier =
+    collegeData.median_earnings && baseTuition > 0
+      ? (collegeData.median_earnings / baseTuition).toFixed(1)
+      : null;
+
+  // Build Dynamic FAQ Entities for both JSON-LD and On-Page GEO Accordion
+  const faqItems = [
+    {
+      question: `How much is tuition at ${collegeData.name}?`,
+      answer: `${collegeData.name} charges ${
+        collegeData.tuition_in_state ? formatCurrency(collegeData.tuition_in_state) : 'variable rates'
+      } per year for in-state undergraduate tuition${
+        collegeData.tuition_out_of_state
+          ? ` and ${formatCurrency(collegeData.tuition_out_of_state)} per year for out-of-state students`
+          : ''
+      }.${
+        tuitionRankNational
+          ? ` Nationally, ${collegeData.name} ranks #${tuitionRankNational.toLocaleString()} out of 2,819 institutions for tuition affordability (#${tuitionRankState} in ${collegeData.state}).`
+          : ''
+      }`,
+    },
+    {
+      question: `What is the acceptance rate at ${collegeData.name}?`,
+      answer: `The admissions acceptance rate at ${collegeData.name} is ${
+        collegeData.acceptance_rate || 'not publicly reported'
+      }.${
+        selectivityRankNational
+          ? ` This places ${collegeData.name} at #${selectivityRankNational.toLocaleString()} nationally for admissions selectivity and #${selectivityRankState} in ${collegeData.state}.`
+          : ''
+      }`,
+    },
+    {
+      question: `What are the 10-year post-graduate median earnings for ${collegeData.name} alumni?`,
+      answer: `Graduates and alumni from ${collegeData.name} earn a median salary of ${
+        collegeData.median_earnings ? formatCurrency(collegeData.median_earnings) : 'N/A'
+      } 10 years after enrollment${
+        roiMultiplier ? `, representing a ${roiMultiplier}x annual return on base tuition` : ''
+      }.${
+        salaryRankNational
+          ? ` Nationally, ${collegeData.name} ranks #${salaryRankNational.toLocaleString()} in alumni earnings (#${salaryRankState} in ${collegeData.state}).`
+          : ''
+      }`,
+    },
+    {
+      question: `What athletic division is ${collegeData.name} in and what sports are offered?`,
+      answer: `${collegeData.name} competes in ${collegeData.division || 'intercollegiate athletics'} and is located in ${locationDisplay}.${
+        totalProgramsCount > 0
+          ? ` Featured programs include ${programs
+              ?.slice(0, 6)
+              .map((p: any) => `${p.gender} ${p.sport}`)
+              .join(', ')}${
+              highestBudgetProgram
+                ? `, with ${highestBudgetProgram.gender} ${highestBudgetProgram.sport} operating on a budget of ${formatCurrency(
+                    highestBudgetProgram.operating_expense || highestBudgetProgram.budget
+                  )}.`
+                : '.'
+            }`
+          : ''
+      }`,
+    },
+  ];
+
+  // Rich @graph JSON-LD for Google Search & AI Engines (ChatGPT, Perplexity, Gemini)
+  const jsonLdGraph = {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'BreadcrumbList',
+        itemListElement: [
+          {
+            '@type': 'ListItem',
+            position: 1,
+            name: 'ChasedSports Home',
+            item: 'https://www.chasedsports.com',
+          },
+          {
+            '@type': 'ListItem',
+            position: 2,
+            name: 'College Finder',
+            item: 'https://www.chasedsports.com/search',
+          },
+          {
+            '@type': 'ListItem',
+            position: 3,
+            name: collegeData.name,
+            item: `https://www.chasedsports.com/college/${resolvedParams.slug}`,
+          },
+        ],
+      },
+      {
+        '@type': 'CollegeOrUniversity',
+        '@id': `https://www.chasedsports.com/college/${resolvedParams.slug}#university`,
+        name: collegeData.name,
+        url: `https://www.chasedsports.com/college/${resolvedParams.slug}`,
+        ...(collegeData.website && {
+          sameAs: [
+            collegeData.website.startsWith('http')
+              ? collegeData.website
+              : `https://${collegeData.website}`,
+          ],
+        }),
+        address: {
+          '@type': 'PostalAddress',
+          ...(collegeData.city && { addressLocality: collegeData.city }),
+          addressRegion: collegeData.state,
+          addressCountry: 'US',
+        },
+        ...(collegeData.student_population && {
+          numberOfStudents: parseInt(String(collegeData.student_population), 10) || undefined,
+        }),
+        additionalProperty: [
+          {
+            '@type': 'PropertyValue',
+            name: 'Athletic Division',
+            value: collegeData.division || 'N/A',
+          },
+          ...(collegeData.tuition_in_state
+            ? [
+                {
+                  '@type': 'PropertyValue',
+                  name: 'In-State Tuition',
+                  value: collegeData.tuition_in_state,
+                  unitCode: 'USD',
+                },
+              ]
+            : []),
+          ...(collegeData.tuition_out_of_state
+            ? [
+                {
+                  '@type': 'PropertyValue',
+                  name: 'Out-of-State Tuition',
+                  value: collegeData.tuition_out_of_state,
+                  unitCode: 'USD',
+                },
+              ]
+            : []),
+          ...(collegeData.acceptance_rate
+            ? [
+                {
+                  '@type': 'PropertyValue',
+                  name: 'Acceptance Rate',
+                  value: String(collegeData.acceptance_rate),
+                },
+              ]
+            : []),
+          ...(collegeData.median_earnings
+            ? [
+                {
+                  '@type': 'PropertyValue',
+                  name: '10-Year Median Alumni Earnings',
+                  value: collegeData.median_earnings,
+                  unitCode: 'USD',
+                },
+              ]
+            : []),
+        ],
+        ...(programs &&
+          programs.length > 0 && {
+            department: programs.map((prog: any) => ({
+              '@type': 'SportsTeam',
+              name: `${collegeData.name} ${prog.gender} ${prog.sport}`,
+              sport: prog.sport,
+              gender: prog.gender,
+              ...(prog.operating_expense && {
+                funder: {
+                  '@type': 'MonetaryAmount',
+                  currency: 'USD',
+                  value: prog.operating_expense,
+                },
+              }),
+            })),
+          }),
+      },
+      {
+        '@type': 'FAQPage',
+        '@id': `https://www.chasedsports.com/college/${resolvedParams.slug}#faq`,
+        mainEntity: faqItems.map((item) => ({
+          '@type': 'Question',
+          name: item.question,
+          acceptedAnswer: {
+            '@type': 'Answer',
+            text: item.answer,
+          },
+        })),
+      },
+    ],
+  };
 
   return (
     <main className="min-h-screen bg-slate-50 font-sans pb-32 selection:bg-blue-500 selection:text-white">
       {/* ========================================================= */}
+      {/* STRUCTURED DATA JSON-LD (SEO & GEO AI CRAWLER GRAPH)      */}
+      {/* ========================================================= */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLdGraph) }}
+      />
+
+      {/* ========================================================= */}
       {/* HERO SECTION                                              */}
       {/* ========================================================= */}
-      <div className="relative bg-white pt-16 pb-32 px-6 sm:px-8 overflow-hidden rounded-b-[2.5rem] shadow-[0_10px_40px_-15px_rgba(0,0,0,0.05)] border-b border-slate-200">
+      <header className="relative bg-white pt-12 pb-32 px-6 sm:px-8 overflow-hidden rounded-b-[2.5rem] shadow-[0_10px_40px_-15px_rgba(0,0,0,0.05)] border-b border-slate-200">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-blue-400/10 blur-[100px] rounded-full pointer-events-none"></div>
 
         <div className="max-w-4xl mx-auto relative z-10">
+          {/* Semantic Breadcrumb Navigation for SEO */}
+          <nav aria-label="Breadcrumb" className="mb-6">
+            <ol className="flex flex-wrap items-center gap-2 text-xs font-bold text-slate-400">
+              <li>
+                <Link href="/" className="hover:text-blue-600 transition-colors">
+                  ChasedSports
+                </Link>
+              </li>
+              <li>
+                <ChevronRight className="w-3.5 h-3.5 text-slate-300" />
+              </li>
+              <li>
+                <Link href="/search" className="hover:text-blue-600 transition-colors">
+                  College Finder
+                </Link>
+              </li>
+              {collegeData.state && (
+                <>
+                  <li>
+                    <ChevronRight className="w-3.5 h-3.5 text-slate-300" />
+                  </li>
+                  <li>
+                    <Link
+                      href={`/search?state=${encodeURIComponent(collegeData.state)}`}
+                      className="hover:text-blue-600 transition-colors"
+                    >
+                      {collegeData.state} Colleges
+                    </Link>
+                  </li>
+                </>
+              )}
+              <li>
+                <ChevronRight className="w-3.5 h-3.5 text-slate-300" />
+              </li>
+              <li className="text-slate-700 truncate max-w-[220px]" aria-current="page">
+                {collegeData.name}
+              </li>
+            </ol>
+          </nav>
+
           <div className="flex flex-wrap items-center gap-4 mb-8">
             <Link 
               href="/search" 
@@ -323,19 +602,22 @@ export default async function CollegePage({
                 href={`/college/${resolvedParams.slug}`}
                 className="inline-flex items-center text-sm font-bold text-slate-600 hover:text-slate-800 transition-colors bg-slate-100 px-5 py-2.5 rounded-full border border-slate-200 hover:bg-slate-200 shadow-sm"
               >
-                View All {collegeData.majors_offered?.length || 'Athletic'} Programs
+                View All {collegeData.name} Athletic Programs
               </Link>
             )}
           </div>
 
-          <h1 className="text-4xl sm:text-5xl md:text-7xl font-black tracking-tighter text-slate-900 mb-8 leading-tight">
+          <h1 className="text-4xl sm:text-5xl md:text-7xl font-black tracking-tighter text-slate-900 mb-4 leading-tight">
             {collegeData.name}
           </h1>
+          <p className="text-base sm:text-lg font-semibold text-slate-500 mb-8 max-w-3xl leading-relaxed">
+            Official {collegeData.division || 'Collegiate'} athletic recruiting standards, team operating budgets, scholarship projections, and 10-year graduate ROI for {collegeData.name} in {locationDisplay}.
+          </p>
 
           <div className="flex flex-wrap items-center gap-4 text-slate-600 font-semibold text-sm md:text-base">
             <div className="flex items-center bg-white px-4 py-2.5 rounded-xl border border-slate-200 shadow-sm">
               <MapPin className="w-4 h-4 mr-2 text-blue-500" />
-              {collegeData.city ? `${collegeData.city}, ${collegeData.state}` : collegeData.state}
+              {locationDisplay}
             </div>
             <div className="flex items-center bg-white px-4 py-2.5 rounded-xl border border-slate-200 shadow-sm">
               <Trophy className="w-4 h-4 mr-2 text-amber-500" />
@@ -357,24 +639,80 @@ export default async function CollegePage({
                 className="flex items-center bg-white px-4 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors cursor-pointer shadow-sm"
               >
                 <Globe className="w-4 h-4 mr-2 text-cyan-500" />
-                Website
+                Official Website
               </a>
             )}
           </div>
         </div>
-      </div>
+      </header>
 
       <div className="max-w-4xl mx-auto px-4 sm:px-6 -mt-16 relative z-20 space-y-10">
         
         {/* ========================================================= */}
+        {/* 0. GEO AI SNAPSHOT & ENTITY DEFINITION LIST (<dl>)        */}
+        {/* ========================================================= */}
+        <section
+          aria-label={`${collegeData.name} Recruiting & Financial Snapshot`}
+          className="bg-white/95 backdrop-blur-xl p-6 sm:p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/60 border border-slate-200/80"
+        >
+          <div className="flex items-center gap-2.5 mb-3">
+            <div className="p-2 rounded-xl bg-blue-50 border border-blue-100 text-blue-600">
+              <CheckCircle2 className="w-4 h-4" />
+            </div>
+            <h2 className="text-xs font-black uppercase tracking-widest text-blue-600">
+              At a Glance: {collegeData.name} Recruiting & ROI Summary
+            </h2>
+          </div>
+
+          {/* Direct Natural-Language Citation Paragraph for LLMs / AI Overviews */}
+          <p className="text-sm sm:text-base text-slate-600 font-medium leading-relaxed mb-6">
+            <strong>{collegeData.name}</strong> is a <strong>{collegeData.division || 'collegiate'}</strong> university located in <strong>{locationDisplay}</strong>.
+            {collegeData.tuition_in_state
+              ? ` Annual in-state tuition is ${formatCurrency(collegeData.tuition_in_state)}`
+              : ''}
+            {collegeData.tuition_out_of_state
+              ? ` (${formatCurrency(collegeData.tuition_out_of_state)} out-of-state)`
+              : ''}
+            {collegeData.acceptance_rate
+              ? `, with an undergraduate acceptance rate of ${collegeData.acceptance_rate}.`
+              : '.'}{' '}
+            {collegeData.median_earnings
+              ? `Alumni earn a median salary of ${formatCurrency(collegeData.median_earnings)} 10 years after enrollment${
+                  salaryRankNational ? ` (ranked #${salaryRankNational.toLocaleString()} nationally)` : ''
+                }.`
+              : ''}
+          </p>
+
+          {/* Semantic Definition List (<dl>) for Zero-Click Extraction */}
+          <dl className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-4 border-t border-slate-100">
+            <div className="bg-slate-50/80 p-3.5 rounded-2xl border border-slate-100">
+              <dt className="text-[10px] font-black uppercase tracking-widest text-slate-400">Division</dt>
+              <dd className="text-sm sm:text-base font-black text-slate-900 mt-0.5">{collegeData.division || 'N/A'}</dd>
+            </div>
+            <div className="bg-slate-50/80 p-3.5 rounded-2xl border border-slate-100">
+              <dt className="text-[10px] font-black uppercase tracking-widest text-slate-400">In-State Tuition</dt>
+              <dd className="text-sm sm:text-base font-black text-slate-900 mt-0.5">{formatCurrency(collegeData.tuition_in_state)}</dd>
+            </div>
+            <div className="bg-slate-50/80 p-3.5 rounded-2xl border border-slate-100">
+              <dt className="text-[10px] font-black uppercase tracking-widest text-slate-400">Acceptance Rate</dt>
+              <dd className="text-sm sm:text-base font-black text-slate-900 mt-0.5">{collegeData.acceptance_rate || 'N/A'}</dd>
+            </div>
+            <div className="bg-emerald-50/70 p-3.5 rounded-2xl border border-emerald-100">
+              <dt className="text-[10px] font-black uppercase tracking-widest text-emerald-600">10-Yr Median Salary</dt>
+              <dd className="text-sm sm:text-base font-black text-emerald-700 mt-0.5">{formatCurrency(collegeData.median_earnings)}</dd>
+            </div>
+          </dl>
+        </section>
+
+        {/* ========================================================= */}
         {/* 1. INSTITUTIONAL OVERVIEW (Academics, Cost, ROI)          */}
         {/* ========================================================= */}
-        <div className="space-y-8">
+        <section aria-label="Tuition, Admissions, and Alumni Earnings" className="space-y-8">
           {/* Basic Academics & Cost */}
           {(hasTuition || collegeData.acceptance_rate) && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {hasTuition && (
-                <div className="bg-white p-6 sm:p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100">
+                <article className="bg-white p-6 sm:p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100">
                   <div className="flex items-center space-x-4 mb-6">
                     <div className="bg-blue-100 p-3 rounded-2xl shadow-inner">
                       <Landmark className="w-6 h-6 text-blue-600" />
@@ -396,24 +734,24 @@ export default async function CollegePage({
                       </div>
                     )}
                   </div>
-                </div>
+                </article>
               )}
 
               {collegeData.acceptance_rate && (
-                <div className="bg-white p-6 sm:p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100 flex flex-col justify-center text-center">
+                <article className="bg-white p-6 sm:p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100 flex flex-col justify-center text-center">
                   <h2 className="text-xl font-black text-slate-900 mb-6">What is the acceptance rate at {collegeData.name}?</h2>
                   <div className="bg-slate-50 w-full rounded-3xl p-6 sm:p-8 border border-slate-100 shadow-inner">
                     <span className="block text-sm font-black text-slate-400 mb-3 uppercase tracking-widest">Acceptance Rate</span>
                     <span className="text-4xl sm:text-6xl font-black text-slate-900 tracking-tighter">{collegeData.acceptance_rate}</span>
                   </div>
-                </div>
+                </article>
               )}
             </div>
           )}
 
           {/* 10-Yr Salary ROI Card */}
           {collegeData.median_earnings && (
-            <div className="bg-white p-6 sm:p-10 md:p-12 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100 flex flex-col md:flex-row items-center justify-between gap-8">
+            <article className="bg-white p-6 sm:p-10 md:p-12 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100 flex flex-col md:flex-row items-center justify-between gap-8">
               <div className="flex-1">
                 <div className="flex items-center space-x-4 mb-4">
                   <div className="bg-green-100 p-3.5 rounded-2xl shadow-inner">
@@ -430,14 +768,14 @@ export default async function CollegePage({
                 <span className="block text-sm font-bold text-green-600 mb-2 uppercase tracking-wider">10-Year Median Salary</span>
                 <span className="text-4xl sm:text-5xl font-black text-green-700 tracking-tighter">{formatCurrency(collegeData.median_earnings)}</span>
               </div>
-            </div>
+            </article>
           )}
-        </div>
+        </section>
 
         {/* ========================================================= */}
         {/* 2. ATHLETIC PROGRAMS (Recruiting Standards & Budget)      */}
         {/* ========================================================= */}
-        <div>
+        <section aria-label={`${collegeData.name} Athletic Programs and Recruiting Standards`}>
           {(!programs || programs.length === 0) && (
             <div className="bg-white p-12 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100 text-center">
               <Activity className="w-12 h-12 text-slate-300 mx-auto mb-4" />
@@ -463,24 +801,24 @@ export default async function CollegePage({
               }
 
               return (
-                <div key={program.id} className="space-y-8">
+                <article key={program.id} className="space-y-8">
                   
                   {/* TOP: RECRUITING STANDARDS */}
                   {program.recruiting_standards?.length > 0 && (
                     <div className="bg-white p-6 sm:p-10 md:p-14 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100">
                       <div className="mb-10 pb-8 border-b border-slate-100 text-center max-w-2xl mx-auto">
                         <h2 className="text-3xl font-black text-slate-900 mb-4 tracking-tight">
-                          What are the athletic recruiting standards for {collegeData.name}?
+                          What are the {program.gender} {program.sport} recruiting standards for {collegeData.name}?
                         </h2>
                         <p className="text-slate-500 font-medium leading-relaxed">
-                          These represent estimated divisional averages. Coaches often flex these times based on your academic profile, progression trajectory, and current roster needs.
+                          These represent estimated {collegeData.division} divisional recruiting benchmarks for {collegeData.name}. Coaches often flex these marks based on your academic profile, progression trajectory, and current roster needs.
                         </p>
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {program.recruiting_standards.map((standard: any) => (
                           <div key={standard.id} className="group p-6 sm:p-8 bg-slate-50 hover:bg-blue-50/50 border border-slate-100 hover:border-blue-200 rounded-[2rem] transition-all duration-300 shadow-sm hover:shadow-md">
-                            <span className="block font-black text-2xl text-slate-800 tracking-tight mb-6 text-center">{standard.event}</span>
+                            <h3 className="block font-black text-2xl text-slate-800 tracking-tight mb-6 text-center">{standard.event}</h3>
                             
                             <div className="space-y-4">
                               <div className="flex justify-between items-center bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-100">
@@ -502,6 +840,37 @@ export default async function CollegePage({
                           </div>
                         ))}
                       </div>
+
+                      {/* GEO TABLE EXTRACTION LAYER: Semantic HTML table for AI Scrapers & Accessibility */}
+                      <details className="mt-8 pt-6 border-t border-slate-100 group">
+                        <summary className="text-xs font-black uppercase tracking-widest text-slate-400 hover:text-blue-600 cursor-pointer flex items-center justify-center gap-1.5 select-none">
+                          <span>View Raw {program.gender} {program.sport} Recruiting Standards Table</span>
+                          <ChevronRight className="w-3.5 h-3.5 transition-transform group-open:rotate-90" />
+                        </summary>
+                        <div className="mt-4 overflow-x-auto rounded-2xl border border-slate-200">
+                          <table className="w-full text-left border-collapse text-xs sm:text-sm">
+                            <caption className="sr-only">
+                              {collegeData.name} {program.gender} {program.sport} Recruiting & Walk-On Standards
+                            </caption>
+                            <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-black uppercase tracking-wider text-[11px]">
+                              <tr>
+                                <th scope="col" className="py-3 px-4">Event</th>
+                                <th scope="col" className="py-3 px-4">Scholarship / Recruit Target</th>
+                                <th scope="col" className="py-3 px-4">Walk-On Target</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 bg-white font-semibold text-slate-700">
+                              {program.recruiting_standards.map((standard: any) => (
+                                <tr key={`table-${standard.id}`}>
+                                  <td className="py-2.5 px-4 font-bold text-slate-900">{standard.event}</td>
+                                  <td className="py-2.5 px-4 text-blue-600 font-black">{formatTimeSeconds(standard.target_time_seconds)}</td>
+                                  <td className="py-2.5 px-4">{standard.walk_on_time_seconds ? formatTimeSeconds(standard.walk_on_time_seconds) : 'N/A'}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </details>
                     </div>
                   )}
 
@@ -558,25 +927,27 @@ export default async function CollegePage({
                     </div>
                   )}
 
-                </div>
+                </article>
               );
             })}
           </div>
-        </div>
+        </section>
 
         {/* ========================================================= */}
         {/* 3. RANKINGS MATRIX (Benchmarks & Percentiles - Bottom)    */}
         {/* ========================================================= */}
-        <div className="bg-white/80 backdrop-blur-xl border border-white rounded-[2.5rem] p-6 sm:p-8 md:p-10 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.05)] relative overflow-hidden">
+        <section aria-label={`${collegeData.name} National and State Rankings`} className="bg-white/80 backdrop-blur-xl border border-white rounded-[2.5rem] p-6 sm:p-8 md:p-10 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.05)] relative overflow-hidden">
           
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-8 mb-8 border-b border-slate-100 relative z-10">
             <div>
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-100 text-blue-600 text-xs font-black uppercase tracking-widest mb-2 shadow-sm">
                 <BarChart3 className="w-3.5 h-3.5" /> Benchmarks & Percentiles
               </div>
-              <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">Institutional Rankings</h2>
+              <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                {collegeData.name} National & {collegeData.state} Rankings
+              </h2>
               <p className="text-xs font-semibold text-slate-500 mt-1 uppercase tracking-wider">
-                Overall placement across the country
+                Overall placement across 2,819 U.S. institutions
               </p>
             </div>
 
@@ -667,7 +1038,76 @@ export default async function CollegePage({
             </div>
 
           </div>
-        </div>
+        </section>
+
+        {/* ========================================================= */}
+        {/* 4. GEO FAQ SECTION (Matches FAQPage Schema for AI Models) */}
+        {/* ========================================================= */}
+        <section
+          aria-label={`Frequently Asked Questions about ${collegeData.name}`}
+          className="bg-white p-6 sm:p-8 md:p-10 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100"
+        >
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2.5 rounded-2xl bg-indigo-50 border border-indigo-100 text-indigo-600">
+              <HelpCircle className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                {collegeData.name} Recruiting & Admissions FAQs
+              </h2>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                Verified institutional & athletic data
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            {faqItems.map((faq, idx) => (
+              <div
+                key={idx}
+                className="p-5 sm:p-6 rounded-3xl bg-slate-50/80 border border-slate-100"
+              >
+                <h3 className="text-base sm:text-lg font-black text-slate-900 mb-2">
+                  {faq.question}
+                </h3>
+                <p className="text-sm text-slate-600 font-medium leading-relaxed">
+                  {faq.answer}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          {/* Contextual Internal Links for Crawlers */}
+          <div className="mt-8 pt-6 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
+            <span className="text-xs font-black uppercase tracking-widest text-slate-400">
+              Explore Similar Programs:
+            </span>
+            <div className="flex flex-wrap gap-2">
+              {collegeData.state && (
+                <Link
+                  href={`/search?state=${encodeURIComponent(collegeData.state)}`}
+                  className="text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-3.5 py-2 rounded-xl transition-colors"
+                >
+                  More Colleges in {collegeData.state}
+                </Link>
+              )}
+              {collegeData.division && (
+                <Link
+                  href={`/search?division=${encodeURIComponent(collegeData.division)}`}
+                  className="text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 px-3.5 py-2 rounded-xl transition-colors"
+                >
+                  All {collegeData.division} Schools
+                </Link>
+              )}
+              <Link
+                href="/search"
+                className="text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 px-3.5 py-2 rounded-xl transition-colors"
+              >
+                Compare in Matchmaker
+              </Link>
+            </div>
+          </div>
+        </section>
 
       </div>
     </main>

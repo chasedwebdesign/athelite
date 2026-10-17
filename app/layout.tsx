@@ -12,7 +12,6 @@ export const metadata: Metadata = {
   title: 'ChasedSports | The Athletic Recruiting Network',
   description: 'The data-driven recruiting platform connecting high school athletes with college programs. Build your profile, verify your stats, and discover your true market value.',
   
-  // These make your links look like rich, clickable cards in iMessage and Social Media
   openGraph: {
     title: 'ChasedSports | The Athletic Recruiting Network',
     description: 'The data-driven recruiting platform connecting high school athletes with college programs.',
@@ -20,9 +19,9 @@ export const metadata: Metadata = {
     siteName: 'ChasedSports',
     images: [
       {
-        url: '/icon.png', // Because of metadataBase, Next.js now knows this is https://www.chasedsports.com/icon.png
-        width: 512,       // Standard icon width
-        height: 512,      // Standard icon height
+        url: '/icon.png',
+        width: 512,
+        height: 512,
         alt: 'ChasedSports Logo',
       },
     ],
@@ -30,7 +29,7 @@ export const metadata: Metadata = {
     type: 'website',
   },
   twitter: {
-    card: 'summary', // Changed to "summary" so it formats your square icon perfectly
+    card: 'summary',
     title: 'ChasedSports | The Athletic Recruiting Network',
     description: 'The data-driven recruiting platform connecting high school athletes with college programs.',
     images: ['/icon.png'],
@@ -43,13 +42,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className="bg-[#F8FAFC]">
+    <html lang="en" className="scroll-pt-20">
+      <body className="bg-[#F8FAFC] min-h-screen flex flex-col overflow-x-clip">
         {/* GLOBAL NAVBAR */}
         <Navbar />
         
         {/* PAGE CONTENT */}
-        {children}
+        <div className="flex-1 w-full relative overflow-x-clip">
+          {children}
+        </div>
 
         {/* 🚨 VERCEL ANALYTICS */}
         <Analytics />

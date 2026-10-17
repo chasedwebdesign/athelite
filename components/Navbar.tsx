@@ -26,33 +26,33 @@ import {
 
 export default function Navbar() {
   const [supabase] = useState(() => createClient());
-  
+
   const router = useRouter();
   const pathname = usePathname();
-  
+
   const [session, setSession] = useState<any>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [notificationBadgeCount, setNotificationBadgeCount] = useState(0);
-  
+
   // --- ROLE & BILLING STATE ---
   const [isAthlete, setIsAthlete] = useState(false);
   const [viewerRole, setViewerRole] = useState<'guest' | 'athlete' | 'coach'>('guest');
   const [isPremium, setIsPremium] = useState(false);
   const [isFounder, setIsFounder] = useState(false);
-  
+
   // --- UI STATE ---
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false); 
-  
+
   // --- GLOBAL SEARCH STATE ---
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false); 
-  
+
   const searchRef = useRef<HTMLDivElement>(null);
   const mobileSearchRef = useRef<HTMLDivElement>(null);
-  
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
@@ -70,9 +70,19 @@ export default function Navbar() {
     if (isMobileMenuOpen) {
       document.body.style.overflow = 'hidden';
     } else {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = '';
     }
+    return () => {
+      document.body.style.overflow = '';
+    };
   }, [isMobileMenuOpen]);
+
+  // Reset mobile menu and snap window scroll to true top (0, 0) on route change
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+    document.body.style.overflow = '';
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  }, [pathname]);
 
   // SMARTER FULL-NAME SEARCH LOGIC
   useEffect(() => {
@@ -80,7 +90,7 @@ export default function Navbar() {
 
     const fetchSearch = async () => {
       const queryText = searchQuery.trim();
-      
+
       if (queryText.length < 2) {
         if (isMounted) setSearchResults([]);
         return;
@@ -94,7 +104,7 @@ export default function Navbar() {
         .limit(5);
 
       const searchTerms = queryText.split(/\s+/);
-      
+
       if (searchTerms.length > 1) {
         query = query
           .ilike('first_name', `%${searchTerms[0]}%`)
@@ -102,7 +112,7 @@ export default function Navbar() {
       } else {
         query = query.or(`first_name.ilike.%${queryText}%,last_name.ilike.%${queryText}%`);
       }
-        
+
       const { data, error } = await query;
 
       if (error) {
@@ -113,20 +123,20 @@ export default function Navbar() {
 
       if (data && isMounted) {
         setSearchResults(data);
-        
+
         if (viewerRole === 'coach' && data.length > 0) {
           const idsToUpdate = data.map((athlete: any) => athlete.id);
-          
+
           const { error: rpcError } = await supabase.rpc('increment_search_appearances', { 
             athlete_ids: idsToUpdate 
           });
-          
+
           if (rpcError) {
             console.error("Failed to increment search appearances:", rpcError.message);
           }
         }
       }
-      
+
       if (isMounted) setIsSearching(false);
     };
 
@@ -170,7 +180,7 @@ export default function Navbar() {
         }
         return msg.sender_id !== userId;
       }).length;
-      
+
       setUnreadCount(realUnreadCount);
     }
 
@@ -204,7 +214,7 @@ export default function Navbar() {
         .select('id, avatar_url, is_founder')
         .eq('id', userId)
         .maybeSingle();
-        
+
       if (coachProfile) {
         setViewerRole('coach');
         setAvatarUrl(coachProfile.avatar_url);
@@ -220,7 +230,7 @@ export default function Navbar() {
     supabase.auth.getSession().then((response: any) => {
       if (isMounted) loadNavData(response?.data?.session || null);
     });
-    
+
     const { data } = supabase.auth.onAuthStateChange((event: any, newSession: any) => {
       if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
         if (isMounted) loadNavData(newSession);
@@ -234,6 +244,7 @@ export default function Navbar() {
   }, [supabase, loadNavData, pathname]);
 
   const handleSignOut = async () => {
+    document.body.style.overflow = '';
     await supabase.auth.signOut();
     setSession(null);
     setIsAthlete(false);
@@ -246,6 +257,8 @@ export default function Navbar() {
   };
 
   const closeMobileMenu = () => {
+    // Synchronously unlock body overflow before Next.js Link navigation fires
+    document.body.style.overflow = '';
     setIsMobileMenuOpen(false);
     setSearchQuery('');
     setSearchResults([]);
@@ -262,7 +275,7 @@ export default function Navbar() {
     <>
       <nav className="bg-white/95 backdrop-blur-lg border-b border-slate-200/80 shadow-sm sticky top-0 z-[100] transition-colors">
         <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between gap-4">
-          
+
           {/* Logo & Primary Navigation Area */}
           <div className="flex flex-1 items-center justify-start shrink-0">
             <Link href="/" onClick={closeMobileMenu} className="flex items-center gap-2 group">
@@ -297,7 +310,7 @@ export default function Navbar() {
                 onFocus={() => setIsSearchOpen(true)}
                 className="w-full bg-slate-100/80 hover:bg-slate-100 border border-slate-200 focus:border-blue-300 focus:bg-white text-base font-medium text-slate-900 rounded-full pl-14 pr-6 py-3.5 transition-all outline-none focus:shadow-md"
               />
-              
+
               {isSearchOpen && searchQuery.length >= 2 && (
                 <div className="absolute top-full mt-3 left-0 w-full min-w-[350px] bg-white border border-slate-200 rounded-[2rem] shadow-2xl overflow-hidden flex flex-col z-[110]">
                   {isSearching ? (
@@ -340,7 +353,7 @@ export default function Navbar() {
             <Link href="/feed" className={`text-sm font-bold flex items-center whitespace-nowrap transition-colors ${isActive('/feed') ? 'text-orange-600' : 'text-slate-500 hover:text-orange-600'}`}>
               <Flame className="w-4 h-4 mr-1.5" /> <span className="hidden lg:inline">Feed</span>
             </Link>
-            
+
             {session && (
               <Link href="/dashboard/team" className={`text-sm font-bold flex items-center whitespace-nowrap transition-colors ${isActive('/dashboard/team') ? 'text-emerald-600' : 'text-slate-500 hover:text-emerald-600'}`}>
                 <Shield className="w-4 h-4 mr-1.5" /> <span className="hidden lg:inline">Teams</span>
@@ -382,7 +395,7 @@ export default function Navbar() {
                     )}
                   </Link>
                 )}
-                
+
                 {isAthlete && (
                   <Link href="/shop" className={`flex items-center justify-center w-10 h-10 rounded-full border transition-all ${isActive('/shop') ? 'bg-emerald-50 border-emerald-200 text-emerald-600 shadow-sm' : 'bg-slate-50 border-slate-200 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 hover:border-emerald-200'}`} title="The Shop">
                     <ShoppingCart className="w-4 h-4" />
@@ -405,7 +418,7 @@ export default function Navbar() {
                     </Link>
                   )
                 )}
-                
+
                 {/* Linked Profile Icon */}
                 <Link 
                   href="/dashboard/profile"
@@ -479,7 +492,7 @@ export default function Navbar() {
                 {unreadCount > 0 && <span className="absolute top-0 right-0 bg-red-500 text-white text-[10px] leading-none font-black min-w-[16px] h-[16px] flex items-center justify-center rounded-full border-2 border-white">{unreadCount}</span>}
               </Link>
             )}
-            
+
             <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 text-slate-600 hover:bg-slate-100 rounded-full transition-colors ml-0.5">
               {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
@@ -491,7 +504,7 @@ export default function Navbar() {
       {isMobileMenuOpen && (
         <div className="fixed inset-0 top-[80px] z-[95] bg-white overflow-y-auto animate-in slide-in-from-top-5 duration-200 md:hidden">
           <div className="p-6 flex flex-col gap-6 min-h-full pb-32">
-            
+
             <div className="relative w-full" ref={mobileSearchRef}>
               <div className="relative">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
@@ -507,7 +520,7 @@ export default function Navbar() {
                   className="w-full bg-slate-100 border border-transparent focus:border-blue-300 focus:bg-white text-base font-medium text-slate-900 rounded-2xl pl-12 pr-4 py-4 transition-all outline-none"
                 />
               </div>
-              
+
               {isSearchOpen && searchQuery.length >= 2 && (
                 <div className="absolute top-full mt-2 w-full bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden flex flex-col z-50">
                   {isSearching ? (
@@ -545,7 +558,7 @@ export default function Navbar() {
                 <School className="w-6 h-6 text-blue-500" />
                 <span className="font-bold text-slate-700 text-sm">College Finder</span>
               </Link>
-              
+
               <Link href="/feed" onClick={closeMobileMenu} className={`border p-4 rounded-2xl flex flex-col items-center justify-center gap-2 transition-colors ${session ? 'col-span-1' : 'col-span-2'} ${isActive('/feed') ? 'bg-orange-50 border-orange-200' : 'bg-slate-50 hover:bg-orange-50 border-slate-100'}`}>
                 <Flame className="w-6 h-6 text-orange-500" />
                 <span className="font-bold text-slate-700 text-sm">Feed</span>
@@ -592,7 +605,7 @@ export default function Navbar() {
                   <Link href="/dashboard/profile" onClick={closeMobileMenu} className={`flex items-center gap-4 p-4 rounded-2xl font-bold text-lg transition-colors ${isActive('/dashboard/profile') ? 'bg-blue-50 text-blue-600' : 'hover:bg-slate-50 text-slate-700'}`}>
                     <User className={`w-6 h-6 ${isActive('/dashboard/profile') ? 'text-blue-500' : 'text-slate-500'}`} /> My Profile
                   </Link>
-                  
+
                   {isAthlete && (
                     isFounder ? (
                       <Link href="/pro" onClick={closeMobileMenu} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-fuchsia-50 text-fuchsia-600 font-bold text-lg transition-colors text-left w-full">
@@ -618,7 +631,7 @@ export default function Navbar() {
                 </>
               )}
             </div>
-            
+
           </div>
         </div>
       )}

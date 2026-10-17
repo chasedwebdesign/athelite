@@ -1649,7 +1649,7 @@ function DashboardContent() {
   }
 
   return (
-    <main className={`min-h-screen ${theme.pageBg} font-sans pb-24 md:pb-12 text-slate-200 relative overflow-x-hidden transition-colors duration-500`}>
+    <main className={`min-h-screen ${theme.pageBg} font-sans pb-24 md:pb-12 text-slate-200 relative overflow-x-clip transition-colors duration-500`}>
       
       {/* 🚀 UPGRADED GRID & HEAVY GLASSMORPHISM BASE 🚀 */}
       <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden bg-[#020617]">

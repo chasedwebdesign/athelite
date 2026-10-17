@@ -1,15 +1,71 @@
 'use client';
 
-import React, { useEffect, useState, useMemo, Suspense, useRef } from 'react';
+import React, { useEffect, useState, useMemo, Suspense, useRef, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
+import * as RecruitingStandardsModule from '@/utils/constants/RecruitingStandards';
 import { 
   MapPin, Trophy, Search, Activity, ChevronRight, BookOpen, 
   TrendingUp, Landmark, SlidersHorizontal, ChevronDown, 
   ChevronUp, DollarSign, Percent, Award, RotateCcw, Bookmark, 
-  RefreshCw, Target, Zap, School, AlertCircle, Map, X, Crown, 
-  Eye, EyeOff, Flame, Briefcase, Wallet, ShieldCheck, Medal
+  RefreshCw, Target, Zap, AlertCircle, Map, X, Crown, 
+  Eye, EyeOff, Flame, Briefcase, Wallet, FolderHeart, Plus, Trash2, Sparkles, Scale, Check, Mail, HelpCircle
 } from 'lucide-react';
 import Link from 'next/link';
+
+// --- STAT-BASED VS NON-STAT-BASED (TEAM) SPORTS ---
+const ALL_SPORTS = [
+  { value: 'Baseball', label: 'Baseball' },
+  { value: 'Basketball', label: 'Basketball' },
+  { value: 'Bowling', label: 'Bowling' },
+  { value: 'Cross Country', label: 'Cross Country' },
+  { value: 'Fencing', label: 'Fencing' },
+  { value: 'Field Hockey', label: 'Field Hockey' },
+  { value: 'Football', label: 'Football' },
+  { value: 'Golf', label: 'Golf' },
+  { value: 'Gymnastics', label: 'Gymnastics' },
+  { value: 'Ice Hockey', label: 'Ice Hockey' },
+  { value: 'Lacrosse', label: 'Lacrosse' },
+  { value: 'Soccer', label: 'Soccer' },
+  { value: 'Softball', label: 'Softball' },
+  { value: 'Swimming and Diving (combined)', label: 'Swimming & Diving' },
+  { value: 'Tennis', label: 'Tennis' },
+  { value: 'Track & Field', label: 'Track & Field' },
+  { value: 'Volleyball', label: 'Volleyball' },
+  { value: 'Water Polo', label: 'Water Polo' },
+  { value: 'Wrestling', label: 'Wrestling' },
+];
+
+const ALL_DIVISIONS = [
+  { value: 'NCAA D1', label: 'NCAA Division 1 (D1)' },
+  { value: 'NCAA D2', label: 'NCAA Division 2 (D2)' },
+  { value: 'NCAA D3', label: 'NCAA Division 3 (D3)' },
+  { value: 'NAIA', label: 'NAIA' },
+  { value: 'Community College (JUCO)', label: 'NJCAA / JUCO' },
+];
+
+const STAT_BASED_SPORTS = new Set([
+  'track & field',
+  'trackandfield',
+  'cross country',
+  'crosscountry',
+  'swimming and diving (combined)',
+  'swimming & diving',
+  'swimminganddivingcombined',
+  'swimminganddiving',
+  'golf',
+  'bowling',
+  'gymnastics',
+]);
+
+const normalizeSport = (s: string) => s.toLowerCase().replace(/ and /g, ' & ').replace(/[^a-z0-9]/g, '');
+
+const isStatBasedSport = (sportName?: string | null): boolean => {
+  if (!sportName) return false;
+  const trimmed = sportName.toLowerCase().trim();
+  const normalized = normalizeSport(sportName);
+  return STAT_BASED_SPORTS.has(trimmed) || STAT_BASED_SPORTS.has(normalized);
+};
 
 // --- UMBRELLA MAJOR MAPPING ---
 const UMBRELLA_MAP: Record<string, string> = {
@@ -65,57 +121,28 @@ function getUmbrellaMajor(searchTerm: string): string {
   return searchTerm.charAt(0).toUpperCase() + searchTerm.slice(1);
 }
 
-// --- TRACK & FIELD DASHBOARD CALCULATOR ---
-const RECRUITING_STANDARDS: Record<string, Record<string, { t1: number, t2: number, t3: number, t4: number, t5: number, t6: number, t7: number, isField?: boolean, text?: string }>> = {
-  'Boys': {
-    '60 Meters': { t1: 6.75, t2: 6.90, t3: 7.05, t4: 7.20, t5: 7.40, t6: 7.60, t7: 8.00 },
-    '100 Meters': { t1: 10.5, t2: 10.8, t3: 11.0, t4: 11.3, t5: 11.6, t6: 11.9, t7: 12.6 },
-    '200 Meters': { t1: 21.2, t2: 21.8, t3: 22.2, t4: 22.8, t5: 23.5, t6: 24.5, t7: 26.0 },
-    '400 Meters': { t1: 47.5, t2: 49.0, t3: 50.0, t4: 51.5, t5: 53.0, t6: 55.0, t7: 58.0 },
-    '800 Meters': { t1: 112, t2: 115, t3: 117, t4: 120, t5: 125, t6: 130, t7: 140 }, 
-    '1500 Meters': { t1: 231, t2: 239, t3: 244, t4: 250, t5: 264, t6: 275, t7: 300 },
-    '1600 Meters': { t1: 250, t2: 258, t3: 264, t4: 270, t5: 285, t6: 295, t7: 320 }, 
-    '3000 Meters': { t1: 500, t2: 518, t3: 532, t4: 546, t5: 574, t6: 600, t7: 660 },
-    '3200 Meters': { t1: 540, t2: 560, t3: 575, t4: 590, t5: 620, t6: 650, t7: 720 }, 
-    '110m Hurdles': { t1: 13.8, t2: 14.2, t3: 14.6, t4: 15.0, t5: 15.5, t6: 16.5, t7: 18.5 },
-    '200m Hurdles': { t1: 24.5, t2: 25.5, t3: 26.5, t4: 27.5, t5: 29.0, t6: 30.5, t7: 33.0 },
-    '300m Hurdles': { t1: 37.0, t2: 38.5, t3: 39.5, t4: 41.0, t5: 42.5, t6: 44.5, t7: 48.0 },
-    '400m Hurdles': { t1: 52.0, t2: 54.0, t3: 56.0, t4: 58.0, t5: 60.0, t6: 63.0, t7: 68.0 },
-    'Long Jump': { t1: 288, t2: 270, t3: 260, t4: 252, t5: 240, t6: 228, t7: 204, isField: true }, 
-    'Triple Jump': { t1: 588, t2: 564, t3: 540, t4: 516, t5: 492, t6: 468, t7: 420, isField: true }, 
-    'High Jump': { t1: 82, t2: 78, t3: 76, t4: 74, t5: 70, t6: 66, t7: 60, isField: true }, 
-    'Pole Vault': { t1: 198, t2: 186, t3: 174, t4: 162, t5: 150, t6: 132, t7: 108, isField: true },
-    'Shot Put': { t1: 720, t2: 660, t3: 600, t4: 540, t5: 480, t6: 444, t7: 360, isField: true }, 
-    'Discus': { t1: 2220, t2: 2040, t3: 1860, t4: 1740, t5: 1620, t6: 1440, t7: 1080, isField: true },
-    'Javelin': { t1: 2340, t2: 2160, t3: 2040, t4: 1920, t5: 1800, t6: 1620, t7: 1200, isField: true },
-    'Hammer': { t1: 2400, t2: 2160, t3: 1920, t4: 1740, t5: 1560, t6: 1320, t7: 960, isField: true }
-  },
-  'Girls': {
-    '60 Meters': { t1: 7.45, t2: 7.65, t3: 7.85, t4: 8.05, t5: 8.30, t6: 8.60, t7: 9.20 },
-    '100 Meters': { t1: 11.7, t2: 12.1, t3: 12.4, t4: 12.8, t5: 13.2, t6: 13.6, t7: 14.5 },
-    '200 Meters': { t1: 24.2, t2: 24.8, t3: 25.5, t4: 26.2, t5: 27.0, t6: 28.5, t7: 31.0 },
-    '400 Meters': { t1: 54.5, t2: 57.0, t3: 58.5, t4: 60.5, t5: 63.0, t6: 66.0, t7: 72.0 },
-    '800 Meters': { t1: 130, t2: 135, t3: 140, t4: 145, t5: 152, text: '160', t6: 160, t7: 175 }, 
-    '1500 Meters': { t1: 268, t2: 282, t3: 291, t4: 300, t5: 314, t6: 330, t7: 375 },
-    '1600 Meters': { t1: 290, t2: 305, t3: 315, t4: 325, t5: 340, t6: 360, t7: 400 }, 
-    '3000 Meters': { t1: 583, t2: 611, t3: 638, t4: 666, t5: 694, t6: 730, t7: 840 },
-    '3200 Meters': { t1: 630, t2: 660, t3: 690, t4: 720, t5: 750, t6: 800, t7: 900 }, 
-    '100m Hurdles': { t1: 13.8, t2: 14.3, t3: 14.8, t4: 15.5, t5: 16.5, t6: 17.8, t7: 20.0 },
-    '200m Hurdles': { t1: 28.0, t2: 29.0, t3: 30.5, t4: 32.0, t5: 34.0, t6: 36.0, t7: 40.0 },
-    '300m Hurdles': { t1: 42.5, t2: 44.5, t3: 46.5, t4: 48.5, t5: 51.0, t6: 54.0, t7: 59.0 },
-    '400m Hurdles': { t1: 60.0, t2: 63.0, t3: 66.0, t4: 69.0, t5: 72.0, t6: 76.0, t7: 85.0 },
-    'Long Jump': { t1: 234, t2: 222, t3: 210, t4: 198, t5: 186, text: '174', t6: 174, t7: 150, isField: true }, 
-    'Triple Jump': { t1: 480, t2: 456, t3: 432, t4: 408, t5: 384, t6: 360, t7: 312, isField: true },
-    'High Jump': { t1: 68, t2: 64, t3: 62, t4: 60, t5: 58, t6: 54, t7: 50, isField: true }, 
-    'Pole Vault': { t1: 156, t2: 144, t3: 132, t4: 120, t5: 108, t6: 90, t7: 72, isField: true },
-    'Shot Put': { t1: 540, t2: 480, t3: 432, t4: 396, t5: 360, t6: 324, t7: 264, isField: true }, 
-    'Discus': { t1: 1800, t2: 1620, t3: 1500, t4: 1380, t5: 1260, t6: 1080, t7: 840, isField: true },
-    'Javelin': { t1: 1740, t2: 1560, t3: 1440, t4: 1320, t5: 1200, t6: 1020, t7: 780, isField: true },
-    'Hammer': { t1: 1920, t2: 1680, t3: 1500, t4: 1320, t5: 1140, t6: 960, t7: 720, isField: true }
-  }
+// --- TRACK & FIELD STANDARDS IMPORT & CALCULATOR ---
+type StandardTier = {
+  t1: number;
+  t2: number;
+  t3: number;
+  t4: number;
+  t5: number;
+  t6: number;
+  t7: number;
+  isField?: boolean;
+  text?: string;
 };
 
+const RECRUITING_STANDARDS: Record<string, Record<string, StandardTier>> =
+  (RecruitingStandardsModule as any).RECRUITING_STANDARDS ||
+  (RecruitingStandardsModule as any).default ||
+  {};
+
 const convertMarkToNumber = (markStr: string, isField: boolean): number => {
+  if (typeof (RecruitingStandardsModule as any).convertMarkToNumber === 'function') {
+    return (RecruitingStandardsModule as any).convertMarkToNumber(markStr, isField);
+  }
   if (!markStr) return 0;
   if (isField) {
     const clean = markStr.replace(/[^0-9.]/g, ' ').trim().split(/\s+/);
@@ -131,13 +158,16 @@ const convertMarkToNumber = (markStr: string, isField: boolean): number => {
   }
 };
 
-const getAthleteProjection = (prs: any[], gender: string) => {
+const getAthleteProjection = (prs: any[], gender: string): { overallScore: number } => {
+  if (typeof (RecruitingStandardsModule as any).getAthleteProjection === 'function') {
+    return (RecruitingStandardsModule as any).getAthleteProjection(prs, gender);
+  }
   if (!prs || !Array.isArray(prs) || prs.length === 0) {
     return { overallScore: 0 };
   }
 
-  const standards = RECRUITING_STANDARDS[gender] || RECRUITING_STANDARDS['Boys'];
-  let allBreakdowns: any[] = [];
+  const standards = RECRUITING_STANDARDS[gender] || RECRUITING_STANDARDS['Boys'] || {};
+  const allBreakdowns: { score: number }[] = [];
 
   prs.forEach((pr) => {
     if (!pr.event || !pr.mark) return;
@@ -153,8 +183,8 @@ const getAthleteProjection = (prs: any[], gender: string) => {
 
     if (eventStds) {
       const val = convertMarkToNumber(pr.mark, !!eventStds.isField);
-      if (isNaN(val) || val === 0) return; 
-      
+      if (isNaN(val) || val === 0) return;
+
       let score = 15;
 
       if (eventStds.isField) {
@@ -165,9 +195,9 @@ const getAthleteProjection = (prs: any[], gender: string) => {
         else if (val >= eventStds.t5) score = 55 + ((val - eventStds.t5) / (eventStds.t4 - eventStds.t5)) * 10;
         else if (val >= eventStds.t6) score = 40 + ((val - eventStds.t6) / (eventStds.t5 - eventStds.t6)) * 14;
         else if (val >= eventStds.t7) score = 20 + ((val - eventStds.t7) / (eventStds.t6 - eventStds.t7)) * 19;
-        else { 
-            const t8 = eventStds.t7 * 0.85; 
-            if (val >= t8) { score = 15 + ((val - t8) / (eventStds.t7 - t8)) * 4; } else { score = 15; } 
+        else {
+          const t8 = eventStds.t7 * 0.85;
+          if (val >= t8) { score = 15 + ((val - t8) / (eventStds.t7 - t8)) * 4; } else { score = 15; }
         }
       } else {
         if (val <= eventStds.t1) score = 95 + Math.min(4, ((eventStds.t1 - val) / (eventStds.t1 * 0.05)) * 4);
@@ -177,9 +207,9 @@ const getAthleteProjection = (prs: any[], gender: string) => {
         else if (val <= eventStds.t5) score = 55 + ((eventStds.t5 - val) / (eventStds.t5 - eventStds.t4)) * 10;
         else if (val <= eventStds.t6) score = 40 + ((eventStds.t6 - val) / (eventStds.t6 - eventStds.t5)) * 14;
         else if (val <= eventStds.t7) score = 20 + ((eventStds.t7 - val) / (eventStds.t7 - eventStds.t6)) * 19;
-        else { 
-            const t8 = eventStds.t7 * 1.15; 
-            if (val <= t8) { score = 15 + ((t8 - val) / (t8 - eventStds.t7)) * 4; } else { score = 15; } 
+        else {
+          const t8 = eventStds.t7 * 1.15;
+          if (val <= t8) { score = 15 + ((t8 - val) / (t8 - eventStds.t7)) * 4; } else { score = 15; }
         }
       }
       allBreakdowns.push({ score: Math.min(99, Math.max(15, Math.round(score))) });
@@ -193,68 +223,26 @@ const getAthleteProjection = (prs: any[], gender: string) => {
 
 // --- DYNAMIC RATING GENERATOR ---
 const getCalculatedRating = (college: any, program: any) => {
-    let rating = program?.team_performance_rating || 0;
-    
-    if (rating === 0 && college) {
-        const div = college.division || '';
-        const acc = parseFloat(college.acceptance_rate || '100');
-        if (div.includes('D1')) {
-            if (acc <= 20) rating = 95;
-            else if (acc <= 50) rating = 85;
-            else rating = 80;
-        } else if (div.includes('D2')) {
-            rating = 70;
-        } else if (div.includes('D3')) {
-            rating = 60;
-        } else if (div.includes('NAIA')) {
-            rating = 55;
-        } else {
-            rating = 40;
-        }
-    }
-    return rating;
-};
+  let rating = program?.team_performance_rating || 0;
 
-// --- DYNAMIC MATCH BADGE GENERATOR ---
-const getBadgeDetails = (college: any, selectedSport: string, useScoreMatch: boolean, athleteScore: number) => {
-    let badgeColor = "bg-slate-900 border-slate-800 text-slate-500";
-    let badgeText = "UR";
-    let badgeSub = "RATING";
-    
-    if (!college.hasSport && selectedSport) {
-        badgeColor = "bg-slate-800 border-slate-700 text-slate-300";
-        badgeText = "ACADEMIC";
-        badgeSub = "NO PROGRAM";
+  if (rating === 0 && college) {
+    const div = college.division || '';
+    const acc = parseFloat(college.acceptance_rate || '100');
+    if (div.includes('D1')) {
+      if (acc <= 20) rating = 95;
+      else if (acc <= 50) rating = 85;
+      else rating = 80;
+    } else if (div.includes('D2')) {
+      rating = 70;
+    } else if (div.includes('D3')) {
+      rating = 60;
+    } else if (div.includes('NAIA')) {
+      rating = 55;
     } else {
-        let rating = getCalculatedRating(college, college.targetProgram);
-        badgeText = rating.toString();
-
-        if (useScoreMatch && rating > 0) {
-            const diff = rating - athleteScore;
-            if (diff <= 0) {
-                badgeColor = "bg-emerald-950/60 border-emerald-500/40 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.3)]";
-                badgeText = "Target";
-                badgeSub = "MATCH";
-            } else if (diff <= 5) {
-                badgeColor = "bg-blue-950/60 border-blue-500/40 text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.3)]";
-                badgeText = "Walk-On";
-                badgeSub = "MATCH";
-            } else if (diff <= 15) {
-                badgeColor = "bg-amber-950/60 border-amber-500/40 text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.3)]";
-                badgeText = "Poss Walk-On";
-                badgeSub = "MATCH";
-            } else {
-                badgeColor = "bg-red-950/60 border-red-500/40 text-red-400 shadow-[0_0_15px_rgba(239,68,68,0.3)]";
-                badgeText = "Stretch";
-                badgeSub = "MATCH";
-            }
-        } else if (rating > 0) {
-            badgeColor = "bg-purple-950/60 border-purple-500/40 text-purple-400";
-            badgeSub = "RATING";
-        }
+      rating = 40;
     }
-    
-    return { badgeColor, badgeText, badgeSub };
+  }
+  return rating;
 };
 
 interface University {
@@ -264,9 +252,9 @@ interface University {
   city: string;
   state: string;
   division: string;
-  student_population: string;
+  student_population?: string;
   majors_offered: string[];
-  programs: any[]; 
+  programs: any[];
   hasSport?: boolean;
   targetProgram?: any;
   acceptance_rate?: string;
@@ -274,7 +262,26 @@ interface University {
   tuition_in_state?: number;
   tuition_out_of_state?: number;
   tuition?: number;
-  athleteMatchScore?: number; 
+  athleteMatchScore?: number;
+}
+
+type MatchmakerCategory = 'fit' | 'cost' | 'salary' | 'funding' | 'roi';
+
+interface SavedSearchPreset {
+  id: string;
+  name: string;
+  schoolName: string;
+  selectedSport: string;
+  selectedGender: string;
+  selectedDivision: string;
+  selectedStates: string[];
+  selectedMajor: string;
+  maxAcceptance: string;
+  tuitionType: string;
+  maxTuition: string;
+  sortBy: string;
+  activeBonusFilter: MatchmakerCategory | null;
+  hideAcademicOnly: boolean;
 }
 
 const US_TILE_MAP = [
@@ -288,52 +295,64 @@ const US_TILE_MAP = [
   { id: 'HI', row: 8, col: 1 }, { id: 'TX', row: 8, col: 5 }, { id: 'FL', row: 8, col: 10 }
 ];
 
+const PAGE_SIZE = 24;
+
 function formatCurrency(num: number | null | undefined) {
   if (!num) return 'N/A';
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(num);
 }
 
-type MatchmakerCategory = 'fit' | 'cost' | 'salary' | 'funding' | 'roi';
-
 const extractTrackPrs = (sports: any) => {
   if (!Array.isArray(sports)) return [];
   const track = sports?.find((s: any) => s.sport_name === 'Track & Field');
   if (!track || !track.metrics) return [];
-  
+
   let parsed = track.metrics;
   if (typeof parsed === 'string') {
-    try { parsed = JSON.parse(parsed); } catch (e) { parsed = []; }
+    try { parsed = JSON.parse(parsed); } catch { parsed = []; }
   }
   if (!Array.isArray(parsed)) return [];
   return parsed.map((m: any) => ({ event: m.name, mark: m.value }));
 };
 
 function SearchContent() {
-  // 1. STABILITY FIX: Use useState to prevent the client from dropping during Suspense remounts
+  const searchParams = useSearchParams();
   const [supabase] = useState(() => createClient());
   const [universities, setUniversities] = useState<University[]>([]);
   const [loading, setLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [isInitialized, setIsInitialized] = useState(false); 
+  const [isInitialized, setIsInitialized] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  // --- Infinite Scroll Pagination State ---
+  const [visibleCount, setVisibleCount] = useState<number>(PAGE_SIZE);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   // --- Matchmaker Filters ---
   const [activeBonusFilter, setActiveBonusFilter] = useState<MatchmakerCategory | null>(null);
   const [hideAcademicOnly, setHideAcademicOnly] = useState(false);
 
+  // --- Side by Side Comparison State ---
+  const [sideBySideList, setSideBySideList] = useState<University[]>([]);
+  const [isSideBySideOpen, setIsSideBySideOpen] = useState(false);
+
   // --- Auth & Target Schools States ---
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [athleteProfile, setAthleteProfile] = useState<any>(null); 
+  const [athleteProfile, setAthleteProfile] = useState<any>(null);
   const [isAthlete, setIsAthlete] = useState<boolean>(false);
   const [athleteFirstName, setAthleteFirstName] = useState<string>('');
-  
-  const [athleteScore, setAthleteScore] = useState<number>(0); 
   const [athleteGender, setAthleteGender] = useState<string>('');
   const [athleteState, setAthleteState] = useState<string>('');
-  
+
   const [savedCollegeIds, setSavedCollegeIds] = useState<Set<string>>(new Set());
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
+
+  // --- Saved Search Presets State ---
+  const [savedSearches, setSavedSearches] = useState<SavedSearchPreset[]>([]);
+  const [isSavingSearch, setIsSavingSearch] = useState(false);
+  const [newSearchName, setNewSearchName] = useState('');
 
   // --- Basic Filters ---
   const [selectedSport, setSelectedSport] = useState('');
@@ -342,7 +361,7 @@ function SearchContent() {
   const [selectedStates, setSelectedStates] = useState<string[]>([]);
   const [isMapOpen, setIsMapOpen] = useState(false);
   const [selectedMajor, setSelectedMajor] = useState('');
-  
+
   // --- Bonus Settings (Advanced) ---
   const [schoolName, setSchoolName] = useState('');
   const [maxAcceptance, setMaxAcceptance] = useState('');
@@ -350,8 +369,38 @@ function SearchContent() {
   const [maxTuition, setMaxTuition] = useState('');
   const [sortBy, setSortBy] = useState('');
 
-  // 1. Load User, Score & Check Role
-  // 2. STABILITY FIX: Use a ref boundary to ensure StrictMode and Next navigation doesn't double-trigger session fetch
+  // --- STABILITY FIX: Keep latest filter values in a ref so executeSearch is 100% stable ---
+  const latestFiltersRef = useRef({
+    selectedSport,
+    schoolName,
+    selectedGender,
+    selectedDivision,
+    selectedStates,
+    selectedMajor,
+  });
+
+  useEffect(() => {
+    latestFiltersRef.current = {
+      selectedSport,
+      schoolName,
+      selectedGender,
+      selectedDivision,
+      selectedStates,
+      selectedMajor,
+    };
+  }, [selectedSport, schoolName, selectedGender, selectedDivision, selectedStates, selectedMajor]);
+
+  const showNotification = useCallback((msg: string, isError = true) => {
+    if (isError) {
+      setErrorMsg(msg);
+      setTimeout(() => setErrorMsg(null), 4500);
+    } else {
+      setToastMsg(msg);
+      setTimeout(() => setToastMsg(null), 3500);
+    }
+  }, []);
+
+  // 1. Load User, Athlete Sports & Saved Searches
   const hasFetchedProfile = useRef(false);
 
   useEffect(() => {
@@ -361,12 +410,22 @@ function SearchContent() {
 
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user?.id) {
-        setCurrentUserId(session.user.id);
-        
+        const uid = session.user.id;
+        setCurrentUserId(uid);
+
+        try {
+          const rawSavedSearches = localStorage.getItem(`chasedSports_savedSearches_${uid}`);
+          if (rawSavedSearches) {
+            setSavedSearches(JSON.parse(rawSavedSearches));
+          }
+        } catch {
+          // Ignore localStorage read errors
+        }
+
         const { data: athleteData } = await supabase
           .from('athletes')
           .select('id, first_name, gender, state, is_premium, is_founder, primary_sport')
-          .eq('id', session.user.id)
+          .eq('id', uid)
           .maybeSingle();
 
         if (athleteData) {
@@ -374,38 +433,20 @@ function SearchContent() {
           setAthleteFirstName(athleteData.first_name);
           setAthleteGender(athleteData.gender || 'Boys');
           if (athleteData.state) setAthleteState(athleteData.state);
-          
+
           const { data: sportsData } = await supabase
             .from('athlete_sports')
             .select('sport_name, metrics, custom_fit_score')
-            .eq('athlete_id', session.user.id);
+            .eq('athlete_id', uid);
 
           setAthleteProfile({ ...athleteData, athlete_sports: sportsData || [] });
-          
-          let bestScore = 0;
-          if (sportsData && sportsData.length > 0) {
-             sportsData.forEach((s: any) => {
-                 if (s.sport_name === 'Track & Field') {
-                     const prs = extractTrackPrs(sportsData);
-                     const trackScore = getAthleteProjection(prs, athleteData.gender || 'Boys').overallScore;
-                     if (trackScore > bestScore) bestScore = trackScore;
-                 } else {
-                     if (s.custom_fit_score && s.custom_fit_score > bestScore) bestScore = s.custom_fit_score;
-                 }
-             });
-          }
-          setAthleteScore(bestScore);
 
           const { data, error } = await supabase
             .from('saved_colleges')
             .select('college_id')
-            .eq('athlete_id', session.user.id);
+            .eq('athlete_id', uid);
 
-          if (error) {
-            console.error("Error fetching saved colleges:", error.message);
-          }
-
-          if (data) {
+          if (!error && data) {
             setSavedCollegeIds(new Set(data.map((d: { college_id: string }) => d.college_id)));
           }
         }
@@ -414,28 +455,169 @@ function SearchContent() {
     fetchUserAndSaves();
   }, [supabase]);
 
-  // --- DYNAMIC HERO SCORE LOGIC ---
-  const activeAthleteScore = useMemo(() => {
-    if (!isAthlete || !athleteProfile) return { score: 0, label: 'Base' };
+  // --- EXTRACT ATHLETE'S SELECTED SPORTS FROM athlete_sports TABLE ---
+  const athleteSelectedSports = useMemo<string[]>(() => {
+    if (!isAthlete || !athleteProfile) return [];
+    const sportsSet = new Set<string>();
 
-    const targetSport = selectedSport || athleteProfile.primary_sport || 'Track & Field';
-    let score = 0;
-    const sportsList = athleteProfile.athlete_sports || [];
-    
-    if (targetSport === 'Track & Field') {
-        const prs = extractTrackPrs(sportsList);
-        score = getAthleteProjection(prs, athleteGender).overallScore;
-    } else {
-        const sportRow = sportsList.find((s: any) => s.sport_name === targetSport);
-        score = sportRow?.custom_fit_score || 0;
+    if (Array.isArray(athleteProfile.athlete_sports)) {
+      athleteProfile.athlete_sports.forEach((row: any) => {
+        if (row?.sport_name && typeof row.sport_name === 'string') {
+          sportsSet.add(row.sport_name.trim());
+        }
+      });
     }
 
-    return { score, label: targetSport };
-  }, [selectedSport, athleteProfile, isAthlete, athleteGender]);
+    if (athleteProfile.primary_sport && typeof athleteProfile.primary_sport === 'string') {
+      sportsSet.add(athleteProfile.primary_sport.trim());
+    }
 
-  // --- 2. Load Initial State (Filters & Results) ---
+    return Array.from(sportsSet);
+  }, [isAthlete, athleteProfile]);
+
+  // --- O(1) PRE-COMPUTED ATHLETE SCORES BY SPORT (STAT-BASED SPORTS ONLY) ---
+  const athleteScoresBySport = useMemo(() => {
+    const map: Record<string, number> = {};
+    if (!isAthlete || !athleteProfile) return map;
+
+    const sportsList = athleteProfile.athlete_sports || [];
+    const prs = extractTrackPrs(sportsList);
+    const trackScore = getAthleteProjection(prs, athleteGender || 'Boys').overallScore;
+
+    if (trackScore > 0) {
+      map['Track & Field'] = trackScore;
+      map[normalizeSport('Track & Field')] = trackScore;
+    }
+
+    sportsList.forEach((s: any) => {
+      if (
+        s.sport_name &&
+        s.sport_name !== 'Track & Field' &&
+        isStatBasedSport(s.sport_name) &&
+        s.custom_fit_score
+      ) {
+        map[s.sport_name] = s.custom_fit_score;
+        map[normalizeSport(s.sport_name)] = s.custom_fit_score;
+      }
+    });
+
+    return map;
+  }, [isAthlete, athleteProfile, athleteGender]);
+
+  // --- DETERMINE CURRENT EFFECTIVE SPORT & WHETHER IT IS STAT-BASED ---
+  const effectiveSport = useMemo(() => {
+    if (selectedSport) return selectedSport;
+    if (athleteSelectedSports.length > 0) return athleteSelectedSports[0];
+    return '';
+  }, [selectedSport, athleteSelectedSports]);
+
+  const isCurrentSportStatBased = useMemo(() => {
+    if (!effectiveSport) return false;
+    return isStatBasedSport(effectiveSport);
+  }, [effectiveSport]);
+
+  // Automatically clear 'fit' bonus filter if user switches to a non-stat-based team sport
   useEffect(() => {
-    async function loadInitialState() {
+    if (!isCurrentSportStatBased && activeBonusFilter === 'fit') {
+      setActiveBonusFilter(null);
+    }
+  }, [isCurrentSportStatBased, activeBonusFilter]);
+
+  // --- DYNAMIC HERO SCORE LOGIC ---
+  const activeAthleteScore = useMemo(() => {
+    if (!isAthlete || !athleteProfile || !effectiveSport) {
+      return { score: 0, label: '', isStatBased: false };
+    }
+    const statBased = isStatBasedSport(effectiveSport);
+    if (!statBased) {
+      return { score: 0, label: effectiveSport, isStatBased: false };
+    }
+    const score =
+      athleteScoresBySport[effectiveSport] ||
+      athleteScoresBySport[normalizeSport(effectiveSport)] ||
+      0;
+    return { score, label: effectiveSport, isStatBased: true };
+  }, [effectiveSport, athleteProfile, isAthlete, athleteScoresBySport]);
+
+  // --- CORE SEARCH EXECUTION (Stable reference via latestFiltersRef) ---
+  const executeSearch = useCallback(async (overrides?: Partial<SavedSearchPreset>) => {
+    setErrorMsg(null);
+    const current = latestFiltersRef.current;
+
+    const sSport = overrides?.selectedSport !== undefined ? overrides.selectedSport : current.selectedSport;
+    const sSchool = overrides?.schoolName !== undefined ? overrides.schoolName : current.schoolName;
+    const sGender = overrides?.selectedGender !== undefined ? overrides.selectedGender : current.selectedGender;
+    const sDivision = overrides?.selectedDivision !== undefined ? overrides.selectedDivision : current.selectedDivision;
+    const sStates = overrides?.selectedStates !== undefined ? overrides.selectedStates : current.selectedStates;
+    const sMajor = overrides?.selectedMajor !== undefined ? overrides.selectedMajor : current.selectedMajor;
+
+    if (!sSport && !sSchool && !sGender && !sDivision && sStates.length === 0 && !sMajor) {
+      showNotification("Please select at least one filter or enter a school name to begin.");
+      return;
+    }
+
+    setLoading(true);
+    setHasSearched(true);
+    setVisibleCount(PAGE_SIZE);
+
+    const selectString = `*, programs(sport, gender, operating_expense, team_performance_rating, average_scholarship)`;
+    let query = supabase.from('universities').select(selectString);
+
+    if (sSchool) query = query.ilike('name', `%${sSchool}%`);
+    if (sDivision) query = query.eq('division', sDivision);
+    if (sStates.length > 0) query = query.in('state', sStates);
+    if (sMajor) {
+      const searchMajor = getUmbrellaMajor(sMajor);
+      query = query.contains('majors_offered', [searchMajor]);
+    }
+
+    const { data, error } = await query.limit(800);
+
+    if (error) {
+      console.error('Database Error:', error.message);
+      showNotification("An error occurred while scanning the database. Please try again.");
+      setUniversities([]);
+    } else {
+      setUniversities(data as unknown as University[]);
+    }
+
+    setLoading(false);
+  }, [supabase, showNotification]);
+
+  // --- 2. Load Initial State & Listen to URL Query Param Changes (SEO Deep-Linking) ---
+  const hasHydratedState = useRef(false);
+
+  useEffect(() => {
+    const urlSport = searchParams?.get('sport') || '';
+    const urlDivision = searchParams?.get('division') || '';
+    const urlState = searchParams?.get('state') || '';
+    const urlMajor = searchParams?.get('major') || '';
+    const urlSchool = searchParams?.get('school') || '';
+
+    if (urlSport || urlDivision || urlState || urlMajor || urlSchool) {
+      const statesArr = urlState ? urlState.split(',').map(s => s.trim().toUpperCase()).filter(Boolean) : [];
+      setSelectedSport(urlSport);
+      setSelectedDivision(urlDivision);
+      setSelectedStates(statesArr);
+      setSelectedMajor(urlMajor);
+      setSchoolName(urlSchool);
+      if (urlSport) setHideAcademicOnly(true);
+      executeSearch({
+        selectedSport: urlSport,
+        selectedDivision: urlDivision,
+        selectedStates: statesArr,
+        selectedMajor: urlMajor,
+        schoolName: urlSchool,
+      });
+      hasHydratedState.current = true;
+      setIsInitialized(true);
+      return;
+    }
+
+    if (hasHydratedState.current) return;
+    hasHydratedState.current = true;
+
+    try {
       const savedFilters = sessionStorage.getItem('chasedSportsFilters');
       const savedResults = sessionStorage.getItem('chasedSportsResults');
 
@@ -445,59 +627,134 @@ function SearchContent() {
         setSelectedSport(f.selectedSport || '');
         setSelectedGender(f.selectedGender || '');
         setSelectedDivision(f.selectedDivision || '');
-        setSelectedStates(f.selectedStates || []);
+        setSelectedStates(Array.isArray(f.selectedStates) ? f.selectedStates : []);
         setSelectedMajor(f.selectedMajor || '');
         setMaxAcceptance(f.maxAcceptance || '');
         setTuitionType(f.tuitionType || 'in_state');
         setMaxTuition(f.maxTuition || '');
         setSortBy(f.sortBy || '');
-        setHasSearched(f.hasSearched || false);
-        setShowAdvanced(f.showAdvanced || false);
-        setHideAcademicOnly(f.hideAcademicOnly || false);
+        setHasSearched(Boolean(f.hasSearched));
+        setShowAdvanced(Boolean(f.showAdvanced));
+        setHideAcademicOnly(Boolean(f.hideAcademicOnly));
         setActiveBonusFilter(f.activeBonusFilter || null);
       }
 
-      if (savedResults) setUniversities(JSON.parse(savedResults));
+      if (savedResults) {
+        setUniversities(JSON.parse(savedResults));
+      }
+
+      const savedSideBySide = sessionStorage.getItem('chasedSportsSideBySide');
+      if (savedSideBySide) {
+        setSideBySideList(JSON.parse(savedSideBySide));
+      }
+    } catch {
+      // Ignore corrupted storage
+    } finally {
       setIsInitialized(true);
     }
-    
-    loadInitialState();
-  }, []);
+  }, [searchParams, executeSearch]);
 
-  // --- Auto-Save States ---
+  // --- SEO DYNAMIC DOCUMENT TITLE ---
   useEffect(() => {
-    if (!isInitialized) return; 
-    const filters = {
-      schoolName, selectedSport, selectedGender, selectedDivision, selectedStates,
-      selectedMajor, maxAcceptance, tuitionType, maxTuition, sortBy, hasSearched, showAdvanced, hideAcademicOnly, activeBonusFilter
-    };
-    sessionStorage.setItem('chasedSportsFilters', JSON.stringify(filters));
+    if (!isInitialized) return;
+    const parts: string[] = [];
+    if (selectedDivision) parts.push(selectedDivision);
+    if (selectedSport) parts.push(selectedSport);
+    else parts.push('College Athletic');
+    parts.push('Programs & Scholarships');
+    if (selectedStates.length > 0) parts.push(`in ${selectedStates.slice(0, 3).join(', ')}`);
+    if (selectedMajor) parts.push(`for ${selectedMajor}`);
+    document.title = `${parts.join(' ')} | ChasedSports College Finder`;
+  }, [isInitialized, selectedDivision, selectedSport, selectedStates, selectedMajor]);
+
+  // --- SAFE SESSION STORAGE CACHING ---
+  useEffect(() => {
+    if (!isInitialized) return;
+    try {
+      const filters = {
+        schoolName, selectedSport, selectedGender, selectedDivision, selectedStates,
+        selectedMajor, maxAcceptance, tuitionType, maxTuition, sortBy, hasSearched, showAdvanced, hideAcademicOnly, activeBonusFilter
+      };
+      sessionStorage.setItem('chasedSportsFilters', JSON.stringify(filters));
+    } catch {
+      // Ignore quota exceeded errors
+    }
   }, [isInitialized, schoolName, selectedSport, selectedGender, selectedDivision, selectedStates, selectedMajor, maxAcceptance, tuitionType, maxTuition, sortBy, hasSearched, showAdvanced, activeBonusFilter, hideAcademicOnly]);
 
   useEffect(() => {
     if (!isInitialized) return;
-    sessionStorage.setItem('chasedSportsResults', JSON.stringify(universities));
+    try {
+      const compactUniversities = universities.map(u => ({
+        id: u.id,
+        slug: u.slug,
+        name: u.name,
+        city: u.city,
+        state: u.state,
+        division: u.division,
+        majors_offered: u.majors_offered,
+        acceptance_rate: u.acceptance_rate,
+        median_earnings: u.median_earnings,
+        tuition_in_state: u.tuition_in_state,
+        tuition_out_of_state: u.tuition_out_of_state,
+        tuition: u.tuition,
+        programs: u.programs
+      }));
+      sessionStorage.setItem('chasedSportsResults', JSON.stringify(compactUniversities));
+    } catch {
+      // Fallback if 800 schools exceed sessionStorage quota
+    }
   }, [isInitialized, universities]);
 
-  const toggleState = (stateCode: string) => {
-    if (selectedStates.includes(stateCode)) {
-      setSelectedStates(selectedStates.filter(s => s !== stateCode));
-    } else {
-      setSelectedStates([...selectedStates, stateCode]);
+  useEffect(() => {
+    if (!isInitialized) return;
+    try {
+      sessionStorage.setItem('chasedSportsSideBySide', JSON.stringify(sideBySideList));
+    } catch {
+      // Ignore quota errors
     }
+  }, [isInitialized, sideBySideList]);
+
+  // Reset pagination whenever filters or sort change
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [universities, maxAcceptance, maxTuition, tuitionType, sortBy, activeBonusFilter, selectedSport, selectedGender, hideAcademicOnly]);
+
+  const toggleState = (stateCode: string) => {
+    setSelectedStates(prev =>
+      prev.includes(stateCode) ? prev.filter(s => s !== stateCode) : [...prev, stateCode]
+    );
   };
 
   const toggleBonusFilter = (filter: MatchmakerCategory) => {
-    setActiveBonusFilter(activeBonusFilter === filter ? null : filter);
+    setActiveBonusFilter(prev => (prev === filter ? null : filter));
   };
+
+  // --- ACTION: TOGGLE SIDE BY SIDE ---
+  const toggleSideBySide = useCallback((e: React.MouseEvent, uni: University) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    setSideBySideList(prev => {
+      const exists = prev.some(item => item.id === uni.id);
+      if (exists) {
+        const next = prev.filter(item => item.id !== uni.id);
+        if (next.length === 0) setIsSideBySideOpen(false);
+        return next;
+      }
+      if (prev.length >= 3) {
+        showNotification("You can compare up to 3 programs at a time in Side by Side.");
+        return prev;
+      }
+      return [...prev, uni];
+    });
+  }, [showNotification]);
 
   // --- ACTION: SAVE COLLEGE ---
   const toggleSaveCollege = async (e: React.MouseEvent, collegeId: string) => {
-    e.preventDefault(); 
+    e.preventDefault();
     e.stopPropagation();
     if (!currentUserId) {
-      setErrorMsg("Create a free athlete account to start saving target schools to your dashboard.");
-      setTimeout(() => setErrorMsg(null), 5000);
+      showNotification("Create a free athlete account to start saving target schools to your dashboard.");
       return;
     }
 
@@ -511,7 +768,7 @@ function SearchContent() {
           .delete()
           .eq('athlete_id', currentUserId)
           .eq('college_id', collegeId);
-        
+
         setSavedCollegeIds(prev => {
           const next = new Set(prev);
           next.delete(collegeId);
@@ -521,7 +778,7 @@ function SearchContent() {
         await supabase
           .from('saved_colleges')
           .insert({ athlete_id: currentUserId, college_id: collegeId });
-        
+
         setSavedCollegeIds(prev => {
           const next = new Set(prev);
           next.add(collegeId);
@@ -530,14 +787,94 @@ function SearchContent() {
       }
     } catch (err: any) {
       console.error("Save Error:", err.message);
-      setErrorMsg("Failed to update saved schools. Please try again.");
-      setTimeout(() => setErrorMsg(null), 5000);
+      showNotification("Failed to update saved schools. Please try again.");
     } finally {
       setSavingIds(prev => {
         const next = new Set(prev);
         next.delete(collegeId);
         return next;
       });
+    }
+  };
+
+  // --- SAVED SEARCHES MANAGEMENT ---
+  const handleSaveCurrentSearch = () => {
+    if (!currentUserId) {
+      showNotification("Log in to save custom filter presets to your account.");
+      return;
+    }
+    if (!selectedSport && !schoolName && !selectedGender && !selectedDivision && selectedStates.length === 0 && !selectedMajor) {
+      showNotification("Select at least one filter before saving a preset.");
+      return;
+    }
+    const trimmed = newSearchName.trim();
+    if (!trimmed) {
+      showNotification("Please enter a name for your saved search.");
+      return;
+    }
+
+    const newPreset: SavedSearchPreset = {
+      id: Date.now().toString(),
+      name: trimmed,
+      schoolName,
+      selectedSport,
+      selectedGender,
+      selectedDivision,
+      selectedStates,
+      selectedMajor,
+      maxAcceptance,
+      tuitionType,
+      maxTuition,
+      sortBy,
+      activeBonusFilter,
+      hideAcademicOnly
+    };
+
+    const updated = [newPreset, ...savedSearches].slice(0, 10);
+    setSavedSearches(updated);
+    setNewSearchName('');
+    setIsSavingSearch(false);
+
+    try {
+      localStorage.setItem(`chasedSports_savedSearches_${currentUserId}`, JSON.stringify(updated));
+      showNotification(`Saved "${trimmed}" preset!`, false);
+    } catch {
+      // Ignore storage error
+    }
+  };
+
+  const applySavedSearch = (preset: SavedSearchPreset) => {
+    const safeBonus =
+      preset.activeBonusFilter === 'fit' && !isStatBasedSport(preset.selectedSport || effectiveSport)
+        ? null
+        : preset.activeBonusFilter;
+
+    setSchoolName(preset.schoolName);
+    setSelectedSport(preset.selectedSport);
+    setSelectedGender(preset.selectedGender);
+    setSelectedDivision(preset.selectedDivision);
+    setSelectedStates(preset.selectedStates);
+    setSelectedMajor(preset.selectedMajor);
+    setMaxAcceptance(preset.maxAcceptance);
+    setTuitionType(preset.tuitionType);
+    setMaxTuition(preset.maxTuition);
+    setSortBy(preset.sortBy);
+    setActiveBonusFilter(safeBonus);
+    setHideAcademicOnly(preset.hideAcademicOnly);
+
+    executeSearch(preset);
+  };
+
+  const deleteSavedSearch = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    const updated = savedSearches.filter(s => s.id !== id);
+    setSavedSearches(updated);
+    if (currentUserId) {
+      try {
+        localStorage.setItem(`chasedSports_savedSearches_${currentUserId}`, JSON.stringify(updated));
+      } catch {
+        // Ignore storage error
+      }
     }
   };
 
@@ -557,123 +894,102 @@ function SearchContent() {
     setActiveBonusFilter(null);
     setUniversities([]);
     setErrorMsg(null);
-    sessionStorage.removeItem('chasedSportsFilters');
-    sessionStorage.removeItem('chasedSportsResults');
+    setVisibleCount(PAGE_SIZE);
+    try {
+      sessionStorage.removeItem('chasedSportsFilters');
+      sessionStorage.removeItem('chasedSportsResults');
+    } catch {
+      // Ignore storage error
+    }
   };
-
-  async function handleSearch() {
-    setErrorMsg(null);
-    if (!selectedSport && !schoolName && !selectedGender && !selectedDivision && selectedStates.length === 0 && !selectedMajor) {
-      setErrorMsg("Please select at least one filter or enter a school name to begin.");
-      setTimeout(() => setErrorMsg(null), 5000);
-      return;
-    }
-
-    setLoading(true);
-    setHasSearched(true);
-
-    let selectString = `*, programs(sport, gender, operating_expense, team_performance_rating, average_scholarship)`;
-    let query = supabase.from('universities').select(selectString);
-
-    if (schoolName) query = query.ilike('name', `%${schoolName}%`);
-    if (selectedDivision) query = query.eq('division', selectedDivision);
-    if (selectedStates.length > 0) query = query.in('state', selectedStates);
-    if (selectedMajor) {
-      const searchMajor = getUmbrellaMajor(selectedMajor);
-      query = query.contains('majors_offered', [searchMajor]); 
-    }
-
-    const { data, error } = await query.limit(800);
-
-    if (error) {
-      console.error('Database Error:', error.message);
-      setErrorMsg("An error occurred while scanning the database. Please try again.");
-      setUniversities([]);
-    } else {
-      setUniversities(data as unknown as University[]);
-    }
-    
-    setLoading(false);
-  }
 
   const mappedMajor = getUmbrellaMajor(selectedMajor);
   const showMajorHint = selectedMajor.length > 2 && mappedMajor.toLowerCase() !== selectedMajor.toLowerCase();
-  
-  const isCoach = currentUserId && !isAthlete;
+  const isCoach = Boolean(currentUserId && !isAthlete);
 
   // --- HELPER: GET CALCULATED TUITION ---
-  const getCalculatedTuition = (uni: University) => {
+  const getCalculatedTuition = useCallback((uni: University) => {
     if (!uni) return { amount: 0, isInState: false };
     const isHomeState = Boolean(athleteState && uni.state === athleteState);
     let amount = uni.tuition_out_of_state || uni.tuition || 0;
-    
+
     if (isHomeState && uni.tuition_in_state) {
-        amount = uni.tuition_in_state;
+      amount = uni.tuition_in_state;
     } else if (isHomeState && uni.tuition) {
-        amount = uni.tuition;
+      amount = uni.tuition;
     }
     return { amount, isInState: isHomeState };
-  };
+  }, [athleteState]);
 
-  // --- FILTER & SORT LOGIC ---
-  const sortedAndFilteredUniversities = useMemo(() => {
-    let processed = universities.map(uni => {
-        let targetProgram = null;
-        let hasSport = true;
-        let athleteMatchScore = 0;
-        
-        const normalizeSport = (s: string) => s.toLowerCase().replace(/ and /g, ' & ').replace(/[^a-z0-9]/g, '');
-
-        if (selectedSport) {
-            const searchGenderStr = selectedGender ? selectedGender.toLowerCase() : (isAthlete && athleteGender ? athleteGender.toLowerCase() : '');
-            let targetGender = '';
-            if (searchGenderStr === 'men' || searchGenderStr === 'boys') targetGender = 'men';
-            if (searchGenderStr === 'women' || searchGenderStr === 'girls') targetGender = 'women';
-
-            targetProgram = uni.programs?.find(p => {
-                const normSearch = normalizeSport(selectedSport);
-                const normDb = normalizeSport(p.sport || '');
-                if (normSearch && !normDb.includes(normSearch) && !normSearch.includes(normDb)) return false;
-                
-                if (targetGender) {
-                    const pG = (p.gender || '').toLowerCase();
-                    const isDbMen = pG === 'men' || pG === 'boys' || pG === "men's" || pG === "boys'" || pG === 'male';
-                    const isDbWomen = pG === 'women' || pG === 'girls' || pG === "women's" || pG === "girls'" || pG === 'female';
-                    
-                    if (targetGender === 'men' && !isDbMen) return false;
-                    if (targetGender === 'women' && !isDbWomen) return false;
-                }
-                return true;
-            });
-            if (!targetProgram) hasSport = false;
-        } else {
-            targetProgram = uni.programs?.[0];
-            if (!targetProgram) hasSport = false;
-        }
-
-        if (isAthlete && athleteProfile && hasSport && targetProgram) {
-            const sportsList = athleteProfile.athlete_sports || [];
-            const progSport = targetProgram.sport;
-            
-            if (progSport === 'Track & Field') {
-                const prs = extractTrackPrs(sportsList);
-                athleteMatchScore = getAthleteProjection(prs, athleteGender).overallScore;
-            } else {
-                const sportRow = sportsList.find((s: any) => s.sport_name === progSport);
-                athleteMatchScore = sportRow?.custom_fit_score || 0;
-            }
-        }
-        return { ...uni, targetProgram, hasSport, athleteMatchScore };
+  // --- HELPER: BUILD EMAIL BUILDER DEEP LINK ---
+  const getEmailBuilderHref = useCallback((uni: University) => {
+    const sportParam = uni.targetProgram?.sport || effectiveSport || '';
+    const params = new URLSearchParams({
+      college: uni.name,
+      slug: uni.slug,
+      ...(sportParam && { sport: sportParam }),
+      ...(uni.division && { division: uni.division }),
     });
+    return `/dashboard/email-builder?${params.toString()}`;
+  }, [effectiveSport]);
 
-    if (hideAcademicOnly && (selectedSport || athleteProfile?.primary_sport)) {
-        processed = processed.filter(uni => uni.hasSport);
+  // --- SHARED UNIVERSITY ENRICHMENT HELPER ---
+  const enrichUniversity = useCallback((uni: University): University => {
+    const normSearchSport = effectiveSport ? normalizeSport(effectiveSport) : '';
+
+    const searchGenderStr = selectedGender ? selectedGender.toLowerCase() : (isAthlete && athleteGender ? athleteGender.toLowerCase() : '');
+    let targetGender = '';
+    if (searchGenderStr === 'men' || searchGenderStr === 'boys') targetGender = 'men';
+    if (searchGenderStr === 'women' || searchGenderStr === 'girls') targetGender = 'women';
+
+    let targetProgram = null;
+    let hasSport = true;
+    let athleteMatchScore = 0;
+
+    if (normSearchSport) {
+      targetProgram = uni.programs?.find(p => {
+        const normDb = normalizeSport(p.sport || '');
+        if (!normDb.includes(normSearchSport) && !normSearchSport.includes(normDb)) return false;
+
+        if (targetGender) {
+          const pG = (p.gender || '').toLowerCase();
+          const isDbMen = pG === 'men' || pG === 'boys' || pG === "men's" || pG === "boys'" || pG === 'male';
+          const isDbWomen = pG === 'women' || pG === 'girls' || pG === "women's" || pG === "girls'" || pG === 'female';
+
+          if (targetGender === 'men' && !isDbMen) return false;
+          if (targetGender === 'women' && !isDbWomen) return false;
+        }
+        return true;
+      });
+      if (!targetProgram) hasSport = false;
+    } else {
+      targetProgram = uni.programs?.[0];
+      if (!targetProgram) hasSport = false;
     }
 
-    let filtered = processed.filter((uni) => {
+    if (isAthlete && hasSport && targetProgram?.sport && isStatBasedSport(targetProgram.sport)) {
+      const progSport = targetProgram.sport;
+      athleteMatchScore =
+        athleteScoresBySport[progSport] ||
+        athleteScoresBySport[normalizeSport(progSport)] ||
+        0;
+    }
+
+    return { ...uni, targetProgram, hasSport, athleteMatchScore };
+  }, [effectiveSport, selectedGender, isAthlete, athleteGender, athleteScoresBySport]);
+
+  // --- OPTIMIZED FILTER & SORT LOGIC ---
+  const sortedAndFilteredUniversities = useMemo(() => {
+    let processed = universities.map(enrichUniversity);
+
+    if (hideAcademicOnly && effectiveSport) {
+      processed = processed.filter(uni => uni.hasSport);
+    }
+
+    const filtered = processed.filter((uni) => {
       const hasAcceptanceData = uni.acceptance_rate != null && uni.acceptance_rate !== '';
       const hasEarnings = uni.median_earnings != null && uni.median_earnings > 0;
-      
+
       if (!hasAcceptanceData && !hasEarnings) return false;
 
       if (maxAcceptance) {
@@ -683,63 +999,62 @@ function SearchContent() {
 
       if (maxTuition) {
         const maxT = parseFloat(maxTuition);
-        const schoolTuition = tuitionType === 'in_state' 
+        const schoolTuition = tuitionType === 'in_state'
           ? (uni.tuition_in_state || uni.tuition || 0)
           : (uni.tuition_out_of_state || uni.tuition || 0);
-        
+
         if (schoolTuition === 0 || schoolTuition > maxT) return false;
       }
       return true;
     });
 
-    // APPLY SORTING: Bonus Filters completely override basic sortBy
     if (activeBonusFilter) {
       filtered.sort((a, b) => {
-        if (activeBonusFilter === 'fit') {
+        if (activeBonusFilter === 'fit' && isCurrentSportStatBased) {
           const ratingA = a.hasSport ? getCalculatedRating(a, a.targetProgram) : 0;
           const ratingB = b.hasSport ? getCalculatedRating(b, b.targetProgram) : 0;
           let scoreA = 0;
           let scoreB = 0;
-  
+
           if (a.hasSport && ratingA > 0 && a.athleteMatchScore && a.athleteMatchScore > 0) {
-              const diffA = Math.abs(ratingA - a.athleteMatchScore);
-              scoreA += 100 - (diffA * 5); 
+            const diffA = Math.abs(ratingA - a.athleteMatchScore);
+            scoreA += 100 - (diffA * 5);
           } else if (a.hasSport) {
-              scoreA += ratingA;
+            scoreA += ratingA;
           }
-  
+
           if (b.hasSport && ratingB > 0 && b.athleteMatchScore && b.athleteMatchScore > 0) {
-              const diffB = Math.abs(ratingB - b.athleteMatchScore);
-              scoreB += 100 - (diffB * 5);
+            const diffB = Math.abs(ratingB - b.athleteMatchScore);
+            scoreB += 100 - (diffB * 5);
           } else if (b.hasSport) {
-              scoreB += ratingB;
+            scoreB += ratingB;
           }
-  
-          scoreA += Math.min((a.median_earnings || 0) / 2000, 50); 
+
+          scoreA += Math.min((a.median_earnings || 0) / 2000, 50);
           scoreB += Math.min((b.median_earnings || 0) / 2000, 50);
           const accA = parseFloat(a.acceptance_rate || '100');
           const accB = parseFloat(b.acceptance_rate || '100');
-          scoreA += ((100 - accA) / 4); 
+          scoreA += ((100 - accA) / 4);
           scoreB += ((100 - accB) / 4);
           scoreA += Math.min((a.targetProgram?.operating_expense || 0) / 100000, 10);
           scoreB += Math.min((b.targetProgram?.operating_expense || 0) / 100000, 10);
-          
+
           return scoreB - scoreA;
         }
-        else if (activeBonusFilter === 'cost') {
+        if (activeBonusFilter === 'cost') {
           const costA = getCalculatedTuition(a).amount || Number.MAX_SAFE_INTEGER;
           const scholA = a.hasSport ? (a.targetProgram?.average_scholarship || 0) : 0;
           const costB = getCalculatedTuition(b).amount || Number.MAX_SAFE_INTEGER;
           const scholB = b.hasSport ? (b.targetProgram?.average_scholarship || 0) : 0;
           return Math.max(0, costA - scholA) - Math.max(0, costB - scholB);
         }
-        else if (activeBonusFilter === 'salary') {
+        if (activeBonusFilter === 'salary') {
           return (b.median_earnings || 0) - (a.median_earnings || 0);
         }
-        else if (activeBonusFilter === 'funding') {
+        if (activeBonusFilter === 'funding') {
           return (b.targetProgram?.operating_expense || 0) - (a.targetProgram?.operating_expense || 0);
         }
-        else if (activeBonusFilter === 'roi') {
+        if (activeBonusFilter === 'roi') {
           const costA = getCalculatedTuition(a).amount || 1;
           const scholA = a.hasSport ? (a.targetProgram?.average_scholarship || 0) : 0;
           const netA = Math.max(1, costA - scholA);
@@ -756,7 +1071,7 @@ function SearchContent() {
           const valA = a.targetProgram?.operating_expense || 0;
           const valB = b.targetProgram?.operating_expense || 0;
           if (sortBy === 'budget_low') {
-            if (valA === 0 && valB !== 0) return 1; 
+            if (valA === 0 && valB !== 0) return 1;
             if (valB === 0 && valA !== 0) return -1;
             return valA - valB;
           }
@@ -795,24 +1110,136 @@ function SearchContent() {
         return 0;
       });
     } else {
-        filtered.sort((a, b) => {
-             const ratingA = a.hasSport ? getCalculatedRating(a, a.targetProgram) : 0;
-             const ratingB = b.hasSport ? getCalculatedRating(b, b.targetProgram) : 0;
-             if (ratingA !== ratingB) return ratingB - ratingA;
+      filtered.sort((a, b) => {
+        const ratingA = a.hasSport ? getCalculatedRating(a, a.targetProgram) : 0;
+        const ratingB = b.hasSport ? getCalculatedRating(b, b.targetProgram) : 0;
+        if (ratingA !== ratingB) return ratingB - ratingA;
 
-             const accA = parseFloat(a.acceptance_rate?.replace('%', '') || '100');
-             const accB = parseFloat(b.acceptance_rate?.replace('%', '') || '100');
-             return accA - accB;
-        });
+        const accA = parseFloat(a.acceptance_rate?.replace('%', '') || '100');
+        const accB = parseFloat(b.acceptance_rate?.replace('%', '') || '100');
+        return accA - accB;
+      });
     }
     return filtered;
-  }, [universities, maxAcceptance, maxTuition, tuitionType, sortBy, activeBonusFilter, selectedSport, selectedGender, isAthlete, athleteGender, athleteProfile, hideAcademicOnly]);
+  }, [
+    universities,
+    enrichUniversity,
+    effectiveSport,
+    isCurrentSportStatBased,
+    maxAcceptance,
+    maxTuition,
+    tuitionType,
+    sortBy,
+    activeBonusFilter,
+    hideAcademicOnly,
+    getCalculatedTuition
+  ]);
 
+  // --- ENRICHED SIDE BY SIDE DATA & WINNER CALCULATIONS ---
+  const enrichedSideBySide = useMemo(() => {
+    return sideBySideList.map(uni => {
+      const enriched = enrichUniversity(uni);
+      const { amount: tuition, isInState } = getCalculatedTuition(enriched);
+      const scholarship = enriched.hasSport ? (enriched.targetProgram?.average_scholarship || 0) : 0;
+      const netCost = tuition > 0 ? Math.max(0, tuition - scholarship) : 0;
+      const netCostForRoi = tuition > 0 ? Math.max(1, tuition - scholarship) : 0;
+      const salary = enriched.median_earnings || 0;
+      const roi = salary > 0 && netCostForRoi > 0 ? Number((salary / netCostForRoi).toFixed(1)) : 0;
+      const budget = enriched.hasSport ? (enriched.targetProgram?.operating_expense || 0) : 0;
+      const teamRating = enriched.hasSport ? getCalculatedRating(enriched, enriched.targetProgram) : 0;
+      const acceptance = parseFloat(enriched.acceptance_rate?.replace('%', '') || '0');
+      const sportIsStatBased = isStatBasedSport(enriched.targetProgram?.sport || effectiveSport);
+
+      let fitPercent = 0;
+      let fitLabel = 'No Program';
+      if (enriched.hasSport && teamRating > 0) {
+        if (sportIsStatBased && isAthlete && enriched.athleteMatchScore && enriched.athleteMatchScore > 0) {
+          const diff = teamRating - enriched.athleteMatchScore;
+          fitPercent = diff <= 0 ? 100 : Math.max(10, 100 - (diff * 5));
+          if (diff <= 0) fitLabel = 'Great Fit';
+          else if (fitPercent >= 80) fitLabel = 'Good Fit';
+          else if (fitPercent >= 50) fitLabel = 'Possible Walk-On';
+          else fitLabel = 'Stretch';
+        } else {
+          fitPercent = teamRating;
+          fitLabel = `${teamRating} Rtg`;
+        }
+      }
+
+      return {
+        ...enriched,
+        tuition,
+        isInState,
+        scholarship,
+        netCost,
+        salary,
+        roi,
+        budget,
+        teamRating,
+        acceptance,
+        fitPercent,
+        fitLabel,
+        sportIsStatBased
+      };
+    });
+  }, [sideBySideList, enrichUniversity, getCalculatedTuition, isAthlete, effectiveSport]);
+
+  const sideBySideWinners = useMemo(() => {
+    if (enrichedSideBySide.length < 2) return null;
+
+    const validNetCosts = enrichedSideBySide.filter(u => u.tuition > 0).map(u => u.netCost);
+    const minNetCost = validNetCosts.length > 0 ? Math.min(...validNetCosts) : null;
+
+    const maxSalary = Math.max(...enrichedSideBySide.map(u => u.salary));
+    const maxRoi = Math.max(...enrichedSideBySide.map(u => u.roi));
+    const maxBudget = Math.max(...enrichedSideBySide.map(u => u.budget));
+    const maxFit = Math.max(...enrichedSideBySide.map(u => u.fitPercent));
+
+    const validAcc = enrichedSideBySide.filter(u => u.acceptance > 0).map(u => u.acceptance);
+    const minAcc = validAcc.length > 0 ? Math.min(...validAcc) : null;
+
+    return {
+      minNetCost,
+      maxSalary: maxSalary > 0 ? maxSalary : null,
+      maxRoi: maxRoi > 0 ? maxRoi : null,
+      maxBudget: maxBudget > 0 ? maxBudget : null,
+      maxFit: maxFit > 0 ? maxFit : null,
+      minAcc
+    };
+  }, [enrichedSideBySide]);
+
+  // --- INTERSECTION OBSERVER FOR INFINITE SCROLL ---
+  useEffect(() => {
+    const sentinel = loadMoreRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setVisibleCount((prev) =>
+            prev < sortedAndFilteredUniversities.length
+              ? Math.min(prev + PAGE_SIZE, sortedAndFilteredUniversities.length)
+              : prev
+          );
+        }
+      },
+      { rootMargin: '350px' }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [sortedAndFilteredUniversities.length, hasSearched, loading]);
+
+  // --- READINESS METER (HIDES WALK-ON / FIT FOR NON-STAT TEAM SPORTS) ---
   const renderReadinessMeter = (uni: University) => {
     if (!uni.hasSport) return null;
 
-    const useScoreMatch = isAthlete && uni.athleteMatchScore && uni.athleteMatchScore > 0;
-    let teamRating = getCalculatedRating(uni, uni.targetProgram);
+    const programSport = uni.targetProgram?.sport || effectiveSport;
+    const sportIsStatBased = isStatBasedSport(programSport);
+    const useScoreMatch =
+      sportIsStatBased && isAthlete && uni.athleteMatchScore && uni.athleteMatchScore > 0;
+
+    const teamRating = getCalculatedRating(uni, uni.targetProgram);
     if (!teamRating) return null;
 
     if (useScoreMatch) {
@@ -823,13 +1250,19 @@ function SearchContent() {
       let label = 'Great Fit';
 
       if (diff > 0) {
-        percent = Math.max(10, 100 - (diff * 5)); 
+        percent = Math.max(10, 100 - (diff * 5));
         if (percent >= 80) {
-          colorClass = 'bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.5)]'; textClass = 'text-emerald-600'; label = 'Good Fit';
+          colorClass = 'bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.5)]';
+          textClass = 'text-emerald-600';
+          label = 'Good Fit';
         } else if (percent >= 50) {
-          colorClass = 'bg-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.5)]'; textClass = 'text-amber-600'; label = 'Possible Walk-On';
+          colorClass = 'bg-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.5)]';
+          textClass = 'text-amber-600';
+          label = 'Possible Walk-On';
         } else {
-          colorClass = 'bg-red-500 shadow-[0_0_15px_rgba(239,68,68,0.5)]'; textClass = 'text-red-600'; label = 'Stretch';
+          colorClass = 'bg-red-500 shadow-[0_0_15px_rgba(239,68,68,0.5)]';
+          textClass = 'text-red-600';
+          label = 'Stretch';
         }
       }
 
@@ -842,7 +1275,7 @@ function SearchContent() {
             <span className={`text-xs font-black ${textClass}`}>{label}</span>
           </div>
           <div className="w-full bg-slate-200/50 rounded-full h-2 overflow-hidden">
-            <div className={`h-full rounded-full transition-all duration-1000 ease-out ${colorClass}`} style={{ width: `${percent}%` }}></div>
+            <div className={`h-full rounded-full transition-all duration-700 ease-out ${colorClass}`} style={{ width: `${percent}%` }}></div>
           </div>
         </div>
       );
@@ -857,37 +1290,144 @@ function SearchContent() {
           <span className="text-xs font-black text-blue-600">{teamRating} Rtg</span>
         </div>
         <div className="w-full bg-slate-200/50 rounded-full h-2 overflow-hidden">
-          <div className="h-full bg-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.5)] rounded-full transition-all duration-1000 ease-out" style={{ width: `${Math.min(100, teamRating)}%` }}></div>
+          <div className="h-full bg-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.5)] rounded-full transition-all duration-700 ease-out" style={{ width: `${Math.min(100, teamRating)}%` }}></div>
         </div>
       </div>
     );
   };
 
-  // --- HELPER: GET GAMIFIED BADGE STRINGS ---
   const getRankBadgeProps = (index: number, filter: MatchmakerCategory | null, states: string[]) => {
-      if (!filter || index >= 5) return null;
-      let region = "US";
-      if (states.length === 1) region = states[0];
-      else if (states.length > 1) region = "Search";
+    if (!filter || index >= 5) return null;
+    if (filter === 'fit' && !isCurrentSportStatBased) return null;
 
-      let category = "";
-      if (filter === 'fit') category = "Athletic Fit";
-      if (filter === 'cost') category = "Lowest Cost";
-      if (filter === 'salary') category = "Salary Rank";
-      if (filter === 'funding') category = "Program Fund";
-      if (filter === 'roi') category = "Top ROI";
+    let region = "US";
+    if (states.length === 1) region = states[0];
+    else if (states.length > 1) region = "Search";
 
-      let styling = "";
-      if (index === 0) styling = "bg-gradient-to-br from-yellow-400 to-amber-600 shadow-[0_0_30px_rgba(251,191,36,0.6)] border border-yellow-200 text-yellow-950";
-      else if (index === 1) styling = "bg-gradient-to-br from-slate-300 to-slate-500 shadow-[0_0_30px_rgba(203,213,225,0.6)] border border-slate-100 text-slate-900";
-      else if (index === 2) styling = "bg-gradient-to-br from-orange-400 to-orange-700 shadow-[0_0_30px_rgba(249,115,22,0.6)] border border-orange-300 text-orange-950";
-      else styling = "bg-gradient-to-br from-blue-400 to-indigo-600 shadow-[0_0_30px_rgba(99,102,241,0.6)] border border-blue-300 text-white";
+    let category = "";
+    if (filter === 'fit') category = "Athletic Fit";
+    if (filter === 'cost') category = "Lowest Cost";
+    if (filter === 'salary') category = "Salary Rank";
+    if (filter === 'funding') category = "Program Fund";
+    if (filter === 'roi') category = "Top ROI";
 
-      return {
-          text: `#${index + 1} ${category} in ${region}`,
-          styling
-      };
+    let styling = "";
+    if (index === 0) styling = "bg-gradient-to-br from-yellow-400 to-amber-600 shadow-[0_0_30px_rgba(251,191,36,0.6)] border border-yellow-200 text-yellow-950";
+    else if (index === 1) styling = "bg-gradient-to-br from-slate-300 to-slate-500 shadow-[0_0_30px_rgba(203,213,225,0.6)] border border-slate-100 text-slate-900";
+    else if (index === 2) styling = "bg-gradient-to-br from-orange-400 to-orange-700 shadow-[0_0_30px_rgba(249,115,22,0.6)] border border-orange-300 text-orange-950";
+    else styling = "bg-gradient-to-br from-blue-400 to-indigo-600 shadow-[0_0_30px_rgba(99,102,241,0.6)] border border-blue-300 text-white";
+
+    return {
+      text: `#${index + 1} ${category} in ${region}`,
+      styling
+    };
   };
+
+  // --- DYNAMIC RECOMMENDED PRESETS BASED ON athlete_sports ---
+  const recommendedPresets = useMemo(() => {
+    const sportsToFeature =
+      athleteSelectedSports.length > 0
+        ? athleteSelectedSports
+        : ['Track & Field', 'Cross Country', 'Soccer', 'Basketball'];
+
+    const presets: Array<{
+      id: string;
+      label: string;
+      isPrimaryFit?: boolean;
+      sport: string;
+      division?: string;
+      states?: string[];
+      bonusFilter?: MatchmakerCategory | null;
+    }> = [];
+
+    sportsToFeature.forEach((sport) => {
+      const statBased = isStatBasedSport(sport);
+
+      if (statBased) {
+        presets.push({
+          id: `${sport}-fit`,
+          label: `My Best ${sport} Fits`,
+          isPrimaryFit: true,
+          sport,
+          bonusFilter: 'fit',
+        });
+      }
+
+      if (athleteState) {
+        presets.push({
+          id: `${sport}-state`,
+          label: `${sport} in ${athleteState}`,
+          sport,
+          states: [athleteState],
+          bonusFilter: null,
+        });
+      } else {
+        presets.push({
+          id: `${sport}-west`,
+          label: `West Coast ${sport}`,
+          sport,
+          states: ['OR', 'WA', 'CA', 'ID', 'AZ'],
+          bonusFilter: null,
+        });
+      }
+
+      presets.push({
+        id: `${sport}-d1`,
+        label: `NCAA D1 ${sport}`,
+        sport,
+        division: 'NCAA D1',
+        bonusFilter: null,
+      });
+
+      presets.push({
+        id: `${sport}-cost`,
+        label: `Lowest Cost ${sport}`,
+        sport,
+        bonusFilter: 'cost',
+      });
+
+      presets.push({
+        id: `${sport}-roi`,
+        label: `Highest ROI ${sport}`,
+        sport,
+        bonusFilter: 'roi',
+      });
+    });
+
+    return presets.slice(0, 8);
+  }, [athleteSelectedSports, athleteState]);
+
+  const visibleUniversities = useMemo(() => {
+    return sortedAndFilteredUniversities.slice(0, visibleCount);
+  }, [sortedAndFilteredUniversities, visibleCount]);
+
+  const sideBySideIds = useMemo(() => new Set(sideBySideList.map(u => u.id)), [sideBySideList]);
+
+  // --- DYNAMIC ITEMLIST JSON-LD WHEN RESULTS ARE LOADED ---
+  const dynamicItemListJsonLd = useMemo(() => {
+    if (visibleUniversities.length === 0) return null;
+    return {
+      '@context': 'https://schema.org',
+      '@type': 'ItemList',
+      name: `${selectedDivision || 'College'} ${selectedSport || 'Athletic'} Programs`,
+      numberOfItems: sortedAndFilteredUniversities.length,
+      itemListElement: visibleUniversities.slice(0, 15).map((u, idx) => ({
+        '@type': 'ListItem',
+        position: idx + 1,
+        item: {
+          '@type': 'CollegeOrUniversity',
+          name: u.name,
+          url: `https://www.chasedsports.com/college/${u.slug}`,
+          address: {
+            '@type': 'PostalAddress',
+            ...(u.city && { addressLocality: u.city }),
+            addressRegion: u.state,
+            addressCountry: 'US',
+          },
+        },
+      })),
+    };
+  }, [visibleUniversities, sortedAndFilteredUniversities.length, selectedDivision, selectedSport]);
 
   const renderedCollegeCards = useMemo(() => {
     if (loading || !isInitialized) {
@@ -904,161 +1444,657 @@ function SearchContent() {
       return (
         <div className="text-center py-16 bg-white/60 backdrop-blur-3xl rounded-3xl border border-slate-200 border-dashed shadow-sm">
           <Activity className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-          <h3 className="text-xl font-bold text-slate-900">No programs match your exact criteria</h3>
+          <h2 className="text-xl font-bold text-slate-900">No programs match your exact criteria</h2>
           <p className="text-slate-500 mt-2 font-medium">Try loosening your filters or adjusting your sorting preferences.</p>
         </div>
       );
     }
 
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {sortedAndFilteredUniversities.map((uni, index) => {
-          const { amount: tuitionToUse, isInState } = getCalculatedTuition(uni);
-          
-          let roiMultiplier = null;
-          if (uni.median_earnings && tuitionToUse && tuitionToUse > 0) {
-            roiMultiplier = (uni.median_earnings / tuitionToUse).toFixed(1);
-          }
+      <>
+        <div className="flex justify-between items-center mb-4 px-1">
+          <p className="text-xs font-black uppercase tracking-widest text-slate-400">
+            Showing {visibleUniversities.length} of {sortedAndFilteredUniversities.length} Programs
+          </p>
+          {sideBySideList.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setIsSideBySideOpen(true)}
+              className="text-xs font-black text-blue-600 hover:text-blue-700 flex items-center gap-1.5 bg-blue-50 px-3 py-1.5 rounded-xl border border-blue-200/60 transition-all"
+            >
+              <Scale className="w-3.5 h-3.5" />
+              Open Side by Side ({sideBySideList.length}/3)
+            </button>
+          )}
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {visibleUniversities.map((uni, index) => {
+            const { amount: tuitionToUse, isInState } = getCalculatedTuition(uni);
+            const avgScholarship = uni.hasSport ? (uni.targetProgram?.average_scholarship || 0) : 0;
+            const netCost = tuitionToUse > 0 ? Math.max(1, tuitionToUse - avgScholarship) : 0;
 
-          const isSaved = savedCollegeIds.has(uni.id);
-          const isProcessing = savingIds.has(uni.id);
-          const rankBadge = getRankBadgeProps(index, activeBonusFilter, selectedStates);
+            let roiMultiplier: string | null = null;
+            if (uni.median_earnings && netCost > 0) {
+              roiMultiplier = (uni.median_earnings / netCost).toFixed(1);
+            }
 
-          return (
-            <div key={uni.id} className={`relative bg-white/80 backdrop-blur-2xl rounded-3xl p-6 shadow-xl shadow-slate-200/40 border flex flex-col h-full transition-all duration-300 group ${rankBadge ? 'border-blue-300/50 hover:shadow-2xl hover:shadow-blue-500/20 hover:-translate-y-2' : 'border-slate-100/50 hover:shadow-2xl hover:shadow-blue-900/10 hover:-translate-y-2'}`}>
-              
-              {/* GAMIFIED BADGE */}
-              {rankBadge && (
+            const isSaved = savedCollegeIds.has(uni.id);
+            const isProcessing = savingIds.has(uni.id);
+            const isInSideBySide = sideBySideIds.has(uni.id);
+            const rankBadge = getRankBadgeProps(index, activeBonusFilter, selectedStates);
+
+            return (
+              <article
+                key={uni.id}
+                className={`relative bg-white/80 backdrop-blur-2xl rounded-3xl p-6 shadow-xl shadow-slate-200/40 border flex flex-col h-full transition-all duration-300 group ${
+                  isInSideBySide
+                    ? 'ring-2 ring-blue-500 border-blue-400'
+                    : rankBadge
+                    ? 'border-blue-300/50 hover:shadow-2xl hover:shadow-blue-500/20 hover:-translate-y-2'
+                    : 'border-slate-100/50 hover:shadow-2xl hover:shadow-blue-900/10 hover:-translate-y-2'
+                }`}
+              >
+                {rankBadge && (
                   <div className={`absolute -top-4 -left-4 z-20 px-5 py-2 rounded-full font-black text-sm tracking-tight ${rankBadge.styling}`}>
-                      {rankBadge.text}
+                    {rankBadge.text}
                   </div>
-              )}
+                )}
 
-              <div className="flex-grow pt-2">
-                <h3 className="text-xl font-black text-slate-900 leading-tight mb-3 group-hover:text-blue-600 transition-colors flex flex-col items-start gap-2">
-                  {uni.name}
-                  {!uni.hasSport && (selectedSport || athleteProfile?.primary_sport) && (
-                      <span className="text-[9px] bg-slate-100 border border-slate-200 text-slate-500 px-2 py-0.5 rounded font-black tracking-widest uppercase">Academic Match Only</span>
-                  )}
-                </h3>
-                
-                <div className="space-y-3 text-sm font-semibold text-slate-600 mb-6">
-                  <div className="flex items-center">
-                    <div className="w-7 h-7 rounded-full bg-blue-50 flex items-center justify-center mr-3 shrink-0">
-                      <MapPin className="w-3.5 h-3.5 text-blue-500" />
+                <div className="flex-grow pt-2">
+                  <h2 className="text-xl font-black text-slate-900 leading-tight mb-3 group-hover:text-blue-600 transition-colors flex flex-col items-start gap-2">
+                    <Link
+                      href={`/college/${uni.slug}${
+                        selectedSport || selectedGender
+                          ? `?${new URLSearchParams({
+                              ...(selectedSport && { sport: selectedSport }),
+                              ...(selectedGender && { gender: selectedGender }),
+                            }).toString()}`
+                          : ''
+                      }`}
+                      className="hover:underline"
+                    >
+                      {uni.name}
+                    </Link>
+                    {!uni.hasSport && effectiveSport && (
+                      <span className="text-[9px] bg-slate-100 border border-slate-200 text-slate-500 px-2 py-0.5 rounded font-black tracking-widest uppercase">
+                        Academic Match Only
+                      </span>
+                    )}
+                  </h2>
+
+                  <div className="space-y-3 text-sm font-semibold text-slate-600 mb-6">
+                    <div className="flex items-center">
+                      <div className="w-7 h-7 rounded-full bg-blue-50 flex items-center justify-center mr-3 shrink-0">
+                        <MapPin className="w-3.5 h-3.5 text-blue-500" />
+                      </div>
+                      <span className="truncate">{uni.city ? `${uni.city}, ${uni.state}` : uni.state}</span>
                     </div>
-                    <span className="truncate">{uni.city ? `${uni.city}, ${uni.state}` : uni.state}</span>
-                  </div>
-                  <div className="flex items-center">
-                    <div className="w-7 h-7 rounded-full bg-yellow-50 flex items-center justify-center mr-3 shrink-0">
-                      <Trophy className="w-3.5 h-3.5 text-yellow-500" />
+                    <div className="flex items-center">
+                      <div className="w-7 h-7 rounded-full bg-yellow-50 flex items-center justify-center mr-3 shrink-0">
+                        <Trophy className="w-3.5 h-3.5 text-yellow-500" />
+                      </div>
+                      {uni.division}
                     </div>
-                    {uni.division}
-                  </div>
-                  <div className="flex items-center">
-                    <div className="w-7 h-7 rounded-full bg-emerald-50 flex items-center justify-center mr-3 shrink-0">
-                      <DollarSign className="w-3.5 h-3.5 text-emerald-500" />
-                    </div>
-                    <span className="flex items-center gap-2">
+                    <div className="flex items-center">
+                      <div className="w-7 h-7 rounded-full bg-emerald-50 flex items-center justify-center mr-3 shrink-0">
+                        <DollarSign className="w-3.5 h-3.5 text-emerald-500" />
+                      </div>
+                      <span className="flex items-center flex-wrap gap-1.5">
                         {formatCurrency(tuitionToUse)} <span className="text-xs text-slate-400 font-bold">/yr</span>
                         {isInState && <span className="text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-black tracking-widest uppercase">In-State</span>}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 mb-2">
-                  <div className="bg-slate-50/50 rounded-xl p-3 border border-slate-100">
-                    <div className="flex items-center text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                      <Landmark className="w-3 h-3 mr-1" /> Acceptance
+                        {avgScholarship > 0 && (
+                          <span className="text-[9px] bg-blue-50 text-blue-600 border border-blue-200/60 px-1.5 py-0.5 rounded font-black tracking-wider uppercase" title="Estimated Average Athletic Aid">
+                            ~{formatCurrency(avgScholarship)} Aid
+                          </span>
+                        )}
+                      </span>
                     </div>
-                    <div className="font-black text-slate-800">{uni.acceptance_rate || 'N/A'}</div>
                   </div>
-                  
-                  <div className="bg-green-50/50 rounded-xl p-3 border border-green-100 relative">
-                    <div className="flex justify-between items-start mb-1">
-                      <div className="flex items-center text-[10px] font-bold text-green-600 uppercase tracking-wider">
-                        <TrendingUp className="w-3 h-3 mr-1" /> 10-Yr Salary
+
+                  <div className="grid grid-cols-2 gap-3 mb-2">
+                    <div className="bg-slate-50/50 rounded-xl p-3 border border-slate-100">
+                      <div className="flex items-center text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                        <Landmark className="w-3 h-3 mr-1" /> Acceptance
                       </div>
-                      {roiMultiplier && (
-                        <span className="text-[10px] font-black bg-green-200 text-green-800 px-1.5 py-0.5 rounded-md shadow-sm" title="Salary compared to Net Cost">
-                          {roiMultiplier}x ROI
-                        </span>
-                      )}
+                      <div className="font-black text-slate-800">{uni.acceptance_rate || 'N/A'}</div>
                     </div>
-                    <div className="font-black text-green-700">{uni.median_earnings ? formatCurrency(uni.median_earnings) : 'N/A'}</div>
+
+                    <div className="bg-green-50/50 rounded-xl p-3 border border-green-100 relative">
+                      <div className="flex justify-between items-start mb-1">
+                        <div className="flex items-center text-[10px] font-bold text-green-600 uppercase tracking-wider">
+                          <TrendingUp className="w-3 h-3 mr-1" /> 10-Yr Salary
+                        </div>
+                        {roiMultiplier && (
+                          <span className="text-[10px] font-black bg-green-200 text-green-800 px-1.5 py-0.5 rounded-md shadow-sm" title="10-Year Median Salary compared to Net Annual Cost">
+                            {roiMultiplier}x ROI
+                          </span>
+                        )}
+                      </div>
+                      <div className="font-black text-green-700">{uni.median_earnings ? formatCurrency(uni.median_earnings) : 'N/A'}</div>
+                    </div>
+                  </div>
+
+                  {renderReadinessMeter(uni)}
+                </div>
+
+                <div className="mt-5 pt-5 border-t border-slate-100 flex justify-between items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={(e) => toggleSideBySide(e, uni)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 border shrink-0 ${
+                      isInSideBySide
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-500/30'
+                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50/50'
+                    }`}
+                    title="Compare in Side by Side"
+                  >
+                    {isInSideBySide ? <Check className="w-3.5 h-3.5" /> : <Scale className="w-3.5 h-3.5" />}
+                    <span>Side by Side</span>
+                  </button>
+
+                  <div className="flex items-center gap-1.5">
+                    {!isCoach && (
+                      <>
+                        <Link
+                          href={getEmailBuilderHref(uni)}
+                          className="p-2 rounded-lg border bg-white border-slate-200 text-slate-500 hover:text-indigo-600 hover:border-indigo-200 hover:bg-indigo-50/60 hover:shadow-md transition-all shadow-sm"
+                          title={`Draft Coach Email to ${uni.name}`}
+                        >
+                          <Mail className="w-4 h-4" />
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={(e) => toggleSaveCollege(e, uni.id)}
+                          disabled={isProcessing}
+                          className={`p-2 rounded-lg border transition-all shadow-sm ${
+                            isSaved
+                              ? 'bg-blue-50 border-blue-200 text-blue-600'
+                              : 'bg-white border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-200 hover:shadow-md'
+                          }`}
+                          title="Save School"
+                        >
+                          {isProcessing ? (
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Bookmark className={`w-4 h-4 ${isSaved ? 'fill-current' : ''}`} />
+                          )}
+                        </button>
+                      </>
+                    )}
+                    <Link
+                      href={`/college/${uni.slug}${
+                        selectedSport || selectedGender
+                          ? `?${new URLSearchParams({
+                              ...(selectedSport && { sport: selectedSport }),
+                              ...(selectedGender && { gender: selectedGender }),
+                            }).toString()}`
+                          : ''
+                      }`}
+                      className={`text-xs sm:text-sm font-black flex items-center px-3 py-2 rounded-lg transition-colors ${rankBadge ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md hover:from-blue-500 hover:to-indigo-500' : 'text-blue-600 hover:bg-blue-50'}`}
+                    >
+                      View More
+                      <ChevronRight className="w-4 h-4 ml-0.5 group-hover:translate-x-1 transition-transform" />
+                    </Link>
                   </div>
                 </div>
+              </article>
+            );
+          })}
+        </div>
 
-                {renderReadinessMeter(uni)}
-
-              </div>
-              <div className="mt-5 pt-5 border-t border-slate-100 flex justify-between items-center gap-3">
-                <div className="flex items-center text-xs font-bold text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100 shrink-0">
-                  <BookOpen className="w-3.5 h-3.5 mr-1.5 text-slate-400" />
-                  {uni.majors_offered ? uni.majors_offered.length : 0} Majors
-                </div>
-                
-                <div className="flex items-center gap-2">
-                  {(!isCoach) && (
-                    <button 
-                      onClick={(e) => toggleSaveCollege(e, uni.id)}
-                      disabled={isProcessing}
-                      className={`p-2 rounded-lg border transition-all shadow-sm ${
-                        isSaved 
-                          ? 'bg-blue-50 border-blue-200 text-blue-600' 
-                          : 'bg-white border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-200 hover:shadow-md'
-                      }`}
-                    >
-                      {isProcessing ? (
-                        <RefreshCw className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Bookmark className={`w-4 h-4 ${isSaved ? 'fill-current' : ''}`} />
-                      )}
-                    </button>
-                  )}
-                  <Link 
-                    href={`/college/${uni.slug}?${new URLSearchParams({
-                      ...(selectedSport && { sport: selectedSport }),
-                      ...(selectedGender && { gender: selectedGender })
-                    }).toString()}`}
-                    className={`text-sm font-black flex items-center px-4 py-2 rounded-lg transition-colors ${rankBadge ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md hover:from-blue-500 hover:to-indigo-500' : 'text-blue-600 hover:bg-blue-50'}`}
-                  >
-                    View More 
-                    <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
-                  </Link>
-                </div>
-              </div>
+        {/* INFINITE SCROLL SENTINEL */}
+        {visibleCount < sortedAndFilteredUniversities.length && (
+          <div ref={loadMoreRef} className="py-12 flex justify-center items-center">
+            <div className="inline-flex items-center gap-3 px-6 py-3 rounded-2xl bg-white/80 backdrop-blur-md border border-slate-200 shadow-sm text-sm font-bold text-slate-600">
+              <RefreshCw className="w-4 h-4 text-blue-500 animate-spin" />
+              Loading more programs...
             </div>
-          );
-        })}
-      </div>
+          </div>
+        )}
+      </>
     );
-  }, [sortedAndFilteredUniversities, loading, isInitialized, hasSearched, selectedSport, selectedGender, savedCollegeIds, savingIds, isCoach, isAthlete, athleteScore, athleteState, athleteProfile, activeBonusFilter, selectedStates]); 
+  }, [
+    visibleUniversities,
+    sortedAndFilteredUniversities.length,
+    visibleCount,
+    loading,
+    isInitialized,
+    hasSearched,
+    selectedSport,
+    selectedGender,
+    effectiveSport,
+    isCurrentSportStatBased,
+    savedCollegeIds,
+    savingIds,
+    sideBySideIds,
+    sideBySideList.length,
+    toggleSideBySide,
+    isCoach,
+    isAthlete,
+    activeBonusFilter,
+    selectedStates,
+    getCalculatedTuition,
+    getEmailBuilderHref
+  ]);
 
   return (
-    <main className="min-h-screen bg-[#F8FAFC] font-sans selection:bg-blue-500/30">
-      
-      {/* 🚨 INLINE ERROR BANNER 🚨 */}
+    <main className="min-h-screen bg-[#F8FAFC] font-sans selection:bg-blue-500/30 pb-28">
+      {/* DYNAMIC RESULTS ITEMLIST JSON-LD */}
+      {dynamicItemListJsonLd && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(dynamicItemListJsonLd) }}
+        />
+      )}
+
+      {/* INLINE ERROR BANNER */}
       {errorMsg && (
-        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 bg-white/90 backdrop-blur-xl text-red-600 border border-red-200 px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-top-10 fade-in duration-300">
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-white/95 backdrop-blur-xl text-red-600 border border-red-200 px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-top-10 fade-in duration-300 w-[90%] max-w-md" role="alert">
           <AlertCircle className="w-5 h-5 shrink-0" />
           <p className="font-bold text-sm">{errorMsg}</p>
         </div>
       )}
 
-      {/* 🚨 INTERACTIVE REGION SELECTOR MODAL 🚨 */}
+      {/* INLINE SUCCESS TOAST */}
+      {toastMsg && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-slate-900/95 backdrop-blur-xl text-emerald-400 border border-emerald-500/30 px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-top-10 fade-in duration-300" role="status">
+          <Sparkles className="w-4 h-4 shrink-0" />
+          <p className="font-bold text-sm text-white">{toastMsg}</p>
+        </div>
+      )}
+
+      {/* FLOATING SIDE BY SIDE DOCK */}
+      {sideBySideList.length > 0 && !isSideBySideOpen && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-[94%] max-w-3xl bg-slate-900/95 backdrop-blur-2xl border border-slate-700/80 rounded-3xl p-3 sm:p-4 shadow-[0_20px_50px_rgba(15,23,42,0.5)] flex flex-col sm:flex-row items-center justify-between gap-3 animate-in slide-in-from-bottom-10 fade-in duration-300">
+          <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0 [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:bg-slate-700">
+            <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-widest text-blue-400 shrink-0 mr-1">
+              <Scale className="w-4 h-4" />
+              <span>Side by Side ({sideBySideList.length}/3)</span>
+            </div>
+            {sideBySideList.map((school) => (
+              <div
+                key={school.id}
+                className="inline-flex items-center gap-1.5 bg-slate-800/90 border border-slate-700 text-white text-xs font-bold px-3 py-1.5 rounded-xl shrink-0"
+              >
+                <span className="truncate max-w-[120px]">{school.name}</span>
+                <button
+                  type="button"
+                  onClick={(e) => toggleSideBySide(e, school)}
+                  className="text-slate-400 hover:text-red-400 transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end shrink-0">
+            <button
+              type="button"
+              onClick={() => setSideBySideList([])}
+              className="text-xs font-bold text-slate-400 hover:text-white px-3 py-2 rounded-xl hover:bg-slate-800 transition-colors"
+            >
+              Clear
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsSideBySideOpen(true)}
+              className="flex-1 sm:flex-initial bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white text-xs sm:text-sm font-black px-5 py-2.5 rounded-xl shadow-lg shadow-blue-500/25 flex items-center justify-center gap-1.5 transition-all"
+            >
+              <Scale className="w-4 h-4" />
+              Side by Side
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* SIDE BY SIDE MODAL */}
+      {isSideBySideOpen && enrichedSideBySide.length > 0 && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-2 sm:p-4 md:p-6">
+          <div
+            className="absolute inset-0 bg-slate-950/70 backdrop-blur-md"
+            onClick={() => setIsSideBySideOpen(false)}
+          ></div>
+
+          <div className="bg-white/95 backdrop-blur-3xl border border-slate-200 rounded-3xl md:rounded-[2.5rem] w-full max-w-6xl max-h-[90vh] flex flex-col relative z-10 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="px-5 py-4 sm:px-8 sm:py-6 bg-gradient-to-r from-slate-900 via-[#0f172a] to-blue-950 text-white flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400">
+                  <Scale className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-xl sm:text-2xl font-black tracking-tight">Side by Side</h2>
+                  <p className="text-xs text-slate-300 font-medium">
+                    Comparing {enrichedSideBySide.length} {enrichedSideBySide.length === 1 ? 'program' : 'programs'} • Sport: {effectiveSport || 'General'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSideBySideList([]);
+                    setIsSideBySideOpen(false);
+                  }}
+                  className="text-xs font-bold text-slate-300 hover:text-red-400 px-3 py-1.5 rounded-xl hover:bg-white/10 transition-colors"
+                >
+                  Clear All
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsSideBySideOpen(false)}
+                  className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Scrollable Comparison Table */}
+            <div className="overflow-auto flex-1 p-4 sm:p-6 md:p-8 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-thumb]:bg-slate-300 [&::-webkit-scrollbar-thumb]:rounded-full">
+              <div
+                className="grid gap-4 min-w-[600px]"
+                style={{
+                  gridTemplateColumns: `160px repeat(${enrichedSideBySide.length}, minmax(200px, 1fr))`
+                }}
+              >
+                {/* Row 0: School Headers */}
+                <div className="flex flex-col justify-end pb-4 border-b border-slate-200">
+                  <span className="text-[11px] font-black uppercase tracking-widest text-slate-400">
+                    Program Overview
+                  </span>
+                </div>
+                {enrichedSideBySide.map((uni) => (
+                  <div key={uni.id} className="pb-4 border-b border-slate-200 flex flex-col justify-between bg-slate-50/70 p-4 rounded-2xl border border-slate-100 relative">
+                    <button
+                      type="button"
+                      onClick={(e) => toggleSideBySide(e, uni)}
+                      className="absolute top-3 right-3 p-1 rounded-full text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                      title="Remove from Side by Side"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                    <div>
+                      <span className="inline-block text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-700 mb-2">
+                        {uni.division}
+                      </span>
+                      <h3 className="text-lg font-black text-slate-900 leading-snug pr-6">{uni.name}</h3>
+                      <p className="text-xs font-semibold text-slate-500 flex items-center gap-1 mt-1">
+                        <MapPin className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                        {uni.city ? `${uni.city}, ${uni.state}` : uni.state}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+
+                {/* Row 1: Athletic Match (Stat-Based) OR Program Standard (Team Sports) */}
+                <div className="flex items-center py-4 border-b border-slate-100 text-xs font-black uppercase tracking-wider text-slate-500">
+                  {isCurrentSportStatBased ? (
+                    <>
+                      <Target className="w-4 h-4 mr-2 text-purple-500 shrink-0" />
+                      Athletic Fit
+                    </>
+                  ) : (
+                    <>
+                      <Activity className="w-4 h-4 mr-2 text-blue-500 shrink-0" />
+                      Program Standard
+                    </>
+                  )}
+                </div>
+                {enrichedSideBySide.map((uni) => {
+                  const isWinner = sideBySideWinners?.maxFit != null && uni.fitPercent === sideBySideWinners.maxFit;
+                  return (
+                    <div
+                      key={uni.id}
+                      className={`p-4 rounded-2xl border my-1 flex flex-col justify-center ${
+                        isWinner ? 'bg-emerald-50/70 border-emerald-300 shadow-sm' : 'bg-white border-slate-100'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-sm font-black text-slate-900">
+                          {isCurrentSportStatBased ? uni.fitLabel : (uni.teamRating > 0 ? `${uni.teamRating} Rtg` : 'N/A')}
+                        </span>
+                        {isWinner && (
+                          <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-emerald-500 text-white flex items-center gap-1">
+                            <Crown className="w-3 h-3" /> {isCurrentSportStatBased ? 'Best Fit' : 'Top Rated'}
+                          </span>
+                        )}
+                      </div>
+                      <div className="w-full bg-slate-200/70 rounded-full h-2 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${isWinner ? 'bg-emerald-500' : 'bg-blue-500'}`}
+                          style={{ width: `${Math.min(100, uni.fitPercent)}%` }}
+                        ></div>
+                      </div>
+                      <span className="text-[11px] font-bold text-slate-400 mt-1.5">
+                        Program Rating: {uni.teamRating > 0 ? uni.teamRating : 'N/A'}
+                      </span>
+                    </div>
+                  );
+                })}
+
+                {/* Row 2: Estimated Net Cost */}
+                <div className="flex items-center py-4 border-b border-slate-100 text-xs font-black uppercase tracking-wider text-slate-500">
+                  <Wallet className="w-4 h-4 mr-2 text-emerald-500 shrink-0" />
+                  Est. Net Cost
+                </div>
+                {enrichedSideBySide.map((uni) => {
+                  const isWinner = sideBySideWinners?.minNetCost != null && uni.tuition > 0 && uni.netCost === sideBySideWinners.minNetCost;
+                  return (
+                    <div
+                      key={uni.id}
+                      className={`p-4 rounded-2xl border my-1 flex flex-col justify-center ${
+                        isWinner ? 'bg-emerald-50/70 border-emerald-300 shadow-sm' : 'bg-white border-slate-100'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-lg font-black text-slate-900">
+                          {uni.tuition > 0 ? formatCurrency(uni.netCost) : 'N/A'}
+                          <span className="text-xs font-bold text-slate-400">/yr</span>
+                        </span>
+                        {isWinner && (
+                          <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-emerald-500 text-white">
+                            Lowest Cost
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[11px] font-semibold text-slate-500 mt-1">
+                        Tuition: {formatCurrency(uni.tuition)} {uni.isInState ? '(In-State)' : ''}
+                      </span>
+                      <span className="text-[11px] font-bold text-blue-600">
+                        Avg Athletic Aid: {uni.scholarship > 0 ? formatCurrency(uni.scholarship) : 'N/A'}
+                      </span>
+                    </div>
+                  );
+                })}
+
+                {/* Row 3: 10-Year Median Salary & ROI */}
+                <div className="flex items-center py-4 border-b border-slate-100 text-xs font-black uppercase tracking-wider text-slate-500">
+                  <TrendingUp className="w-4 h-4 mr-2 text-blue-500 shrink-0" />
+                  10-Yr Salary & ROI
+                </div>
+                {enrichedSideBySide.map((uni) => {
+                  const isSalaryWinner = sideBySideWinners?.maxSalary != null && uni.salary === sideBySideWinners.maxSalary;
+                  const isRoiWinner = sideBySideWinners?.maxRoi != null && uni.roi === sideBySideWinners.maxRoi;
+                  return (
+                    <div
+                      key={uni.id}
+                      className={`p-4 rounded-2xl border my-1 flex flex-col justify-center ${
+                        isSalaryWinner || isRoiWinner ? 'bg-emerald-50/70 border-emerald-300 shadow-sm' : 'bg-white border-slate-100'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-lg font-black text-emerald-700">
+                          {uni.salary > 0 ? formatCurrency(uni.salary) : 'N/A'}
+                        </span>
+                        {isSalaryWinner && (
+                          <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-emerald-500 text-white">
+                            Top Salary
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-xs font-black text-slate-700">
+                          ROI: {uni.roi > 0 ? `${uni.roi}x` : 'N/A'}
+                        </span>
+                        {isRoiWinner && (
+                          <span className="text-[10px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500 text-white">
+                            Best ROI
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Row 4: Sport Operating Budget */}
+                <div className="flex items-center py-4 border-b border-slate-100 text-xs font-black uppercase tracking-wider text-slate-500">
+                  <Award className="w-4 h-4 mr-2 text-amber-500 shrink-0" />
+                  Sport Budget
+                </div>
+                {enrichedSideBySide.map((uni) => {
+                  const isWinner = sideBySideWinners?.maxBudget != null && uni.budget === sideBySideWinners.maxBudget;
+                  return (
+                    <div
+                      key={uni.id}
+                      className={`p-4 rounded-2xl border my-1 flex flex-col justify-center ${
+                        isWinner ? 'bg-emerald-50/70 border-emerald-300 shadow-sm' : 'bg-white border-slate-100'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-base font-black text-slate-900">
+                          {uni.budget > 0 ? formatCurrency(uni.budget) : 'N/A'}
+                        </span>
+                        {isWinner && (
+                          <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-emerald-500 text-white">
+                            Most Funded
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[11px] font-semibold text-slate-400 mt-0.5">
+                        Annual Operating Expense
+                      </span>
+                    </div>
+                  );
+                })}
+
+                {/* Row 5: Acceptance Rate & Majors */}
+                <div className="flex items-center py-4 border-b border-slate-100 text-xs font-black uppercase tracking-wider text-slate-500">
+                  <Landmark className="w-4 h-4 mr-2 text-slate-500 shrink-0" />
+                  Academics
+                </div>
+                {enrichedSideBySide.map((uni) => {
+                  const isSelectiveWinner = sideBySideWinners?.minAcc != null && uni.acceptance === sideBySideWinners.minAcc;
+                  return (
+                    <div
+                      key={uni.id}
+                      className="p-4 rounded-2xl border border-slate-100 bg-white my-1 flex flex-col justify-center"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-base font-black text-slate-900">
+                          {uni.acceptance_rate || 'N/A'} Acceptance
+                        </span>
+                        {isSelectiveWinner && (
+                          <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-purple-100 text-purple-700">
+                            Most Selective
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-xs font-bold text-slate-500 mt-1 flex items-center gap-1">
+                        <BookOpen className="w-3.5 h-3.5 text-slate-400" />
+                        {uni.majors_offered ? uni.majors_offered.length : 0} Umbrella Majors
+                      </span>
+                    </div>
+                  );
+                })}
+
+                {/* Row 6: Action Buttons */}
+                <div className="flex items-center pt-4 text-xs font-black uppercase tracking-wider text-slate-400">
+                  Actions
+                </div>
+                {enrichedSideBySide.map((uni) => {
+                  const isSaved = savedCollegeIds.has(uni.id);
+                  const isProcessing = savingIds.has(uni.id);
+                  return (
+                    <div key={uni.id} className="pt-4 flex items-center gap-2">
+                      {!isCoach && (
+                        <>
+                          <Link
+                            href={getEmailBuilderHref(uni)}
+                            className="p-2.5 rounded-xl border bg-white border-slate-200 text-slate-500 hover:text-indigo-600 hover:border-indigo-200 hover:bg-indigo-50/60 transition-all"
+                            title={`Draft Coach Email to ${uni.name}`}
+                          >
+                            <Mail className="w-4 h-4" />
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={(e) => toggleSaveCollege(e, uni.id)}
+                            disabled={isProcessing}
+                            className={`p-2.5 rounded-xl border transition-all ${
+                              isSaved
+                                ? 'bg-blue-50 border-blue-200 text-blue-600'
+                                : 'bg-white border-slate-200 text-slate-500 hover:text-blue-600 hover:border-blue-200'
+                            }`}
+                            title="Save School"
+                          >
+                            {isProcessing ? (
+                              <RefreshCw className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Bookmark className={`w-4 h-4 ${isSaved ? 'fill-current' : ''}`} />
+                            )}
+                          </button>
+                        </>
+                      )}
+                      <Link
+                        href={`/college/${uni.slug}${
+                          selectedSport || selectedGender
+                            ? `?${new URLSearchParams({
+                                ...(selectedSport && { sport: selectedSport }),
+                                ...(selectedGender && { gender: selectedGender }),
+                              }).toString()}`
+                            : ''
+                        }`}
+                        className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-black py-2.5 px-4 rounded-xl flex items-center justify-center gap-1 shadow-md transition-all"
+                      >
+                        View Program
+                        <ChevronRight className="w-4 h-4" />
+                      </Link>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* INTERACTIVE REGION SELECTOR MODAL */}
       {isMapOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsMapOpen(false)}></div>
           <div className="bg-white/90 backdrop-blur-2xl border border-slate-200/50 rounded-3xl p-6 md:p-8 relative z-10 w-full max-w-4xl shadow-2xl animate-in zoom-in-95">
             <div className="flex justify-between items-center mb-6">
               <div>
-                <h3 className="text-2xl font-black text-slate-900">Target Regions</h3>
+                <h2 className="text-2xl font-black text-slate-900">Target Regions</h2>
                 <p className="text-slate-500 text-sm font-medium">Select unlimited states to focus your search ({selectedStates.length})</p>
               </div>
-              <button onClick={() => setIsMapOpen(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X className="w-6 h-6 text-slate-400" /></button>
+              <div className="flex items-center gap-2">
+                {selectedStates.length > 0 && (
+                  <button
+                    onClick={() => setSelectedStates([])}
+                    className="text-xs font-bold text-slate-500 hover:text-red-600 px-3 py-1.5 rounded-lg hover:bg-red-50 transition-colors"
+                  >
+                    Clear All
+                  </button>
+                )}
+                <button onClick={() => setIsMapOpen(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+                  <X className="w-6 h-6 text-slate-400" />
+                </button>
+              </div>
             </div>
-            
+
             <div className="w-full overflow-x-auto pb-4 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
               <div className="grid grid-cols-12 grid-rows-8 gap-1 sm:gap-2 min-w-[600px] mx-auto p-4 bg-slate-50/50 rounded-2xl border border-slate-100">
                 {US_TILE_MAP.map(state => {
@@ -1069,8 +2105,8 @@ function SearchContent() {
                       onClick={() => toggleState(state.id)}
                       style={{ gridColumn: state.col, gridRow: state.row }}
                       className={`aspect-square rounded-md sm:rounded-lg font-black text-[10px] sm:text-xs md:text-sm transition-all border flex items-center justify-center ${
-                        isSelected 
-                          ? 'bg-gradient-to-br from-blue-600 to-blue-500 border-blue-500 text-white scale-105 shadow-[0_0_15px_rgba(59,130,246,0.5)] z-10' 
+                        isSelected
+                          ? 'bg-gradient-to-br from-blue-600 to-blue-500 border-blue-500 text-white scale-105 shadow-[0_0_15px_rgba(59,130,246,0.5)] z-10'
                           : 'bg-white border-slate-200 text-slate-500 hover:border-blue-500 hover:text-blue-600'
                       }`}
                     >
@@ -1082,90 +2118,155 @@ function SearchContent() {
             </div>
 
             <button onClick={() => setIsMapOpen(false)} className="w-full mt-6 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-black py-4 rounded-xl transition-all shadow-lg shadow-blue-600/30">
-              Confirm Regions
+              Confirm Regions ({selectedStates.length > 0 ? selectedStates.join(', ') : 'Nationwide'})
             </button>
           </div>
         </div>
       )}
 
-      {/* 🚨 DYNAMIC HERO SECTION 🚨 */}
-      <div className="relative bg-gradient-to-br from-slate-900 via-[#0f172a] to-blue-950 pt-24 pb-40 md:pb-32 px-4 md:px-8 overflow-hidden rounded-b-[2.5rem] md:rounded-b-[3rem] shadow-2xl">
+      {/* MOBILE-FIRST COMPACT HERO HEADER */}
+      <header className="relative bg-gradient-to-br from-slate-900 via-[#0f172a] to-blue-950 pt-20 pb-14 md:pt-24 md:pb-28 px-4 md:px-8 overflow-hidden rounded-b-[2rem] md:rounded-b-[3rem] shadow-2xl">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-blue-600/20 blur-[120px] rounded-full pointer-events-none"></div>
-        <div className="max-w-5xl mx-auto relative z-10 text-center space-y-6">
-          
-          {isAthlete && activeAthleteScore.score > 0 ? (
+        <div className="max-w-5xl mx-auto relative z-10 text-center space-y-2 md:space-y-5">
+          {isAthlete && activeAthleteScore.isStatBased && activeAthleteScore.score > 0 ? (
             <>
-              <div className="inline-flex items-center px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-400/20 text-emerald-400 text-sm font-bold tracking-wide mb-4 shadow-[0_0_20px_rgba(16,185,129,0.15)]">
-                <Target className="w-4 h-4 mr-2" />
+              <div className="inline-flex items-center px-3.5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-400/20 text-emerald-400 text-xs md:text-sm font-bold tracking-wide shadow-[0_0_20px_rgba(16,185,129,0.15)]">
+                <Target className="w-3.5 h-3.5 mr-1.5" />
                 {activeAthleteScore.label} Score: {activeAthleteScore.score}
               </div>
-              <h1 className="text-5xl md:text-7xl font-black tracking-tighter text-white">
+              <h1 className="text-3xl sm:text-5xl md:text-6xl font-black tracking-tighter text-white">
                 Welcome back, <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-300">{athleteFirstName}</span>
               </h1>
-              <p className="text-lg md:text-xl text-slate-300 max-w-2xl mx-auto font-medium leading-relaxed">
-                We've activated your personalized Match Meters. Search programs below to instantly calculate your Best Athletic Fit and Lowest Net Cost.
+              <p className="text-xs sm:text-base md:text-lg text-slate-300 max-w-2xl mx-auto font-medium leading-relaxed">
+                Your personalized Match Meters are active. Filter programs below or select up to 3 schools for a Side by Side breakdown.
               </p>
             </>
           ) : (
             <>
-              <div className="inline-flex items-center px-4 py-2 rounded-full bg-blue-500/10 border border-blue-400/20 text-blue-400 text-sm font-bold tracking-wide mb-4 shadow-[0_0_20px_rgba(59,130,246,0.15)]">
-                <Flame className="w-4 h-4 mr-2" />
-                The Matchmaker is unlocked
+              <div className="inline-flex items-center px-3.5 py-1.5 rounded-full bg-blue-500/10 border border-blue-400/20 text-blue-400 text-xs md:text-sm font-bold tracking-wide shadow-[0_0_20px_rgba(59,130,246,0.15)]">
+                <Flame className="w-3.5 h-3.5 mr-1.5" />
+                The Matchmaker Engine
               </div>
-              <h1 className="text-6xl md:text-7xl font-black tracking-tighter text-white">
-                Chased<span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300">Sports</span>
+              <h1 className="text-3xl sm:text-5xl md:text-6xl font-black tracking-tighter text-white">
+                College Athletic <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300">Finder & ROI Matchmaker</span>
               </h1>
-              <p className="text-lg md:text-xl text-slate-300 max-w-2xl mx-auto font-medium leading-relaxed">
-                Stop guessing. Instantly discover which college programs match your exact criteria for Athletic Caliber, Tuition Budget, and ROI.
+              <p className="text-xs sm:text-base md:text-lg text-slate-300 max-w-2xl mx-auto font-medium leading-relaxed">
+                Compare 2,800+ NCAA D1, D2, D3, NAIA, and JUCO college athletic programs by recruiting standards, scholarship aid, net tuition budget, and 10-year salary ROI.
               </p>
             </>
           )}
-
         </div>
-      </div>
+      </header>
 
-      <div className="max-w-7xl mx-auto px-4 md:px-6 pb-24">
-        {/* The Control Panel */}
-        <div className="relative -mt-10 md:-mt-16 bg-white/70 backdrop-blur-3xl p-5 md:p-8 rounded-3xl md:rounded-[2rem] shadow-xl shadow-blue-900/10 border border-white mb-8 transition-all duration-500 z-20">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6">
+        {/* THE CONTROL PANEL */}
+        <section aria-label="Search Filters" className="relative -mt-8 md:-mt-14 bg-white/80 backdrop-blur-3xl p-4 sm:p-6 md:p-8 rounded-3xl md:rounded-[2rem] shadow-xl shadow-blue-900/10 border border-white mb-6 md:mb-8 transition-all duration-500 z-20">
           
+          {/* SAVED SEARCHES BAR */}
+          {(savedSearches.length > 0 || currentUserId) && (
+            <div className="mb-4 pb-3 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 max-w-full [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
+                <span className="text-[11px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1 shrink-0 mr-1">
+                  <FolderHeart className="w-3.5 h-3.5 text-blue-500" /> Saved:
+                </span>
+                {savedSearches.length === 0 ? (
+                  <span className="text-xs font-medium text-slate-400 italic">No saved presets yet</span>
+                ) : (
+                  savedSearches.map((preset) => (
+                    <div
+                      key={preset.id}
+                      onClick={() => applySavedSearch(preset)}
+                      className="group inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100/80 hover:bg-blue-50 border border-slate-200/70 hover:border-blue-300 text-xs font-bold text-slate-700 hover:text-blue-600 cursor-pointer transition-all shrink-0"
+                    >
+                      <span>{preset.name}</span>
+                      <button
+                        type="button"
+                        onClick={(e) => deleteSavedSearch(e, preset.id)}
+                        className="text-slate-400 hover:text-red-500 transition-colors p-0.5"
+                        title="Remove saved search"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {!isSavingSearch ? (
+                <button
+                  type="button"
+                  onClick={() => setIsSavingSearch(true)}
+                  className="text-xs font-black text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100/80 px-3 py-1.5 rounded-xl transition-colors flex items-center gap-1 shrink-0"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Save Current Filter
+                </button>
+              ) : (
+                <div className="flex items-center gap-2 w-full sm:w-auto animate-in fade-in duration-200">
+                  <input
+                    type="text"
+                    placeholder="Preset name (e.g. West Coast D1)"
+                    value={newSearchName}
+                    onChange={(e) => setNewSearchName(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSaveCurrentSearch()}
+                    className="flex-1 sm:w-48 bg-white border border-blue-300 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={handleSaveCurrentSearch}
+                    className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-black px-3 py-1.5 rounded-xl transition-colors"
+                  >
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setIsSavingSearch(false); setNewSearchName(''); }}
+                    className="p-1.5 text-slate-400 hover:text-slate-600"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* --- BASIC SETTINGS (Always Visible) --- */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 md:gap-6">
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Sport</label>
-              <select 
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 md:gap-6">
+            <div className="space-y-1.5 col-span-2 sm:col-span-1">
+              <label htmlFor="sport-select" className="text-[11px] font-bold text-slate-500 uppercase tracking-widest pl-1">Sport</label>
+              <select
+                id="sport-select"
                 value={selectedSport}
                 onChange={(e) => setSelectedSport(e.target.value)}
-                className="w-full bg-slate-50/80 backdrop-blur-sm border border-slate-200/60 text-slate-800 rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-semibold shadow-sm appearance-none cursor-pointer transition-all"
+                className="w-full bg-slate-50/80 backdrop-blur-sm border border-slate-200/60 text-slate-800 rounded-xl px-3.5 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-semibold text-sm shadow-sm appearance-none cursor-pointer transition-all"
               >
                 <option value="">Any Sport...</option>
-                <option value="Baseball">Baseball</option>
-                <option value="Basketball">Basketball</option>
-                <option value="Bowling">Bowling</option>
-                <option value="Cross Country">Cross Country</option>
-                <option value="Fencing">Fencing</option>
-                <option value="Field Hockey">Field Hockey</option>
-                <option value="Football">Football</option>
-                <option value="Golf">Golf</option>
-                <option value="Gymnastics">Gymnastics</option>
-                <option value="Ice Hockey">Ice Hockey</option>
-                <option value="Lacrosse">Lacrosse</option>
-                <option value="Soccer">Soccer</option>
-                <option value="Softball">Softball</option>
-                <option value="Swimming and Diving (combined)">Swimming & Diving</option>
-                <option value="Tennis">Tennis</option>
-                <option value="Track & Field">Track & Field</option>
-                <option value="Volleyball">Volleyball</option>
-                <option value="Water Polo">Water Polo</option>
-                <option value="Wrestling">Wrestling</option>
+                {athleteSelectedSports.length > 0 && (
+                  <optgroup label="Your Selected Sports">
+                    {athleteSelectedSports.map((sp) => (
+                      <option key={`athlete-${sp}`} value={sp}>
+                        ★ {sp}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                <optgroup label="All College Sports">
+                  {ALL_SPORTS.map((sp) => (
+                    <option key={sp.value} value={sp.value}>
+                      {sp.label}
+                    </option>
+                  ))}
+                </optgroup>
               </select>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Gender</label>
-              <select 
+            <div className="space-y-1.5">
+              <label htmlFor="gender-select" className="text-[11px] font-bold text-slate-500 uppercase tracking-widest pl-1">Gender</label>
+              <select
+                id="gender-select"
                 value={selectedGender}
                 onChange={(e) => setSelectedGender(e.target.value)}
-                className="w-full bg-slate-50/80 backdrop-blur-sm border border-slate-200/60 text-slate-800 rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-semibold shadow-sm appearance-none cursor-pointer transition-all"
+                className="w-full bg-slate-50/80 backdrop-blur-sm border border-slate-200/60 text-slate-800 rounded-xl px-3.5 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-semibold text-sm shadow-sm appearance-none cursor-pointer transition-all"
               >
                 <option value="">Any</option>
                 <option value="Men">Men</option>
@@ -1173,12 +2274,13 @@ function SearchContent() {
               </select>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Division</label>
-              <select 
+            <div className="space-y-1.5">
+              <label htmlFor="division-select" className="text-[11px] font-bold text-slate-500 uppercase tracking-widest pl-1">Division</label>
+              <select
+                id="division-select"
                 value={selectedDivision}
                 onChange={(e) => setSelectedDivision(e.target.value)}
-                className="w-full bg-slate-50/80 backdrop-blur-sm border border-slate-200/60 text-slate-800 rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-semibold shadow-sm appearance-none cursor-pointer transition-all"
+                className="w-full bg-slate-50/80 backdrop-blur-sm border border-slate-200/60 text-slate-800 rounded-xl px-3.5 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-semibold text-sm shadow-sm appearance-none cursor-pointer transition-all"
               >
                 <option value="">Any Division</option>
                 <option value="NCAA D1">NCAA D1</option>
@@ -1189,37 +2291,38 @@ function SearchContent() {
               </select>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1 flex justify-between items-center">
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-widest pl-1 flex justify-between items-center">
                 <span>Regions</span>
                 {selectedStates.length > 0 && <span className="text-blue-500">{selectedStates.length}</span>}
               </label>
-              <button 
+              <button
+                type="button"
                 onClick={() => setIsMapOpen(true)}
-                className="w-full bg-slate-50/80 backdrop-blur-sm border border-slate-200/60 text-slate-800 rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-semibold shadow-sm transition-all flex justify-between items-center group"
+                className="w-full bg-slate-50/80 backdrop-blur-sm border border-slate-200/60 text-slate-800 rounded-xl px-3.5 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-semibold text-sm shadow-sm transition-all flex justify-between items-center group"
               >
                 <span className="truncate">{selectedStates.length > 0 ? selectedStates.join(', ') : 'Nationwide'}</span>
-                <Map className="w-4 h-4 text-slate-400 group-hover:text-blue-500 transition-colors" />
+                <Map className="w-4 h-4 text-slate-400 group-hover:text-blue-500 transition-colors shrink-0 ml-1" />
               </button>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Field of Study</label>
-              <input 
+            <div className="space-y-1.5 col-span-2 sm:col-span-1">
+              <label htmlFor="major-input" className="text-[11px] font-bold text-slate-500 uppercase tracking-widest pl-1">Field of Study</label>
+              <input
+                id="major-input"
                 type="text"
                 list="major-options"
                 placeholder="e.g. Nursing, Finance..."
                 value={selectedMajor}
                 onChange={(e) => setSelectedMajor(e.target.value)}
-                className="w-full bg-slate-50/80 backdrop-blur-sm border border-slate-200/60 text-slate-800 rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-semibold shadow-sm placeholder:font-normal placeholder:text-slate-400 transition-all"
+                onKeyDown={(e) => e.key === 'Enter' && executeSearch()}
+                className="w-full bg-slate-50/80 backdrop-blur-sm border border-slate-200/60 text-slate-800 rounded-xl px-3.5 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-semibold text-sm shadow-sm placeholder:font-normal placeholder:text-slate-400 transition-all"
               />
-              <div className="h-4 pl-1">
-                {showMajorHint && (
-                  <p className="text-[11px] font-bold text-blue-500 animate-pulse">
-                    Searching category: {mappedMajor}
-                  </p>
-                )}
-              </div>
+              {showMajorHint && (
+                <p className="text-[10px] font-bold text-blue-500 pl-1 animate-pulse">
+                  Category: {mappedMajor}
+                </p>
+              )}
               <datalist id="major-options">
                 <option value="Agriculture" />
                 <option value="Architecture" />
@@ -1244,61 +2347,65 @@ function SearchContent() {
           </div>
 
           {/* Toggle for Bonus Settings */}
-          <div className="mt-2 flex justify-center lg:justify-start">
-            <button 
+          <div className="mt-3 flex justify-between items-center">
+            <button
+              type="button"
               onClick={() => setShowAdvanced(!showAdvanced)}
-              className="flex items-center text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors py-2"
+              className="flex items-center text-xs sm:text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors py-1.5"
             >
-              <SlidersHorizontal className="w-4 h-4 mr-2" />
-              {showAdvanced ? 'Hide Advanced Filters' : 'Show Advanced Filters'}
+              <SlidersHorizontal className="w-3.5 h-3.5 mr-1.5" />
+              {showAdvanced ? 'Hide School Name, Cost & Sort Filters' : 'School Name, Cost & Sort Filters'}
               {showAdvanced ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />}
             </button>
           </div>
 
           {/* --- BONUS SETTINGS (Advanced) --- */}
           <div className={`transition-all duration-500 ease-in-out overflow-hidden ${showAdvanced ? 'max-h-[800px] opacity-100' : 'max-h-0 opacity-0'}`}>
-            <div className="pt-4 pr-6 pb-2"> 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 pt-4 border-t border-slate-100/50">
-                
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Specific School</label>
+            <div className="pt-3 pb-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-6 pt-3 border-t border-slate-100/50">
+                <div className="space-y-1.5">
+                  <label htmlFor="school-name-input" className="text-[11px] font-bold text-slate-500 uppercase tracking-widest pl-1">Specific School</label>
                   <div className="relative flex items-center">
                     <div className="absolute left-3 pointer-events-none">
                       <Search className="h-4 w-4 text-slate-400" />
                     </div>
-                    <input 
-                      type="text" 
+                    <input
+                      id="school-name-input"
+                      type="text"
                       placeholder="e.g. Oregon State or Stanford"
                       value={schoolName}
                       onChange={(e) => setSchoolName(e.target.value)}
-                      className="w-full bg-slate-50/80 backdrop-blur-sm border border-slate-200/60 text-slate-800 rounded-xl pl-9 pr-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-semibold shadow-sm placeholder:font-normal placeholder:text-slate-400 transition-all"
+                      onKeyDown={(e) => e.key === 'Enter' && executeSearch()}
+                      className="w-full bg-slate-50/80 backdrop-blur-sm border border-slate-200/60 text-slate-800 rounded-xl pl-9 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-semibold text-sm shadow-sm placeholder:font-normal placeholder:text-slate-400 transition-all"
                     />
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Max Acceptance %</label>
+                <div className="space-y-1.5">
+                  <label htmlFor="max-acceptance-input" className="text-[11px] font-bold text-slate-500 uppercase tracking-widest pl-1">Max Acceptance %</label>
                   <div className="relative flex items-center">
                     <div className="absolute left-3 pointer-events-none">
                       <Percent className="h-4 w-4 text-slate-400" />
                     </div>
-                    <input 
-                      type="number" 
+                    <input
+                      id="max-acceptance-input"
+                      type="number"
                       placeholder="e.g. 50"
                       value={maxAcceptance}
                       onChange={(e) => setMaxAcceptance(e.target.value)}
-                      className="w-full bg-slate-50/80 backdrop-blur-sm border border-slate-200/60 text-slate-800 rounded-xl pl-9 pr-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-semibold shadow-sm placeholder:font-normal placeholder:text-slate-400 transition-all"
+                      className="w-full bg-slate-50/80 backdrop-blur-sm border border-slate-200/60 text-slate-800 rounded-xl pl-9 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-semibold text-sm shadow-sm placeholder:font-normal placeholder:text-slate-400 transition-all"
                     />
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Max Tuition Cost</label>
+                <div className="space-y-1.5">
+                  <label htmlFor="max-tuition-input" className="text-[11px] font-bold text-slate-500 uppercase tracking-widest pl-1">Max Tuition Cost</label>
                   <div className="flex gap-2">
-                    <select 
+                    <select
+                      aria-label="Tuition Type"
                       value={tuitionType}
                       onChange={(e) => setTuitionType(e.target.value)}
-                      className="w-1/3 bg-slate-50/80 backdrop-blur-sm border border-slate-200/60 text-slate-800 rounded-xl px-2 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white text-sm font-semibold shadow-sm appearance-none cursor-pointer"
+                      className="w-1/3 bg-slate-50/80 backdrop-blur-sm border border-slate-200/60 text-slate-800 rounded-xl px-2 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white text-xs font-semibold shadow-sm appearance-none cursor-pointer"
                     >
                       <option value="in_state">In-State</option>
                       <option value="out_of_state">Out-State</option>
@@ -1307,160 +2414,297 @@ function SearchContent() {
                       <div className="absolute left-3 pointer-events-none">
                         <DollarSign className="h-4 w-4 text-slate-400" />
                       </div>
-                      <input 
-                        type="number" 
+                      <input
+                        id="max-tuition-input"
+                        type="number"
                         placeholder="e.g. 30000"
                         value={maxTuition}
                         onChange={(e) => setMaxTuition(e.target.value)}
-                        className="w-full bg-slate-50/80 backdrop-blur-sm border border-slate-200/60 text-slate-800 rounded-xl pl-8 pr-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-semibold shadow-sm placeholder:font-normal placeholder:text-slate-400 transition-all"
+                        className="w-full bg-slate-50/80 backdrop-blur-sm border border-slate-200/60 text-slate-800 rounded-xl pl-8 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-semibold text-sm shadow-sm placeholder:font-normal placeholder:text-slate-400 transition-all"
                       />
                     </div>
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Sort Results By</label>
-                  <select 
+                <div className="space-y-1.5">
+                  <label htmlFor="sort-by-select" className="text-[11px] font-bold text-slate-500 uppercase tracking-widest pl-1">Sort Results By</label>
+                  <select
+                    id="sort-by-select"
                     value={sortBy}
                     onChange={(e) => setSortBy(e.target.value)}
                     disabled={activeBonusFilter !== null}
-                    className="w-full bg-slate-50/80 backdrop-blur-sm border border-slate-200/60 text-slate-800 rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-semibold shadow-sm appearance-none cursor-pointer transition-all disabled:opacity-50 disabled:bg-slate-100"
+                    className="w-full bg-slate-50/80 backdrop-blur-sm border border-slate-200/60 text-slate-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-semibold text-sm shadow-sm appearance-none cursor-pointer transition-all disabled:opacity-50 disabled:bg-slate-100"
                   >
-                    <option value="">Don't Sort</option>
-                    
+                    <option value="">Default (Rating)</option>
                     <optgroup label="Tuition Cost">
                       <option value="tuition_low">Lowest to Highest</option>
                       <option value="tuition_high">Highest to Lowest</option>
                     </optgroup>
-
                     <optgroup label="Acceptance Rate">
                       <option value="acceptance_high">Highest to Lowest</option>
                       <option value="acceptance_low">Lowest to Highest</option>
                     </optgroup>
-
                     <optgroup label="10-Year Salary">
                       <option value="salary_high">Highest to Lowest</option>
                       <option value="salary_low">Lowest to Highest</option>
                     </optgroup>
-
                     <optgroup label="Sport Budget">
                       <option value="budget_high">Highest to Lowest</option>
                       <option value="budget_low">Lowest to Highest</option>
                     </optgroup>
                   </select>
                 </div>
-
               </div>
             </div>
           </div>
 
-          <div className="mt-6 flex flex-col md:flex-row justify-end gap-4 pt-6 border-t border-slate-100/50">
-            {/* RESET BUTTON */}
-            <button 
+          <div className="mt-4 flex flex-row justify-end gap-3 pt-4 border-t border-slate-100/50">
+            <button
+              type="button"
               onClick={handleReset}
-              className="w-full md:w-auto px-6 py-3.5 rounded-xl font-bold transition-all text-slate-500 hover:text-slate-800 hover:bg-slate-100 flex items-center justify-center border border-transparent hover:border-slate-200"
+              className="px-4 sm:px-6 py-3 rounded-xl font-bold text-sm transition-all text-slate-500 hover:text-slate-800 hover:bg-slate-100 flex items-center justify-center border border-transparent hover:border-slate-200"
             >
-              <RotateCcw className="w-4 h-4 mr-2" />
-              Reset Filters
+              <RotateCcw className="w-4 h-4 mr-1.5" />
+              Reset
             </button>
-            
-            {/* SEARCH BUTTON */}
-            <button 
-              onClick={handleSearch}
+
+            <button
+              type="button"
+              onClick={() => executeSearch()}
               disabled={loading}
-              className="w-full md:w-auto group bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 disabled:from-slate-300 disabled:to-slate-300 disabled:cursor-not-allowed text-white px-10 py-3.5 rounded-xl font-black transition-all shadow-lg shadow-blue-500/25 flex items-center justify-center relative overflow-hidden"
+              className="flex-1 sm:flex-initial group bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 disabled:from-slate-300 disabled:to-slate-300 disabled:cursor-not-allowed text-white px-6 sm:px-10 py-3 rounded-xl font-black text-sm sm:text-base transition-all shadow-lg shadow-blue-500/25 flex items-center justify-center relative overflow-hidden"
             >
               <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:animate-[shimmer_1.5s_infinite]"></div>
-              {loading ? 'Scanning Database...' : (
+              {loading ? 'Scanning...' : (
                 <>
-                  <Search className="w-5 h-5 mr-2 group-hover:scale-110 transition-transform" />
+                  <Search className="w-4 h-4 sm:w-5 sm:h-5 mr-2 group-hover:scale-110 transition-transform" />
                   Search Programs
                 </>
               )}
             </button>
           </div>
-        </div>
+        </section>
 
-        {/* --- MATCHMAKER BONUS FILTERS (Toggle Row) --- */}
+        {/* --- MATCHMAKER BONUS FILTERS (Hides "Best Fit" for Non-Stat Team Sports) --- */}
         {hasSearched && !errorMsg && (
-            <div className="mb-10 flex flex-col items-center animate-in fade-in duration-500">
-                <div className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
-                    <Zap className="w-4 h-4 text-amber-500" /> Matchmaker Bonus Filters
-                </div>
-                <div className="bg-white/40 backdrop-blur-md p-2 rounded-2xl border border-slate-200 flex flex-wrap justify-center gap-2 shadow-sm">
-                    <button 
-                        onClick={() => toggleBonusFilter('fit')}
-                        className={`px-5 py-2.5 rounded-xl text-sm font-black transition-all flex items-center border ${activeBonusFilter === 'fit' ? 'bg-gradient-to-r from-purple-500 to-fuchsia-500 text-white border-purple-400 shadow-[0_0_20px_rgba(168,85,247,0.4)]' : 'bg-white text-slate-500 border-slate-200 hover:border-purple-200 hover:text-purple-600'}`}
-                    >
-                        <Target className="w-4 h-4 mr-2" /> Best Fit
-                    </button>
-                    <button 
-                        onClick={() => toggleBonusFilter('cost')}
-                        className={`px-5 py-2.5 rounded-xl text-sm font-black transition-all flex items-center border ${activeBonusFilter === 'cost' ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white border-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.4)]' : 'bg-white text-slate-500 border-slate-200 hover:border-emerald-200 hover:text-emerald-600'}`}
-                    >
-                        <Wallet className="w-4 h-4 mr-2" /> Lowest Cost
-                    </button>
-                    <button 
-                        onClick={() => toggleBonusFilter('salary')}
-                        className={`px-5 py-2.5 rounded-xl text-sm font-black transition-all flex items-center border ${activeBonusFilter === 'salary' ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white border-blue-400 shadow-[0_0_20px_rgba(59,130,246,0.4)]' : 'bg-white text-slate-500 border-slate-200 hover:border-blue-200 hover:text-blue-600'}`}
-                    >
-                        <Briefcase className="w-4 h-4 mr-2" /> Top Salary
-                    </button>
-                    <button 
-                        onClick={() => toggleBonusFilter('funding')}
-                        className={`px-5 py-2.5 rounded-xl text-sm font-black transition-all flex items-center border ${activeBonusFilter === 'funding' ? 'bg-gradient-to-r from-yellow-400 to-orange-500 text-white border-yellow-300 shadow-[0_0_20px_rgba(250,204,21,0.4)]' : 'bg-white text-slate-500 border-slate-200 hover:border-yellow-200 hover:text-yellow-600'}`}
-                    >
-                        <Award className="w-4 h-4 mr-2" /> Best Funded
-                    </button>
-                    <button 
-                        onClick={() => toggleBonusFilter('roi')}
-                        className={`px-5 py-2.5 rounded-xl text-sm font-black transition-all flex items-center border ${activeBonusFilter === 'roi' ? 'bg-gradient-to-r from-amber-500 to-rose-500 text-white border-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.4)]' : 'bg-white text-slate-500 border-slate-200 hover:border-amber-200 hover:text-amber-600'}`}
-                    >
-                        <TrendingUp className="w-4 h-4 mr-2" /> Best ROI
-                    </button>
-                    
-                    {/* ACADEMIC ONLY TOGGLE */}
-                    <button 
-                      onClick={() => setHideAcademicOnly(!hideAcademicOnly)}
-                      className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 border-2 ml-2 ${
-                        hideAcademicOnly 
-                          ? 'bg-red-500/10 border-red-500 text-red-500 shadow-[0_0_15px_rgba(239,68,68,0.25)]' 
-                          : 'bg-white border-slate-200 text-slate-500 hover:border-slate-400 hover:text-slate-700'
-                      }`}
-                    >
-                      {hideAcademicOnly ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      {hideAcademicOnly ? 'Hiding Academic Only' : 'Show All'}
-                    </button>
-                </div>
+          <section aria-label="Matchmaker Instant Sort" className="mb-8 flex flex-col items-center animate-in fade-in duration-500">
+            <div className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2.5 flex items-center gap-1.5">
+              <Zap className="w-3.5 h-3.5 text-amber-500" /> Matchmaker Instant Sort
             </div>
+            <div className="bg-white/60 backdrop-blur-md p-1.5 sm:p-2 rounded-2xl border border-slate-200 flex flex-wrap justify-center gap-1.5 sm:gap-2 shadow-sm">
+              {isCurrentSportStatBased && (
+                <button
+                  type="button"
+                  onClick={() => toggleBonusFilter('fit')}
+                  className={`px-3.5 sm:px-5 py-2 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center border ${
+                    activeBonusFilter === 'fit'
+                      ? 'bg-gradient-to-r from-purple-500 to-fuchsia-500 text-white border-purple-400 shadow-[0_0_20px_rgba(168,85,247,0.4)]'
+                      : 'bg-white text-slate-600 border-slate-200 hover:border-purple-200 hover:text-purple-600'
+                  }`}
+                >
+                  <Target className="w-3.5 h-3.5 mr-1.5" /> Best Fit
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => toggleBonusFilter('cost')}
+                className={`px-3.5 sm:px-5 py-2 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center border ${
+                  activeBonusFilter === 'cost'
+                    ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white border-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.4)]'
+                    : 'bg-white text-slate-600 border-slate-200 hover:border-emerald-200 hover:text-emerald-600'
+                }`}
+              >
+                <Wallet className="w-3.5 h-3.5 mr-1.5" /> Lowest Cost
+              </button>
+              <button
+                type="button"
+                onClick={() => toggleBonusFilter('salary')}
+                className={`px-3.5 sm:px-5 py-2 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center border ${
+                  activeBonusFilter === 'salary'
+                    ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white border-blue-400 shadow-[0_0_20px_rgba(59,130,246,0.4)]'
+                    : 'bg-white text-slate-600 border-slate-200 hover:border-blue-200 hover:text-blue-600'
+                }`}
+              >
+                <Briefcase className="w-3.5 h-3.5 mr-1.5" /> Top Salary
+              </button>
+              <button
+                type="button"
+                onClick={() => toggleBonusFilter('funding')}
+                className={`px-3.5 sm:px-5 py-2 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center border ${
+                  activeBonusFilter === 'funding'
+                    ? 'bg-gradient-to-r from-yellow-400 to-orange-500 text-white border-yellow-300 shadow-[0_0_20px_rgba(250,204,21,0.4)]'
+                    : 'bg-white text-slate-600 border-slate-200 hover:border-yellow-200 hover:text-yellow-600'
+                }`}
+              >
+                <Award className="w-3.5 h-3.5 mr-1.5" /> Best Funded
+              </button>
+              <button
+                type="button"
+                onClick={() => toggleBonusFilter('roi')}
+                className={`px-3.5 sm:px-5 py-2 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center border ${
+                  activeBonusFilter === 'roi'
+                    ? 'bg-gradient-to-r from-amber-500 to-rose-500 text-white border-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.4)]'
+                    : 'bg-white text-slate-600 border-slate-200 hover:border-amber-200 hover:text-amber-600'
+                }`}
+              >
+                <TrendingUp className="w-3.5 h-3.5 mr-1.5" /> Best ROI
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setHideAcademicOnly(!hideAcademicOnly)}
+                className={`px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 border ${
+                  hideAcademicOnly
+                    ? 'bg-red-500/10 border-red-500 text-red-600 shadow-[0_0_15px_rgba(239,68,68,0.2)]'
+                    : 'bg-white border-slate-200 text-slate-500 hover:border-slate-400 hover:text-slate-700'
+                }`}
+              >
+                {hideAcademicOnly ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                {hideAcademicOnly ? 'Sports Only' : 'Show All'}
+              </button>
+            </div>
+          </section>
         )}
 
         {/* --- DYNAMIC CONTENT BLOCKS --- */}
         {!hasSearched ? (
-          
-          <div className="bg-white/60 backdrop-blur-3xl border border-slate-200/50 rounded-[2.5rem] p-8 md:p-16 text-center shadow-sm relative overflow-hidden animate-in fade-in zoom-in-95 duration-700">
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-2xl h-64 bg-blue-500/5 blur-[80px] rounded-full pointer-events-none"></div>
-            <Crown className="w-16 h-16 text-blue-500 mx-auto mb-6 relative z-10" />
-            <h3 className="text-3xl md:text-4xl font-black text-slate-900 mb-4 relative z-10 tracking-tight">The Matchmaker Engine</h3>
-            <p className="text-slate-500 max-w-xl mx-auto font-medium text-lg relative z-10 mb-8">
-              Set your parameters above and hit search to instantly filter hundreds of schools and discover the <span className="text-slate-900 font-bold">Top Tier Programs</span>, <span className="text-slate-900 font-bold">Lowest Net Cost</span>, and <span className="text-slate-900 font-bold">Highest ROI</span> matches.
-            </p>
-          </div>
-
+          <section aria-label="Recommended Filters" className="space-y-8 animate-in fade-in duration-500">
+            <div className="bg-white/60 backdrop-blur-3xl border border-slate-200/50 rounded-3xl p-6 sm:p-10 text-center shadow-sm relative overflow-hidden">
+              <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 mb-3">
+                <Crown className="w-6 h-6" />
+              </div>
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900 mb-2 tracking-tight">
+                {athleteSelectedSports.length > 0
+                  ? `Recommended for Your ${athleteSelectedSports.length > 1 ? 'Sports' : 'Sport'} (${athleteSelectedSports.join(' & ')})`
+                  : 'Recommended Quick-Launch Filters'}
+              </h2>
+              <p className="text-slate-500 max-w-lg mx-auto font-medium text-xs sm:text-sm mb-6">
+                Tap a recommended filter below to immediately scan matching college programs, scholarships, and ROI metrics.
+              </p>
+              <div className="flex flex-wrap justify-center gap-2.5 max-w-3xl mx-auto">
+                {recommendedPresets.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedSport(preset.sport);
+                      setSelectedDivision(preset.division || '');
+                      setSelectedStates(preset.states || []);
+                      setActiveBonusFilter(preset.bonusFilter || null);
+                      setHideAcademicOnly(true);
+                      executeSearch({
+                        selectedSport: preset.sport,
+                        selectedDivision: preset.division || '',
+                        selectedStates: preset.states || [],
+                      });
+                    }}
+                    className={
+                      preset.isPrimaryFit
+                        ? 'px-4 py-2.5 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-black text-xs sm:text-sm shadow-md hover:scale-105 transition-transform flex items-center gap-1.5'
+                        : 'px-4 py-2.5 rounded-2xl bg-white border border-slate-200 hover:border-blue-400 text-slate-800 font-bold text-xs sm:text-sm shadow-sm hover:text-blue-600 transition-all'
+                    }
+                  >
+                    {preset.isPrimaryFit && <Target className="w-4 h-4" />}
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </section>
         ) : (
-          <div className="animate-in fade-in slide-in-from-bottom-8 duration-500">
-              {renderedCollegeCards}
-          </div>
+          <section aria-label="Search Results" className="animate-in fade-in slide-in-from-bottom-8 duration-500 mb-12">
+            {renderedCollegeCards}
+          </section>
         )}
 
+        {/* ========================================================= */}
+        {/* CRAWLABLE SEO & GEO DIRECTORY + METHODOLOGY GUIDE         */}
+        {/* (Always rendered in DOM so Search & AI Bots index links)  */}
+        {/* ========================================================= */}
+        <aside
+          aria-label="College Recruiting Directory & Methodology"
+          className="mt-10 space-y-6 bg-white/60 backdrop-blur-xl border border-slate-200/60 rounded-3xl p-6 sm:p-8 text-left shadow-sm"
+        >
+          <div>
+            <h2 className="text-lg sm:text-xl font-black text-slate-900 mb-2">
+              Explore College Athletic Programs by Sport & Division
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-600 leading-relaxed mb-5">
+              ChasedSports indexes over 2,800 NCAA Division 1 (D1), Division 2 (D2), Division 3 (D3), NAIA, and NJCAA (JUCO) universities nationwide. Compare official program operating budgets, average athletic scholarship aid, in-state and out-of-state tuition costs, admission acceptance rates, and 10-year median alumni earnings.
+            </p>
+
+            <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-2.5">
+              Browse by College Sport
+            </h3>
+            <nav aria-label="Popular Sport Searches" className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 mb-6">
+              {ALL_SPORTS.map((sp) => (
+                <Link
+                  key={sp.value}
+                  href={`/search?sport=${encodeURIComponent(sp.value)}`}
+                  className="text-xs font-bold text-slate-600 hover:text-blue-600 bg-white/90 hover:bg-blue-50/70 border border-slate-200/70 rounded-xl px-3 py-2 transition-colors truncate"
+                >
+                  College {sp.label} Programs
+                </Link>
+              ))}
+            </nav>
+
+            <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-2.5">
+              Browse by Athletic Division
+            </h3>
+            <nav aria-label="Athletic Division Searches" className="flex flex-wrap gap-2">
+              {ALL_DIVISIONS.map((div) => (
+                <Link
+                  key={div.value}
+                  href={`/search?division=${encodeURIComponent(div.value)}`}
+                  className="text-xs font-bold text-slate-700 hover:text-blue-600 bg-slate-100/80 hover:bg-blue-50 border border-slate-200 rounded-xl px-3.5 py-2 transition-colors"
+                >
+                  {div.label} Schools
+                </Link>
+              ))}
+            </nav>
+          </div>
+
+          {/* GEO FAQ Block on /search for AI Answer Engines */}
+          <div className="pt-6 border-t border-slate-200/60">
+            <div className="flex items-center gap-2 mb-4">
+              <HelpCircle className="w-4 h-4 text-blue-600" />
+              <h2 className="text-base sm:text-lg font-black text-slate-900">
+                How ChasedSports Recruiting & ROI Ratings Work
+              </h2>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-white/80 p-4 rounded-2xl border border-slate-100">
+                <h3 className="text-xs font-black uppercase tracking-wider text-blue-600 mb-1">
+                  1. Athletic Readiness Score
+                </h3>
+                <p className="text-xs text-slate-600 leading-relaxed font-medium">
+                  For stat-based sports (Track & Field, Cross Country, Swimming, Golf), ChasedSports benchmarks your personal records (PRs) into a 15–99 Recruiting Score and compares it against each college&apos;s Team Performance Rating.
+                </p>
+              </div>
+              <div className="bg-white/80 p-4 rounded-2xl border border-slate-100">
+                <h3 className="text-xs font-black uppercase tracking-wider text-emerald-600 mb-1">
+                  2. Net Cost & Scholarship Aid
+                </h3>
+                <p className="text-xs text-slate-600 leading-relaxed font-medium">
+                  We combine in-state and out-of-state tuition data with program-specific operating budgets and average athletic scholarship allocations to project your true annual net cost.
+                </p>
+              </div>
+              <div className="bg-white/80 p-4 rounded-2xl border border-slate-100">
+                <h3 className="text-xs font-black uppercase tracking-wider text-amber-600 mb-1">
+                  3. 10-Year Alumni ROI Multiplier
+                </h3>
+                <p className="text-xs text-slate-600 leading-relaxed font-medium">
+                  Our ROI Multiplier divides a university&apos;s 10-year post-enrollment median graduate earnings by its estimated annual net tuition cost so families can compare long-term career value.
+                </p>
+              </div>
+            </div>
+          </div>
+        </aside>
       </div>
     </main>
   );
 }
 
-// ----------------------------------------------------------------------
-// THE CRITICAL DEFAULT EXPORT TO FIX NEXT.JS "NOT A REACT COMPONENT" ERROR
-// ----------------------------------------------------------------------
 export default function SearchPage() {
   return (
     <Suspense fallback={
