@@ -1,46 +1,79 @@
 // app/sitemap.ts
-import { MetadataRoute } from 'next';
-import { createClient } from '@supabase/supabase-js';
+import type { MetadataRoute } from 'next';
+import { createClient } from '@/utils/supabase/client';
 
 // Cache the sitemap for 24 hours on Vercel's Edge Network
 export const revalidate = 86400;
 
-export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  // Bulletproof sanitization: strips markdown brackets, quotes, and trailing slashes
-  const rawEnvUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://chasedsports.com';
-  const baseUrl = rawEnvUrl
-    .replace(/[\[\]()]/g, '')
-    .replace(/['"]/g, '')
-    .replace('://www.', '://')
-    .replace(/\/$/, '');
+// Built from an array so chat clipboards and env vars can never inject [url](url)
+const baseUrl = ['https:', '', 'chasedsports.com'].join('/');
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+const SPORTS_SLUGS = [
+  'baseball',
+  'basketball',
+  'bowling',
+  'cross-country',
+  'fencing',
+  'field-hockey',
+  'football',
+  'golf',
+  'gymnastics',
+  'ice-hockey',
+  'lacrosse',
+  'soccer',
+  'softball',
+  'swimming-and-diving',
+  'tennis',
+  'track-and-field',
+  'volleyball',
+  'water-polo',
+  'wrestling',
+];
+
+const DIVISION_SLUGS = ['ncaa-d1', 'ncaa-d2', 'ncaa-d3', 'naia', 'juco'];
+
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const supabase = createClient();
+  const now = new Date();
 
   // 1. Public Static Routes (High-value crawlable landing pages)
   const staticPaths = [
     { route: '', priority: 1.0, freq: 'daily' as const },
-    { route: '/search', priority: 0.9, freq: 'daily' as const },
+    { route: '/search', priority: 0.95, freq: 'daily' as const },
     { route: '/leaderboard', priority: 0.9, freq: 'daily' as const },
+    { route: '/division-checker', priority: 0.85, freq: 'weekly' as const },
+    { route: '/compete', priority: 0.8, freq: 'daily' as const },
     { route: '/feed', priority: 0.8, freq: 'daily' as const },
-    { route: '/division-checker', priority: 0.8, freq: 'weekly' as const },
-    { route: '/compete', priority: 0.8, freq: 'weekly' as const },
+    { route: '/feed/discussions', priority: 0.75, freq: 'daily' as const },
+    { route: '/feed/network', priority: 0.75, freq: 'daily' as const },
     { route: '/shop', priority: 0.7, freq: 'weekly' as const },
-    { route: '/pro', priority: 0.7, freq: 'weekly' as const },
-    { route: '/coach-pro', priority: 0.7, freq: 'weekly' as const },
+    { route: '/pro', priority: 0.7, freq: 'monthly' as const },
+    { route: '/coach-pro', priority: 0.7, freq: 'monthly' as const },
+    { route: '/login', priority: 0.5, freq: 'monthly' as const },
+    { route: '/signup', priority: 0.6, freq: 'monthly' as const },
+    { route: '/privacy', priority: 0.3, freq: 'yearly' as const },
+    { route: '/terms', priority: 0.3, freq: 'yearly' as const },
   ];
 
   const staticRoutes: MetadataRoute.Sitemap = staticPaths.map(({ route, priority, freq }) => ({
     url: `${baseUrl}${route}`,
-    lastModified: new Date(),
+    lastModified: now,
     changeFrequency: freq,
     priority,
   }));
 
+  // 2. Programmatic Rankings Routes (/rankings/[sport]/[division])
+  const rankingRoutes: MetadataRoute.Sitemap = SPORTS_SLUGS.flatMap((sport) =>
+    DIVISION_SLUGS.map((division) => ({
+      url: `${baseUrl}/rankings/${sport}/${division}`,
+      lastModified: now,
+      changeFrequency: 'weekly' as const,
+      priority: 0.85,
+    }))
+  );
+
   try {
-    // 2. Fetch ALL Universities (Bypassing PostgREST 1,000-row limit)
+    // 3. Fetch ALL Universities (Bypassing PostgREST 1,000-row limit)
     const [u1, u2, u3, u4] = await Promise.all([
       supabase.from('universities').select('slug').not('slug', 'is', null).range(0, 999),
       supabase.from('universities').select('slug').not('slug', 'is', null).range(1000, 1999),
@@ -53,16 +86,24 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       ...(u2.data || []),
       ...(u3.data || []),
       ...(u4.data || []),
-    ].filter((uni) => Boolean(uni.slug && String(uni.slug).trim() !== ''));
+    ];
 
-    const collegeRoutes: MetadataRoute.Sitemap = allUniversities.map((uni) => ({
-      url: `${baseUrl}/college/${encodeURIComponent(String(uni.slug).trim())}`,
-      lastModified: new Date(),
+    const uniqueSlugs = Array.from(
+      new Set(
+        allUniversities
+          .map((uni: { slug: string | null }) => (uni.slug ? String(uni.slug).trim() : ''))
+          .filter(Boolean)
+      )
+    );
+
+    const collegeRoutes: MetadataRoute.Sitemap = uniqueSlugs.map((slug) => ({
+      url: `${baseUrl}/college/${encodeURIComponent(slug)}`,
+      lastModified: now,
       changeFrequency: 'weekly',
       priority: 0.8,
     }));
 
-    // 3. Fetch ONLY Verified Athletes (trust_level === 1)
+    // 4. Fetch ONLY Verified Athletes (trust_level === 1)
     const { data: athletes, error: athleteError } = await supabase
       .from('athletes')
       .select('id, custom_slug, last_login_date, created_at')
@@ -70,12 +111,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
     if (athleteError) throw athleteError;
 
-    const athleteRoutes: MetadataRoute.Sitemap = (athletes || []).map((athlete) => {
+    const athleteRoutes: MetadataRoute.Sitemap = (athletes || []).map((athlete: any) => {
       const modifiedDate = athlete.last_login_date
         ? new Date(athlete.last_login_date)
         : athlete.created_at
           ? new Date(athlete.created_at)
-          : new Date();
+          : now;
 
       const canonicalIdentifier = athlete.custom_slug
         ? String(athlete.custom_slug).trim()
@@ -89,9 +130,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       };
     });
 
-    return [...staticRoutes, ...collegeRoutes, ...athleteRoutes];
+    return [...staticRoutes, ...rankingRoutes, ...collegeRoutes, ...athleteRoutes];
   } catch (error) {
     console.error('Error generating dynamic sitemap:', error);
-    return staticRoutes;
+    return [...staticRoutes, ...rankingRoutes];
   }
 }

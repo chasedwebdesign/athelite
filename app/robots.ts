@@ -1,14 +1,25 @@
 // app/robots.ts
-import { MetadataRoute } from 'next';
+import type { MetadataRoute } from 'next';
+
+const baseUrl = ['https:', '', 'chasedsports.com'].join('/');
 
 export default function robots(): MetadataRoute.Robots {
-  const baseUrl = 'https://chasedsports.com';
-
   return {
     rules: [
       {
         userAgent: '*',
-        allow: ['/', '/college/', '/athlete/', '/search', '/leaderboard', '/feed', '/compete', '/division-checker'],
+        allow: [
+          '/',
+          '/college/',
+          '/rankings/',
+          '/athlete/',
+          '/coach/',
+          '/search',
+          '/leaderboard',
+          '/feed',
+          '/compete',
+          '/division-checker',
+        ],
         disallow: ['/api/', '/dashboard/', '/onboarding/', '/notifications'],
       },
     ],
