@@ -7,29 +7,29 @@ import LandingClient, { FeaturedCollegeItem, FeaturedAthleteItem } from './Landi
 export const revalidate = 3600;
 
 export const metadata: Metadata = {
-  title: 'ChasedSports | #1 High School Recruiting OS, College Matchmaker & Athlete Profiles',
+  title: 'ChasedSports | #1 High School Recruiting OS, College Matchmaker & Athletic Portfolios',
   description:
-    'The operating system for high school athletes. Instantly calculate your 0-99 Base Recruiting Score across 19+ sports, sync your Athletic.net PRs, unlock ChasedSports Pro, and match with 1,500+ NCAA D1, D2, D3, & NAIA colleges.',
+    'The operating system for high school athletes across 19 sports. Calculate your 0-99 Base Recruiting Score, build your official Athletic Portfolio, unlock ChasedSports Pro, and match with 1,500+ NCAA D1, D2, D3, & NAIA colleges.',
   keywords: [
     'high school recruiting calculator',
+    'high school athletic portfolio',
     'college track and field recruiting standards',
-    'NCAA D1 track times',
-    'Athletic.net recruiting sync',
+    'NCAA D1 recruiting standards',
     'college athletic scholarship finder',
     'ChasedSports Pro',
     'ChasedSports',
     'college roster readiness meter',
     'recruiting score calculator',
     'cross country recruiting standards',
-    'college sports ROI calculator'
+    'college sports ROI calculator',
   ],
   alternates: {
     canonical: 'https://chasedsports.com',
   },
   openGraph: {
-    title: 'ChasedSports | Find YOUR College & Track Your True Recruiting Value',
+    title: 'ChasedSports | Find YOUR College & Build Your Official Athletic Portfolio',
     description:
-      'Instantly calculate your college recruiting tier (Power 4 D1, Mid-Major, D2, D3, NAIA), sync verified Athletic.net PRs, and filter 1,500+ college athletic programs by budget and 10-year ROI.',
+      'Instantly calculate your college recruiting tier (Power 4 D1, Mid-Major, D2, D3, NAIA) across 19 sports, customize your verified Athletic Portfolio, and filter 1,500+ college athletic programs by budget and 10-year ROI.',
     url: 'https://chasedsports.com',
     siteName: 'ChasedSports',
     images: [
@@ -45,9 +45,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'ChasedSports | High School Athlete Recruiting OS',
+    title: 'ChasedSports | High School Athlete Recruiting OS & Portfolios',
     description:
-      'Calculate your 0-99 Recruit Score, compare against 1,500+ college rosters, and build your verified recruiting profile for free.',
+      'Calculate your 0-99 Recruit Score across 19 sports, compare against 1,500+ college rosters, and build your official athletic portfolio for free.',
     images: ['https://chasedsports.com/icon.png'],
   },
   robots: {
@@ -83,17 +83,79 @@ const ATHLETE_GRADIENTS = [
 ];
 
 const FALLBACK_COLLEGES: FeaturedCollegeItem[] = [
-  { id: '1', name: 'University of Miami', location: 'Coral Gables, FL', division: 'NCAA D1', budget: '$127.9M', salary: '$134,500', color: 'from-orange-500 to-emerald-600', backStats: { recruitScore: 92, acceptanceRate: '19%', gradRate: '83%' } },
-  { id: '2', name: 'University of Notre Dame', location: 'Notre Dame, IN', division: 'NCAA D1', budget: '$139.3M', salary: '$152,000', color: 'from-blue-800 to-amber-500', backStats: { recruitScore: 88, acceptanceRate: '13%', gradRate: '97%' } },
-  { id: '3', name: 'Stanford University', location: 'Stanford, CA', division: 'NCAA D1', budget: '$142.5M', salary: '$175,000', color: 'from-red-800 to-red-600', backStats: { recruitScore: 96, acceptanceRate: '4%', gradRate: '95%' } },
-  { id: '4', name: 'University of Oregon', location: 'Eugene, OR', division: 'NCAA D1', budget: '$135.2M', salary: '$128,000', color: 'from-green-600 to-yellow-400', backStats: { recruitScore: 94, acceptanceRate: '83%', gradRate: '74%' } },
-  { id: '5', name: 'Harvey Mudd College', location: 'Claremont, CA', division: 'NCAA D3', budget: '$3.1M', salary: '$168,000', color: 'from-slate-800 to-amber-500', backStats: { recruitScore: 74, acceptanceRate: '13%', gradRate: '93%' } },
+  {
+    id: '1',
+    name: 'University of Miami',
+    location: 'Coral Gables, FL',
+    division: 'NCAA D1',
+    budget: '$127.9M',
+    salary: '$134,500',
+    color: 'from-orange-500 to-emerald-600',
+    backStats: { recruitScore: 92, acceptanceRate: '19%', gradRate: '83%' },
+  },
+  {
+    id: '2',
+    name: 'University of Notre Dame',
+    location: 'Notre Dame, IN',
+    division: 'NCAA D1',
+    budget: '$139.3M',
+    salary: '$152,000',
+    color: 'from-blue-800 to-amber-500',
+    backStats: { recruitScore: 88, acceptanceRate: '13%', gradRate: '97%' },
+  },
+  {
+    id: '3',
+    name: 'Stanford University',
+    location: 'Stanford, CA',
+    division: 'NCAA D1',
+    budget: '$142.5M',
+    salary: '$175,000',
+    color: 'from-red-800 to-red-600',
+    backStats: { recruitScore: 96, acceptanceRate: '4%', gradRate: '95%' },
+  },
+  {
+    id: '4',
+    name: 'University of Oregon',
+    location: 'Eugene, OR',
+    division: 'NCAA D1',
+    budget: '$135.2M',
+    salary: '$128,000',
+    color: 'from-green-600 to-yellow-400',
+    backStats: { recruitScore: 94, acceptanceRate: '83%', gradRate: '74%' },
+  },
+  {
+    id: '5',
+    name: 'Harvey Mudd College',
+    location: 'Claremont, CA',
+    division: 'NCAA D3',
+    budget: '$3.1M',
+    salary: '$168,000',
+    color: 'from-slate-800 to-amber-500',
+    backStats: { recruitScore: 74, acceptanceRate: '13%', gradRate: '93%' },
+  },
 ];
 
 const FALLBACK_ATHLETES: FeaturedAthleteItem[] = [
-  { id: '1', rank: 1, firstName: 'Chase', lastName: 'Fulleton', highSchool: 'South Albany HS', state: 'OR', initials: 'CF', tier: 'Legend Rank', tierClass: 'legend-badge', color: 'from-blue-600 to-indigo-600' },
-  { id: '2', rank: 1, firstName: 'Luke', lastName: 'Skywalker', highSchool: 'Tatooine Prep', state: 'CA', initials: 'LS', tier: 'Legend Rank', tierClass: 'legend-badge', color: 'from-emerald-500 to-teal-600' },
-  { id: '3', rank: 1, firstName: 'Mia', lastName: 'Hamm', highSchool: 'North Carolina HS', state: 'NC', initials: 'MH', tier: 'Legend Rank', tierClass: 'legend-badge', color: 'from-rose-500 to-pink-600' },
+  {
+    id: '1',
+    firstName: 'Chase',
+    lastName: 'Fulleton',
+    highSchool: 'South Albany HS',
+    state: 'OR',
+    gradYear: 2027,
+    gender: 'Boys',
+    initials: 'CF',
+    color: 'from-blue-600 to-indigo-600',
+    equippedCard: 'hype',
+    equippedBorder: 'gold',
+    isVerified: true,
+    isPro: true,
+    sportName: 'Cross Country',
+    levelOfPlay: 'Varsity',
+    fitScore: 88,
+    gpa: '4.0',
+    metrics: [{ name: '5,000 Meters', value: '16:36' }],
+  },
 ];
 
 function formatCurrencyCompact(val: number | null | undefined, fallback: string): string {
@@ -102,6 +164,31 @@ function formatCurrencyCompact(val: number | null | undefined, fallback: string)
   if (num >= 1_000_000) return `$${(num / 1_000_000).toFixed(1)}M`;
   if (num >= 1_000) return `$${Math.round(num / 1_000)}K`;
   return `$${num.toLocaleString()}`;
+}
+
+// Interleave athletes by equipped_card so consecutive cards have visual variety
+function diversifyByCardTheme(athletes: FeaturedAthleteItem[]): FeaturedAthleteItem[] {
+  const buckets: Record<string, FeaturedAthleteItem[]> = {};
+  for (const ath of athletes) {
+    const key = ath.equippedCard || 'obsidian';
+    if (!buckets[key]) buckets[key] = [];
+    buckets[key].push(ath);
+  }
+
+  const themeKeys = Object.keys(buckets);
+  const result: FeaturedAthleteItem[] = [];
+  let added = true;
+
+  while (added) {
+    added = false;
+    for (const key of themeKeys) {
+      if (buckets[key].length > 0) {
+        result.push(buckets[key].shift()!);
+        added = true;
+      }
+    }
+  }
+  return result;
 }
 
 export default async function HomePage() {
@@ -161,34 +248,109 @@ export default async function HomePage() {
         }
       }
 
-      // 2. Pre-fetch verified athletes for SSR crawlability (/athlete/[id])
+      // 2. Pre-fetch athletes using .select('*') so missing column names never cause a fallback
       const { data: athData } = await supabase
         .from('athletes')
-        .select('id, first_name, last_name, high_school, state, gender, trust_level')
-        .gt('trust_level', 0)
+        .select('*')
         .not('first_name', 'is', null)
-        .limit(16);
+        .limit(50);
 
       if (athData && athData.length > 0) {
-        const mappedAthletes: FeaturedAthleteItem[] = athData.map((a: any, idx: number) => {
-          const fName = a.first_name || 'Verified';
-          const lName = a.last_name || 'Athlete';
-          return {
-            id: String(a.id),
-            rank: 1,
-            firstName: fName,
-            lastName: lName,
-            highSchool: a.high_school || 'Varsity Track & Field',
-            state: a.state || 'US',
-            initials: `${fName[0] || 'C'}${lName[0] || 'S'}`.toUpperCase(),
-            tier: 'Legend Rank',
-            tierClass: 'legend-badge',
-            color: ATHLETE_GRADIENTS[idx % ATHLETE_GRADIENTS.length],
-          };
+        // Only keep athletes who have equipped a background card (or equipped border)
+        const equippedAthletes = athData.filter((a: any) => {
+          const card = String(a.equipped_card || '').trim().toLowerCase();
+          return card !== '' && card !== 'base' && card !== 'default' && card !== 'none';
         });
 
-        if (mappedAthletes.length > 0) {
-          initialAthletes = mappedAthletes;
+        if (equippedAthletes.length > 0) {
+          const athleteIds = equippedAthletes.map((a: any) => a.id);
+
+          // Strictly fetch ONLY active sports (is_active = true)
+          const { data: sportsData } = await supabase
+            .from('athlete_sports')
+            .select('*')
+            .in('athlete_id', athleteIds)
+            .eq('is_active', true);
+
+          const activeSportsByAthlete: Record<string, any[]> = {};
+          if (sportsData && Array.isArray(sportsData)) {
+            for (const s of sportsData) {
+              if (s.is_active !== true) continue;
+              if (!activeSportsByAthlete[s.athlete_id]) {
+                activeSportsByAthlete[s.athlete_id] = [];
+              }
+              activeSportsByAthlete[s.athlete_id].push(s);
+            }
+          }
+
+          const mappedAthletes: FeaturedAthleteItem[] = equippedAthletes
+            .map((a: any, idx: number) => {
+              const fName = a.first_name || 'Verified';
+              const lName = a.last_name || 'Athlete';
+
+              // Filter out any sport that was disabled in the athlete's `sports` array
+              const enabledSportNames: string[] | null =
+                Array.isArray(a.sports) && a.sports.length > 0 ? a.sports : null;
+
+              const validSports = (activeSportsByAthlete[a.id] || []).filter((sp: any) => {
+                if (sp.is_active !== true) return false;
+                if (enabledSportNames && !enabledSportNames.includes(sp.sport_name)) return false;
+                return Array.isArray(sp.metrics) && sp.metrics.length > 0;
+              });
+
+              // Pick the active sport with the highest custom_fit_score
+              validSports.sort((x: any, y: any) => Number(y.custom_fit_score || 0) - Number(x.custom_fit_score || 0));
+              const activeSport = validSports[0] || null;
+
+              let parsedGpa: string | null = null;
+              if (a.saved_resume) {
+                try {
+                  const parsed = JSON.parse(a.saved_resume);
+                  if (parsed?.gpa) parsedGpa = String(parsed.gpa);
+                } catch (e) {}
+              }
+
+              const rawMetrics =
+                activeSport && Array.isArray(activeSport.metrics)
+                  ? activeSport.metrics
+                      .filter((m: any) => (m.name || m.event) && (m.value || m.mark))
+                      .map((m: any) => ({
+                        name: String(m.name || m.event),
+                        value: String(m.value || m.mark),
+                      }))
+                  : [];
+
+              const rawGradYear = Number(a.grad_year);
+              const validGradYear = !isNaN(rawGradYear) && rawGradYear >= 2020 && rawGradYear <= 2035 ? rawGradYear : null;
+
+              return {
+                id: String(a.id),
+                customSlug: a.custom_slug || null,
+                firstName: fName,
+                lastName: lName,
+                highSchool: a.high_school || 'Varsity Athletics',
+                state: a.state || 'US',
+                gradYear: validGradYear,
+                gender: a.gender || 'Boys',
+                initials: `${fName[0] || 'C'}${lName[0] || 'S'}`.toUpperCase(),
+                color: ATHLETE_GRADIENTS[idx % ATHLETE_GRADIENTS.length],
+                avatarUrl: a.avatar_url || null,
+                equippedCard: String(a.equipped_card).trim().toLowerCase(),
+                equippedBorder: a.equipped_border || null,
+                isVerified: Number(a.trust_level) > 0,
+                isPro: Boolean(a.is_premium),
+                sportName: activeSport?.sport_name || (enabledSportNames && enabledSportNames[0]) || 'Track & Field',
+                levelOfPlay: activeSport?.level_of_play || 'Varsity',
+                fitScore: Number(activeSport?.custom_fit_score) || 0,
+                gpa: parsedGpa,
+                metrics: rawMetrics,
+              };
+            })
+            .filter((ath) => ath.metrics && ath.metrics.length > 0);
+
+          if (mappedAthletes.length > 0) {
+            initialAthletes = diversifyByCardTheme(mappedAthletes).slice(0, 12);
+          }
         }
       }
     } catch (e) {
@@ -196,7 +358,7 @@ export default async function HomePage() {
     }
   }
 
-  // 🚨 GEO & SEO JSON-LD STRUCTURED DATA GRAPH (Includes direct ItemLists for Colleges, Athletes, and Pro)
+  // 🚨 GEO & SEO JSON-LD STRUCTURED DATA GRAPH
   const jsonLd = {
     '@context': 'https://schema.org',
     '@graph': [
@@ -206,7 +368,7 @@ export default async function HomePage() {
         url: 'https://chasedsports.com',
         name: 'ChasedSports',
         description:
-          'Gamified high school athletic recruiting platform, college matchmaker search engine, and verified athlete profiles.',
+          'Gamified high school athletic recruiting platform, college matchmaker search engine, and official athlete portfolios across 19 sports.',
         potentialAction: {
           '@type': 'SearchAction',
           target: 'https://chasedsports.com/search?q={search_term_string}',
@@ -222,7 +384,7 @@ export default async function HomePage() {
         offers: [
           {
             '@type': 'Offer',
-            name: 'ChasedSports Free Athlete Profile',
+            name: 'ChasedSports Free Athletic Portfolio',
             price: '0',
             priceCurrency: 'USD',
             url: 'https://chasedsports.com/login',
@@ -232,14 +394,14 @@ export default async function HomePage() {
             name: 'ChasedSports Pro Membership',
             url: 'https://chasedsports.com/pro',
             description:
-              'Unlock advanced college matchmaking, unlimited coach outreach email templates, Readiness Meters, and premium profile themes.',
+              'Unlock permanent HD highlight video portfolio hosting, advanced college matchmaking Readiness Meters, coach outreach email templates, and premium holographic profile themes.',
           },
         ],
         featureList: [
-          'Instant 0-99 Base Recruiting Score Calculator across 19+ sports',
-          'One-click Athletic.net PR synchronization and identity verification',
+          'Instant 0-99 Base Recruiting Score Calculator across 19 high school sports',
+          'Official Public Athletic Portfolios (/athlete/[id]) with customizable holographic themes, borders, and academic resumes',
+          'PRO HD Highlight Video hosting pinned directly to athlete recruiting portfolios',
           'College Matchmaker filtering 1,500+ NCAA D1, D2, D3, and NAIA programs by operating budget, tuition, average scholarship, and 10-year median earnings',
-          'Verified Public Athlete Profiles (/athlete/[id]) with customizable shop borders and banners',
           'Team Headquarters with pooled ChasedCash and Boosts',
         ],
       },
@@ -252,17 +414,6 @@ export default async function HomePage() {
           position: idx + 1,
           name: `${col.name} (${col.division})`,
           url: `https://chasedsports.com/college/${col.id}`,
-        })),
-      },
-      {
-        '@type': 'ItemList',
-        '@id': 'https://chasedsports.com/#featured-athletes',
-        name: 'Verified High School Athletes on ChasedSports',
-        itemListElement: initialAthletes.slice(0, 10).map((ath, idx) => ({
-          '@type': 'ListItem',
-          position: idx + 1,
-          name: `${ath.firstName} ${ath.lastName} - ${ath.highSchool}`,
-          url: `https://chasedsports.com/athlete/${ath.id}`,
         })),
       },
       {
@@ -279,18 +430,18 @@ export default async function HomePage() {
           },
           {
             '@type': 'Question',
-            name: 'How does ChasedSports calculate my 0-99 Base Recruiting Score?',
+            name: 'How does ChasedSports calculate my 0-99 Base Recruiting Score across 19 sports?',
             acceptedAnswer: {
               '@type': 'Answer',
-              text: 'ChasedSports evaluates your official personal records (PRs) and sport-specific metrics against NCAA D1 (Power 4 & Mid-Major), D2, D3, and NAIA roster standards. A score of 95–99 represents Power 4 D1 priority recruits, 85–94 represents Mid-Major D1 scholarship/roster targets, 75–84 represents Top D2 or D1 Walk-On standards, 65–74 represents NCAA D2/D3 prospects, and 55–64 represents NAIA prospects.',
+              text: 'ChasedSports evaluates your personal records (PRs) and position-specific metrics across 19 sports against NCAA D1 (Power 4 & Mid-Major), D2, D3, and NAIA roster standards. A score of 95–99 represents Power 4 D1 priority recruits, 85–94 represents Mid-Major D1 scholarship/roster targets, 75–84 represents Top D2 or D1 Walk-On standards, 65–74 represents NCAA D2/D3 prospects, and 55–64 represents NAIA prospects.',
             },
           },
           {
             '@type': 'Question',
-            name: 'What is included in ChasedSports Pro?',
+            name: 'What is included in an Official ChasedSports Athletic Portfolio?',
             acceptedAnswer: {
               '@type': 'Answer',
-              text: 'ChasedSports Pro (/pro) unlocks the full recruiting operating system: deep College Matchmaker Readiness Meters comparing your PRs directly against college team_performance_ratings, automated coach email builders, financial net-cost & 10-year ROI breakdowns, and exclusive animated profile borders and banners.',
+              text: 'Your ChasedSports Athletic Portfolio (/athlete/[id]) is your all-in-one digital recruiting resume. It showcases your sport-specific metrics across any of our 19 supported sports, season accolades, unweighted GPA, custom holographic card themes, animated borders, and pinned PRO HD highlight videos for college coaches.',
             },
           },
         ],

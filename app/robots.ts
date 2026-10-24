@@ -1,15 +1,18 @@
+// app/robots.ts
 import { MetadataRoute } from 'next';
 
 export default function robots(): MetadataRoute.Robots {
-  const baseUrl = 'https://www.chasedsports.com'; // Replace with your actual domain
+  const baseUrl = 'https://chasedsports.com';
 
   return {
-    rules: {
-      userAgent: '*',
-      allow: '/',
-      // Tell Google NOT to index private user routes
-      disallow: ['/dashboard/', '/api/'], 
-    },
+    rules: [
+      {
+        userAgent: '*',
+        allow: ['/', '/college/', '/athlete/', '/search', '/leaderboard', '/feed', '/compete', '/division-checker'],
+        disallow: ['/api/', '/dashboard/', '/onboarding/', '/notifications'],
+      },
+    ],
     sitemap: `${baseUrl}/sitemap.xml`,
+    host: baseUrl,
   };
 }

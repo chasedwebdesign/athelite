@@ -1,84 +1,94 @@
+// app/sitemap.ts
 import { MetadataRoute } from 'next';
 import { createClient } from '@supabase/supabase-js';
 
-// 🚨 Cache the sitemap for 24 hours on Vercel's Edge Network to save database reads
-export const revalidate = 86400; 
+// Cache the sitemap for 24 hours on Vercel's Edge Network
+export const revalidate = 86400;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.chasedsports.com';
+  // Always normalize to non-www https://chasedsports.com so sitemap URLs never 308 redirect
+  const rawBaseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://chasedsports.com';
+  const baseUrl = rawBaseUrl.replace('://www.', '://').replace(/\/$/, '');
 
-  // We use the standard supabase-js client here since sitemap.ts runs entirely 
-  // on the server and just needs public read access.
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
-  // 1. Static Routes (Merged)
+  // 1. Public Static Routes (High-value crawlable landing pages)
   const staticPaths = [
     { route: '', priority: 1.0, freq: 'daily' as const },
-    { route: '/search', priority: 0.9, freq: 'weekly' as const },
-    { route: '/feed', priority: 0.9, freq: 'always' as const },
-    { route: '/leaderboard', priority: 0.9, freq: 'daily' as const }, 
-    { route: '/shop', priority: 0.8, freq: 'weekly' as const },
+    { route: '/search', priority: 0.9, freq: 'daily' as const },
+    { route: '/leaderboard', priority: 0.9, freq: 'daily' as const },
+    { route: '/feed', priority: 0.8, freq: 'daily' as const },
+    { route: '/division-checker', priority: 0.8, freq: 'weekly' as const },
     { route: '/compete', priority: 0.8, freq: 'weekly' as const },
-    { route: '/login', priority: 0.5, freq: 'monthly' as const },
+    { route: '/shop', priority: 0.7, freq: 'weekly' as const },
+    { route: '/pro', priority: 0.7, freq: 'weekly' as const },
+    { route: '/coach-pro', priority: 0.7, freq: 'weekly' as const },
   ];
 
   const staticRoutes: MetadataRoute.Sitemap = staticPaths.map(({ route, priority, freq }) => ({
     url: `${baseUrl}${route}`,
     lastModified: new Date(),
     changeFrequency: freq,
-    priority: priority,
+    priority,
   }));
 
   try {
-    // 2. Fetch Universities for the College Finder SEO
-    // 🚨 FIX: Added 'slug' to the select statement so it isn't undefined in the map loop
-    const { data: universities, error: uniError } = await supabase
-      .from('universities')
-      .select('id, slug');
+    // 2. Fetch ALL Universities (Bypassing PostgREST 1,000-row limit)
+    const [u1, u2, u3, u4] = await Promise.all([
+      supabase.from('universities').select('slug').not('slug', 'is', null).range(0, 999),
+      supabase.from('universities').select('slug').not('slug', 'is', null).range(1000, 1999),
+      supabase.from('universities').select('slug').not('slug', 'is', null).range(2000, 2999),
+      supabase.from('universities').select('slug').not('slug', 'is', null).range(3000, 3999),
+    ]);
 
-    if (uniError) throw uniError;
+    const allUniversities = [
+      ...(u1.data || []),
+      ...(u2.data || []),
+      ...(u3.data || []),
+      ...(u4.data || []),
+    ].filter((uni) => Boolean(uni.slug && String(uni.slug).trim() !== ''));
 
-    const collegeRoutes: MetadataRoute.Sitemap = (universities || []).map((uni) => ({
-      url: `${baseUrl}/college/${uni.slug}`,
-      lastModified: new Date(), // Replace with uni.updated_at if added to schema later
+    const collegeRoutes: MetadataRoute.Sitemap = allUniversities.map((uni) => ({
+      url: `${baseUrl}/college/${encodeURIComponent(String(uni.slug).trim())}`,
+      lastModified: new Date(),
       changeFrequency: 'weekly',
-      priority: 0.6,
+      priority: 0.8,
     }));
 
-    // 3. Fetch ALL Verified Athletes (trust_level > 0)
-    // We intentionally exclude unverified athletes so we don't index unclaimed pages
+    // 3. Fetch ONLY Verified Athletes (trust_level === 1)
     const { data: athletes, error: athleteError } = await supabase
       .from('athletes')
-      .select('id, last_login_date, created_at')
-      .gt('trust_level', 0);
+      .select('id, custom_slug, last_login_date, created_at')
+      .eq('trust_level', 1);
 
     if (athleteError) throw athleteError;
 
     const athleteRoutes: MetadataRoute.Sitemap = (athletes || []).map((athlete) => {
-      // 🚨 SEO HACK: Use their real last login to tell Google this is a highly active portfolio
-      const modifiedDate = athlete.last_login_date 
-        ? new Date(athlete.last_login_date) 
-        : (athlete.created_at ? new Date(athlete.created_at) : new Date());
+      const modifiedDate = athlete.last_login_date
+        ? new Date(athlete.last_login_date)
+        : athlete.created_at
+          ? new Date(athlete.created_at)
+          : new Date();
+
+      // Always prefer custom_slug so the sitemap URL matches the canonical URL on /athlete/[id]
+      const canonicalIdentifier = athlete.custom_slug
+        ? String(athlete.custom_slug).trim()
+        : String(athlete.id).trim();
 
       return {
-        url: `${baseUrl}/athlete/${athlete.id}`,
-        lastModified: modifiedDate, 
-        changeFrequency: 'daily', // High frequency because feed posts/PRs update often
-        priority: 0.8, // High priority so Google ranks their portfolios quickly
+        url: `${baseUrl}/athlete/${encodeURIComponent(canonicalIdentifier)}`,
+        lastModified: modifiedDate,
+        changeFrequency: 'daily',
+        priority: 0.8,
       };
     });
 
-    // Combine and return all routes for Google to crawl
     return [...staticRoutes, ...collegeRoutes, ...athleteRoutes];
-
   } catch (error) {
-    console.error("Error generating dynamic sitemap:", error);
-    
-    // Fallback: If Supabase fails for any reason, return the static routes 
-    // so the build doesn't crash and Google still gets a valid XML file.
+    console.error('Error generating dynamic sitemap:', error);
     return staticRoutes;
   }
 }

@@ -1,3 +1,4 @@
+// app/layout.tsx
 import type { Metadata } from 'next';
 import { Analytics } from '@vercel/analytics/react';
 import Navbar from '@/components/Navbar';
@@ -7,15 +8,21 @@ import Navbar from '@/components/Navbar';
 import './globals.css';
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://www.chasedsports.com'),
-  
+  metadataBase: new URL('https://chasedsports.com'),
+
   title: 'ChasedSports | The Athletic Recruiting Network',
-  description: 'The data-driven recruiting platform connecting high school athletes with college programs. Build your profile, verify your stats, and discover your true market value.',
-  
+  description:
+    'The data-driven recruiting platform connecting high school athletes with college programs. Build your profile, verify your stats, and discover your true market value.',
+
+  alternates: {
+    canonical: 'https://chasedsports.com',
+  },
+
   openGraph: {
     title: 'ChasedSports | The Athletic Recruiting Network',
-    description: 'The data-driven recruiting platform connecting high school athletes with college programs.',
-    url: 'https://www.chasedsports.com',
+    description:
+      'The data-driven recruiting platform connecting high school athletes with college programs.',
+    url: 'https://chasedsports.com',
     siteName: 'ChasedSports',
     images: [
       {
@@ -31,7 +38,8 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary',
     title: 'ChasedSports | The Athletic Recruiting Network',
-    description: 'The data-driven recruiting platform connecting high school athletes with college programs.',
+    description:
+      'The data-driven recruiting platform connecting high school athletes with college programs.',
     images: ['/icon.png'],
   },
 };
@@ -46,13 +54,13 @@ export default function RootLayout({
       <body className="bg-[#F8FAFC] min-h-screen flex flex-col overflow-x-clip">
         {/* GLOBAL NAVBAR */}
         <Navbar />
-        
+
         {/* PAGE CONTENT */}
         <div className="flex-1 w-full relative overflow-x-clip">
           {children}
         </div>
 
-        {/* 🚨 VERCEL ANALYTICS */}
+        {/* VERCEL ANALYTICS */}
         <Analytics />
       </body>
     </html>

@@ -1,3 +1,4 @@
+// app/search/page.tsx
 'use client';
 
 import React, { useEffect, useState, useMemo, Suspense, useRef, useCallback } from 'react';
@@ -245,6 +246,15 @@ const getCalculatedRating = (college: any, program: any) => {
   return rating;
 };
 
+// --- COMPOSITE ACADEMIC & 10-YEAR SALARY SCORE ---
+const getAcademicAndSalaryScore = (uni: University): number => {
+  const salary = uni.median_earnings || 0;
+  const rawAcc = parseFloat(uni.acceptance_rate?.replace('%', '') || '100');
+  const clampedAcc = isNaN(rawAcc) ? 100 : Math.min(100, Math.max(1, rawAcc));
+  const selectivityBonus = (100 - clampedAcc) * 350;
+  return salary > 0 ? salary + selectivityBonus : selectivityBonus * 0.25;
+};
+
 interface University {
   id: string;
   slug: string;
@@ -296,6 +306,7 @@ const US_TILE_MAP = [
 ];
 
 const PAGE_SIZE = 24;
+const BASE_SITE_URL = 'https://chasedsports.com';
 
 function formatCurrency(num: number | null | undefined) {
   if (!num) return 'N/A';
@@ -539,22 +550,42 @@ function SearchContent() {
     return { score, label: effectiveSport, isStatBased: true };
   }, [effectiveSport, athleteProfile, isAthlete, athleteScoresBySport]);
 
-  // --- CORE SEARCH EXECUTION (Stable reference via latestFiltersRef) ---
+  // --- CHECK IF ANY USER FILTER IS ACTIVE ---
+  const hasActiveFilters = useMemo(() => {
+    return Boolean(
+      selectedSport ||
+      schoolName ||
+      selectedGender ||
+      selectedDivision ||
+      selectedStates.length > 0 ||
+      selectedMajor ||
+      maxAcceptance ||
+      maxTuition ||
+      sortBy ||
+      activeBonusFilter
+    );
+  }, [
+    selectedSport,
+    schoolName,
+    selectedGender,
+    selectedDivision,
+    selectedStates.length,
+    selectedMajor,
+    maxAcceptance,
+    maxTuition,
+    sortBy,
+    activeBonusFilter
+  ]);
+
+  // --- CORE SEARCH EXECUTION (Zero-Friction: Supports Default Unfiltered Load) ---
   const executeSearch = useCallback(async (overrides?: Partial<SavedSearchPreset>) => {
     setErrorMsg(null);
     const current = latestFiltersRef.current;
 
-    const sSport = overrides?.selectedSport !== undefined ? overrides.selectedSport : current.selectedSport;
     const sSchool = overrides?.schoolName !== undefined ? overrides.schoolName : current.schoolName;
-    const sGender = overrides?.selectedGender !== undefined ? overrides.selectedGender : current.selectedGender;
     const sDivision = overrides?.selectedDivision !== undefined ? overrides.selectedDivision : current.selectedDivision;
     const sStates = overrides?.selectedStates !== undefined ? overrides.selectedStates : current.selectedStates;
     const sMajor = overrides?.selectedMajor !== undefined ? overrides.selectedMajor : current.selectedMajor;
-
-    if (!sSport && !sSchool && !sGender && !sDivision && sStates.length === 0 && !sMajor) {
-      showNotification("Please select at least one filter or enter a school name to begin.");
-      return;
-    }
 
     setLoading(true);
     setHasSearched(true);
@@ -571,7 +602,10 @@ function SearchContent() {
       query = query.contains('majors_offered', [searchMajor]);
     }
 
-    const { data, error } = await query.limit(800);
+    // Order by 10-year median salary descending at DB level so top academic/earning universities are always included
+    const { data, error } = await query
+      .order('median_earnings', { ascending: false, nullsFirst: false })
+      .limit(800);
 
     if (error) {
       console.error('Database Error:', error.message);
@@ -584,7 +618,7 @@ function SearchContent() {
     setLoading(false);
   }, [supabase, showNotification]);
 
-  // --- 2. Load Initial State & Listen to URL Query Param Changes (SEO Deep-Linking) ---
+  // --- 2. Load Initial State & Listen to URL Query Param Changes (SEO Deep-Linking + Zero-Friction Default) ---
   const hasHydratedState = useRef(false);
 
   useEffect(() => {
@@ -617,6 +651,8 @@ function SearchContent() {
     if (hasHydratedState.current) return;
     hasHydratedState.current = true;
 
+    let restoredResultsCount = 0;
+
     try {
       const savedFilters = sessionStorage.getItem('chasedSportsFilters');
       const savedResults = sessionStorage.getItem('chasedSportsResults');
@@ -640,7 +676,12 @@ function SearchContent() {
       }
 
       if (savedResults) {
-        setUniversities(JSON.parse(savedResults));
+        const parsed = JSON.parse(savedResults);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setUniversities(parsed);
+          setHasSearched(true);
+          restoredResultsCount = parsed.length;
+        }
       }
 
       const savedSideBySide = sessionStorage.getItem('chasedSportsSideBySide');
@@ -651,6 +692,16 @@ function SearchContent() {
       // Ignore corrupted storage
     } finally {
       setIsInitialized(true);
+      if (restoredResultsCount === 0) {
+        executeSearch({
+          selectedSport: '',
+          schoolName: '',
+          selectedGender: '',
+          selectedDivision: '',
+          selectedStates: [],
+          selectedMajor: '',
+        });
+      }
     }
   }, [searchParams, executeSearch]);
 
@@ -660,7 +711,7 @@ function SearchContent() {
     const parts: string[] = [];
     if (selectedDivision) parts.push(selectedDivision);
     if (selectedSport) parts.push(selectedSport);
-    else parts.push('College Athletic');
+    else parts.push('Top Academic & Highest 10-Year Salary College Athletic');
     parts.push('Programs & Scholarships');
     if (selectedStates.length > 0) parts.push(`in ${selectedStates.slice(0, 3).join(', ')}`);
     if (selectedMajor) parts.push(`for ${selectedMajor}`);
@@ -889,10 +940,8 @@ function SearchContent() {
     setTuitionType('in_state');
     setMaxTuition('');
     setSortBy('');
-    setHasSearched(false);
     setHideAcademicOnly(false);
     setActiveBonusFilter(null);
-    setUniversities([]);
     setErrorMsg(null);
     setVisibleCount(PAGE_SIZE);
     try {
@@ -901,6 +950,14 @@ function SearchContent() {
     } catch {
       // Ignore storage error
     }
+    executeSearch({
+      selectedSport: '',
+      schoolName: '',
+      selectedGender: '',
+      selectedDivision: '',
+      selectedStates: [],
+      selectedMajor: '',
+    });
   };
 
   const mappedMajor = getUmbrellaMajor(selectedMajor);
@@ -1067,6 +1124,12 @@ function SearchContent() {
       });
     } else if (sortBy) {
       filtered.sort((a, b) => {
+        if (sortBy === 'rating_high') {
+          const ratingA = a.hasSport ? getCalculatedRating(a, a.targetProgram) : 0;
+          const ratingB = b.hasSport ? getCalculatedRating(b, b.targetProgram) : 0;
+          if (ratingA !== ratingB) return ratingB - ratingA;
+          return (b.median_earnings || 0) - (a.median_earnings || 0);
+        }
         if (sortBy.startsWith('budget')) {
           const valA = a.targetProgram?.operating_expense || 0;
           const valB = b.targetProgram?.operating_expense || 0;
@@ -1110,10 +1173,19 @@ function SearchContent() {
         return 0;
       });
     } else {
+      // DEFAULT RANKING: Best Colleges for Academics & Highest 10-Year Median Salary
       filtered.sort((a, b) => {
-        const ratingA = a.hasSport ? getCalculatedRating(a, a.targetProgram) : 0;
-        const ratingB = b.hasSport ? getCalculatedRating(b, b.targetProgram) : 0;
-        if (ratingA !== ratingB) return ratingB - ratingA;
+        if (selectedSport) {
+          if (a.hasSport && !b.hasSport) return -1;
+          if (!a.hasSport && b.hasSport) return 1;
+        }
+
+        const scoreA = getAcademicAndSalaryScore(a);
+        const scoreB = getAcademicAndSalaryScore(b);
+        if (scoreB !== scoreA) return scoreB - scoreA;
+
+        const salaryDiff = (b.median_earnings || 0) - (a.median_earnings || 0);
+        if (salaryDiff !== 0) return salaryDiff;
 
         const accA = parseFloat(a.acceptance_rate?.replace('%', '') || '100');
         const accB = parseFloat(b.acceptance_rate?.replace('%', '') || '100');
@@ -1125,6 +1197,7 @@ function SearchContent() {
     universities,
     enrichUniversity,
     effectiveSport,
+    selectedSport,
     isCurrentSportStatBased,
     maxAcceptance,
     maxTuition,
@@ -1296,15 +1369,16 @@ function SearchContent() {
     );
   };
 
-  const getRankBadgeProps = (index: number, filter: MatchmakerCategory | null, states: string[]) => {
-    if (!filter || index >= 5) return null;
+  const getRankBadgeProps = (index: number, filter: MatchmakerCategory | null, states: string[], currentSortBy: string) => {
+    if (index >= 5) return null;
     if (filter === 'fit' && !isCurrentSportStatBased) return null;
+    if (!filter && currentSortBy) return null;
 
     let region = "US";
     if (states.length === 1) region = states[0];
     else if (states.length > 1) region = "Search";
 
-    let category = "";
+    let category = "Academics & Salary";
     if (filter === 'fit') category = "Athletic Fit";
     if (filter === 'cost') category = "Lowest Cost";
     if (filter === 'salary') category = "Salary Rank";
@@ -1403,13 +1477,19 @@ function SearchContent() {
 
   const sideBySideIds = useMemo(() => new Set(sideBySideList.map(u => u.id)), [sideBySideList]);
 
-  // --- DYNAMIC ITEMLIST JSON-LD WHEN RESULTS ARE LOADED ---
+  // --- DYNAMIC ITEMLIST JSON-LD WHEN RESULTS ARE LOADED (Unified on non-www BASE_SITE_URL) ---
   const dynamicItemListJsonLd = useMemo(() => {
     if (visibleUniversities.length === 0) return null;
+    const listTitle =
+      selectedDivision || selectedSport
+        ? `${selectedDivision || 'College'} ${selectedSport || 'Athletic'} Programs`
+        : 'Top Colleges Ranked by Academics & 10-Year Median Salary';
+
     return {
       '@context': 'https://schema.org',
       '@type': 'ItemList',
-      name: `${selectedDivision || 'College'} ${selectedSport || 'Athletic'} Programs`,
+      name: listTitle,
+      description: 'Compare NCAA, NAIA, and JUCO universities by 10-year median alumni salary, admission acceptance rate, net tuition cost, and athletic recruiting standards.',
       numberOfItems: sortedAndFilteredUniversities.length,
       itemListElement: visibleUniversities.slice(0, 15).map((u, idx) => ({
         '@type': 'ListItem',
@@ -1417,7 +1497,7 @@ function SearchContent() {
         item: {
           '@type': 'CollegeOrUniversity',
           name: u.name,
-          url: `https://www.chasedsports.com/college/${u.slug}`,
+          url: `${BASE_SITE_URL}/college/${u.slug}`,
           address: {
             '@type': 'PostalAddress',
             ...(u.city && { addressLocality: u.city }),
@@ -1452,15 +1532,22 @@ function SearchContent() {
 
     return (
       <>
-        <div className="flex justify-between items-center mb-4 px-1">
-          <p className="text-xs font-black uppercase tracking-widest text-slate-400">
-            Showing {visibleUniversities.length} of {sortedAndFilteredUniversities.length} Programs
-          </p>
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-4 px-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-xs font-black uppercase tracking-widest text-slate-400">
+              Showing {visibleUniversities.length} of {sortedAndFilteredUniversities.length} Programs
+            </p>
+            {!activeBonusFilter && !sortBy && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/70">
+                <TrendingUp className="w-3 h-3" /> Ranked by Best Academics & 10-Yr Median Salary
+              </span>
+            )}
+          </div>
           {sideBySideList.length > 0 && (
             <button
               type="button"
               onClick={() => setIsSideBySideOpen(true)}
-              className="text-xs font-black text-blue-600 hover:text-blue-700 flex items-center gap-1.5 bg-blue-50 px-3 py-1.5 rounded-xl border border-blue-200/60 transition-all"
+              className="text-xs font-black text-blue-600 hover:text-blue-700 flex items-center gap-1.5 bg-blue-50 px-3 py-1.5 rounded-xl border border-blue-200/60 transition-all self-start sm:self-auto"
             >
               <Scale className="w-3.5 h-3.5" />
               Open Side by Side ({sideBySideList.length}/3)
@@ -1481,7 +1568,7 @@ function SearchContent() {
             const isSaved = savedCollegeIds.has(uni.id);
             const isProcessing = savingIds.has(uni.id);
             const isInSideBySide = sideBySideIds.has(uni.id);
-            const rankBadge = getRankBadgeProps(index, activeBonusFilter, selectedStates);
+            const rankBadge = getRankBadgeProps(index, activeBonusFilter, selectedStates, sortBy);
 
             return (
               <article
@@ -1672,6 +1759,7 @@ function SearchContent() {
     isCoach,
     isAthlete,
     activeBonusFilter,
+    sortBy,
     selectedStates,
     getCalculatedTuition,
     getEmailBuilderHref
@@ -2138,7 +2226,7 @@ function SearchContent() {
                 Welcome back, <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-300">{athleteFirstName}</span>
               </h1>
               <p className="text-xs sm:text-base md:text-lg text-slate-300 max-w-2xl mx-auto font-medium leading-relaxed">
-                Your personalized Match Meters are active. Filter programs below or select up to 3 schools for a Side by Side breakdown.
+                Your personalized Match Meters are active. Explore top universities ranked by academics and 10-year salary below, or filter by sport.
               </p>
             </>
           ) : (
@@ -2151,7 +2239,7 @@ function SearchContent() {
                 College Athletic <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300">Finder & ROI Matchmaker</span>
               </h1>
               <p className="text-xs sm:text-base md:text-lg text-slate-300 max-w-2xl mx-auto font-medium leading-relaxed">
-                Compare 2,800+ NCAA D1, D2, D3, NAIA, and JUCO college athletic programs by recruiting standards, scholarship aid, net tuition budget, and 10-year salary ROI.
+                Compare 2,800+ NCAA D1, D2, D3, NAIA, and JUCO college athletic programs ranked by academic selectivity, 10-year median salary ROI, scholarship aid, and recruiting standards.
               </p>
             </>
           )}
@@ -2435,14 +2523,17 @@ function SearchContent() {
                     disabled={activeBonusFilter !== null}
                     className="w-full bg-slate-50/80 backdrop-blur-sm border border-slate-200/60 text-slate-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white font-semibold text-sm shadow-sm appearance-none cursor-pointer transition-all disabled:opacity-50 disabled:bg-slate-100"
                   >
-                    <option value="">Default (Rating)</option>
+                    <option value="">Default (Best Academics & 10-Yr Salary)</option>
+                    <optgroup label="Athletic Rating">
+                      <option value="rating_high">Program Rating (Highest to Lowest)</option>
+                    </optgroup>
                     <optgroup label="Tuition Cost">
                       <option value="tuition_low">Lowest to Highest</option>
                       <option value="tuition_high">Highest to Lowest</option>
                     </optgroup>
                     <optgroup label="Acceptance Rate">
-                      <option value="acceptance_high">Highest to Lowest</option>
-                      <option value="acceptance_low">Lowest to Highest</option>
+                      <option value="acceptance_low">Most Selective (Lowest %)</option>
+                      <option value="acceptance_high">Least Selective (Highest %)</option>
                     </optgroup>
                     <optgroup label="10-Year Salary">
                       <option value="salary_high">Highest to Lowest</option>
@@ -2484,6 +2575,48 @@ function SearchContent() {
             </button>
           </div>
         </section>
+
+        {/* --- QUICK-LAUNCH PRESET PILLS (Shown when no specific sport/school filter is active) --- */}
+        {!hasActiveFilters && (
+          <section aria-label="Recommended Filters" className="mb-6 animate-in fade-in duration-500">
+            <div className="bg-white/70 backdrop-blur-2xl border border-slate-200/60 rounded-3xl p-4 sm:p-5 shadow-sm flex flex-col items-center text-center">
+              <div className="text-[11px] font-black uppercase tracking-widest text-blue-600 flex items-center gap-1.5 mb-2.5">
+                <Crown className="w-3.5 h-3.5" />
+                {athleteSelectedSports.length > 0
+                  ? `Quick-Launch for Your ${athleteSelectedSports.length > 1 ? 'Sports' : 'Sport'} (${athleteSelectedSports.join(' & ')})`
+                  : 'Quick-Launch Recruiting Presets'}
+              </div>
+              <div className="flex flex-wrap justify-center gap-2 max-w-4xl">
+                {recommendedPresets.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedSport(preset.sport);
+                      setSelectedDivision(preset.division || '');
+                      setSelectedStates(preset.states || []);
+                      setActiveBonusFilter(preset.bonusFilter || null);
+                      setHideAcademicOnly(true);
+                      executeSearch({
+                        selectedSport: preset.sport,
+                        selectedDivision: preset.division || '',
+                        selectedStates: preset.states || [],
+                      });
+                    }}
+                    className={
+                      preset.isPrimaryFit
+                        ? 'px-3.5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-black text-xs shadow-md hover:scale-105 transition-transform flex items-center gap-1.5'
+                        : 'px-3.5 py-2 rounded-xl bg-white border border-slate-200 hover:border-blue-400 text-slate-700 font-bold text-xs shadow-sm hover:text-blue-600 transition-all'
+                    }
+                  >
+                    {preset.isPrimaryFit && <Target className="w-3.5 h-3.5" />}
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* --- MATCHMAKER BONUS FILTERS (Hides "Best Fit" for Non-Stat Team Sports) --- */}
         {hasSearched && !errorMsg && (
@@ -2566,56 +2699,10 @@ function SearchContent() {
           </section>
         )}
 
-        {/* --- DYNAMIC CONTENT BLOCKS --- */}
-        {!hasSearched ? (
-          <section aria-label="Recommended Filters" className="space-y-8 animate-in fade-in duration-500">
-            <div className="bg-white/60 backdrop-blur-3xl border border-slate-200/50 rounded-3xl p-6 sm:p-10 text-center shadow-sm relative overflow-hidden">
-              <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 mb-3">
-                <Crown className="w-6 h-6" />
-              </div>
-              <h2 className="text-xl sm:text-2xl font-black text-slate-900 mb-2 tracking-tight">
-                {athleteSelectedSports.length > 0
-                  ? `Recommended for Your ${athleteSelectedSports.length > 1 ? 'Sports' : 'Sport'} (${athleteSelectedSports.join(' & ')})`
-                  : 'Recommended Quick-Launch Filters'}
-              </h2>
-              <p className="text-slate-500 max-w-lg mx-auto font-medium text-xs sm:text-sm mb-6">
-                Tap a recommended filter below to immediately scan matching college programs, scholarships, and ROI metrics.
-              </p>
-              <div className="flex flex-wrap justify-center gap-2.5 max-w-3xl mx-auto">
-                {recommendedPresets.map((preset) => (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedSport(preset.sport);
-                      setSelectedDivision(preset.division || '');
-                      setSelectedStates(preset.states || []);
-                      setActiveBonusFilter(preset.bonusFilter || null);
-                      setHideAcademicOnly(true);
-                      executeSearch({
-                        selectedSport: preset.sport,
-                        selectedDivision: preset.division || '',
-                        selectedStates: preset.states || [],
-                      });
-                    }}
-                    className={
-                      preset.isPrimaryFit
-                        ? 'px-4 py-2.5 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-black text-xs sm:text-sm shadow-md hover:scale-105 transition-transform flex items-center gap-1.5'
-                        : 'px-4 py-2.5 rounded-2xl bg-white border border-slate-200 hover:border-blue-400 text-slate-800 font-bold text-xs sm:text-sm shadow-sm hover:text-blue-600 transition-all'
-                    }
-                  >
-                    {preset.isPrimaryFit && <Target className="w-4 h-4" />}
-                    {preset.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </section>
-        ) : (
-          <section aria-label="Search Results" className="animate-in fade-in slide-in-from-bottom-8 duration-500 mb-12">
-            {renderedCollegeCards}
-          </section>
-        )}
+        {/* --- COLLEGE DIRECTORY RESULTS --- */}
+        <section aria-label="Search Results" className="animate-in fade-in slide-in-from-bottom-8 duration-500 mb-12">
+          {renderedCollegeCards}
+        </section>
 
         {/* ========================================================= */}
         {/* CRAWLABLE SEO & GEO DIRECTORY + METHODOLOGY GUIDE         */}

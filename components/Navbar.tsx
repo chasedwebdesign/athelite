@@ -31,6 +31,7 @@ export default function Navbar() {
   const pathname = usePathname();
 
   const [session, setSession] = useState<any>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [notificationBadgeCount, setNotificationBadgeCount] = useState(0);
@@ -66,14 +67,18 @@ export default function Navbar() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Lock background page scroll reliably when mobile menu is open
   useEffect(() => {
     if (isMobileMenuOpen) {
       document.body.style.overflow = 'hidden';
+      document.documentElement.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = '';
+      document.documentElement.style.overflow = '';
     }
     return () => {
       document.body.style.overflow = '';
+      document.documentElement.style.overflow = '';
     };
   }, [isMobileMenuOpen]);
 
@@ -81,6 +86,7 @@ export default function Navbar() {
   useEffect(() => {
     setIsMobileMenuOpen(false);
     document.body.style.overflow = '';
+    document.documentElement.style.overflow = '';
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
   }, [pathname]);
 
@@ -156,6 +162,7 @@ export default function Navbar() {
       setIsAthlete(false);
       setViewerRole('guest');
       setNotificationBadgeCount(0);
+      setIsAuthLoading(false);
       return;
     }
 
@@ -208,6 +215,11 @@ export default function Navbar() {
       const unseenViews = Math.max(0, computedTotalViews - (isNaN(seenViews) ? 0 : seenViews));
 
       setNotificationBadgeCount(unseenLikes + unseenViews + realUnreadCount);
+      setIsAuthLoading(false);
+
+      if (pathname === '/') {
+        router.replace('/dashboard');
+      }
     } else {
       const { data: coachProfile } = await supabase
         .from('coaches')
@@ -220,9 +232,19 @@ export default function Navbar() {
         setAvatarUrl(coachProfile.avatar_url);
         setIsFounder(coachProfile.is_founder || false);
         setIsAthlete(false);
+        setIsAuthLoading(false);
+
+        if (pathname === '/') {
+          router.replace('/dashboard/coach');
+        }
+      } else {
+        setIsAuthLoading(false);
+        if (pathname === '/') {
+          router.replace('/dashboard');
+        }
       }
     }
-  }, [supabase]);
+  }, [supabase, pathname, router]);
 
   useEffect(() => {
     let isMounted = true;
@@ -241,10 +263,11 @@ export default function Navbar() {
       isMounted = false;
       data?.subscription?.unsubscribe();
     };
-  }, [supabase, loadNavData, pathname]);
+  }, [supabase, loadNavData]);
 
   const handleSignOut = async () => {
     document.body.style.overflow = '';
+    document.documentElement.style.overflow = '';
     await supabase.auth.signOut();
     setSession(null);
     setIsAthlete(false);
@@ -259,6 +282,7 @@ export default function Navbar() {
   const closeMobileMenu = () => {
     // Synchronously unlock body overflow before Next.js Link navigation fires
     document.body.style.overflow = '';
+    document.documentElement.style.overflow = '';
     setIsMobileMenuOpen(false);
     setSearchQuery('');
     setSearchResults([]);
@@ -269,16 +293,21 @@ export default function Navbar() {
     return pathname === path || (path !== '/' && pathname.startsWith(path));
   };
 
+  // Route logged-in users directly to their Homebase instead of `/`
+  const homebasePath = viewerRole === 'coach' ? '/dashboard/coach' : '/dashboard';
+  const brandHref = session ? homebasePath : '/';
+
   if (pathname === '/login') return null;
 
   return (
     <>
-      <nav className="bg-white/95 backdrop-blur-lg border-b border-slate-200/80 shadow-sm sticky top-0 z-[100] transition-colors">
-        <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between gap-4">
+      {/* Fixed Navbar so it never scrolls off the top on mobile viewports */}
+      <nav className="bg-white/95 backdrop-blur-lg border-b border-slate-200/80 shadow-sm fixed top-0 left-0 right-0 w-full h-20 z-[100] transition-colors">
+        <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 h-full flex items-center justify-between gap-4">
 
           {/* Logo & Primary Navigation Area */}
           <div className="flex flex-1 items-center justify-start shrink-0">
-            <Link href="/" onClick={closeMobileMenu} className="flex items-center gap-2 group">
+            <Link href={brandHref} onClick={closeMobileMenu} className="flex items-center gap-2 group">
               <div className="relative w-10 h-10 sm:w-12 sm:h-12 overflow-hidden group-hover:scale-105 transition-transform">
                 <Image 
                   src="/icon.png" 
@@ -363,7 +392,7 @@ export default function Navbar() {
             {session ? (
               <>
                 <div className="h-6 w-px bg-slate-200 mx-1 shrink-0"></div>
-                <Link href="/dashboard" className={`text-sm font-bold flex items-center whitespace-nowrap transition-colors ${isActive('/dashboard') && !isActive('/dashboard/team') && !isActive('/dashboard/messages') ? 'text-blue-600' : 'text-slate-500 hover:text-blue-600'}`} title="Dashboard Homebase">
+                <Link href={homebasePath} className={`text-sm font-bold flex items-center whitespace-nowrap transition-colors ${isActive('/dashboard') && !isActive('/dashboard/team') && !isActive('/dashboard/messages') && !isActive('/dashboard/profile') ? 'text-blue-600' : 'text-slate-500 hover:text-blue-600'}`} title="Dashboard Homebase">
                   <LayoutDashboard className="w-4 h-4" /><span className="hidden lg:inline ml-1.5">Homebase</span>
                 </Link>
 
@@ -441,18 +470,21 @@ export default function Navbar() {
                   <LogOut className="w-5 h-5" />
                 </button>
               </>
-            ) : (
+            ) : !isAuthLoading ? (
               <div className="flex items-center gap-3 ml-2">
                 <Link href="/login?mode=signup" className="text-sm font-bold bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-full transition-all shadow-sm shadow-blue-600/20 whitespace-nowrap">Get Started</Link>
               </div>
+            ) : (
+              <div className="w-28 h-10 rounded-full bg-slate-100 animate-pulse ml-2" />
             )}
           </div>
 
           {/* Mobile Actions */}
           <div className="flex items-center gap-1.5 sm:gap-2.5 md:hidden">
-            {!session && (
+            {!session && !isAuthLoading && (
               <Link 
                 href="/login?mode=signup" 
+                onClick={closeMobileMenu}
                 className="text-sm font-bold bg-blue-600 hover:bg-blue-500 text-white px-5 py-2 rounded-full transition-all shadow-sm"
               >
                 Get Started
@@ -493,16 +525,23 @@ export default function Navbar() {
               </Link>
             )}
 
-            <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 text-slate-600 hover:bg-slate-100 rounded-full transition-colors ml-0.5">
+            <button 
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} 
+              aria-label="Toggle Menu"
+              className="p-2 text-slate-600 hover:bg-slate-100 rounded-full transition-colors ml-0.5"
+            >
               {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
           </div>
         </div>
       </nav>
 
+      {/* Spacer to offset the fixed 80px (h-20) Navbar */}
+      <div className="h-20 w-full shrink-0" aria-hidden="true" />
+
       {/* Mobile Slide-Out Menu */}
       {isMobileMenuOpen && (
-        <div className="fixed inset-0 top-[80px] z-[95] bg-white overflow-y-auto animate-in slide-in-from-top-5 duration-200 md:hidden">
+        <div className="fixed inset-x-0 top-20 bottom-0 h-[calc(100dvh-5rem)] z-[95] bg-white overflow-y-auto overscroll-contain animate-in slide-in-from-top-5 duration-200 md:hidden">
           <div className="p-6 flex flex-col gap-6 min-h-full pb-32">
 
             <div className="relative w-full" ref={mobileSearchRef}>
@@ -576,7 +615,7 @@ export default function Navbar() {
               {session ? (
                 <>
                   <div className="h-px bg-slate-100 my-2"></div>
-                  <Link href="/dashboard" onClick={closeMobileMenu} className={`flex items-center gap-4 p-4 rounded-2xl font-bold text-lg transition-colors ${isActive('/dashboard') && !isActive('/dashboard/profile') && !isActive('/dashboard/messages') ? 'bg-blue-50 text-blue-600' : 'hover:bg-slate-50 text-slate-700'}`}>
+                  <Link href={homebasePath} onClick={closeMobileMenu} className={`flex items-center gap-4 p-4 rounded-2xl font-bold text-lg transition-colors ${isActive('/dashboard') && !isActive('/dashboard/profile') && !isActive('/dashboard/messages') && !isActive('/dashboard/team') ? 'bg-blue-50 text-blue-600' : 'hover:bg-slate-50 text-slate-700'}`}>
                     <LayoutDashboard className={`w-6 h-6 ${isActive('/dashboard') ? 'text-blue-500' : 'text-slate-500'}`} /> Homebase
                   </Link>
 
@@ -624,12 +663,12 @@ export default function Navbar() {
 
                   <button onClick={handleSignOut} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-red-50 text-red-600 font-bold text-lg transition-colors text-left w-full"><LogOut className="w-6 h-6" /> Log Out</button>
                 </>
-              ) : (
+              ) : !isAuthLoading ? (
                 <>
                   <div className="h-px bg-slate-100 my-2"></div>
                   <Link href="/login?mode=signup" onClick={closeMobileMenu} className="bg-blue-600 text-white font-black text-center p-4 rounded-2xl shadow-lg shadow-blue-600/20">Get Started</Link>
                 </>
-              )}
+              ) : null}
             </div>
 
           </div>
