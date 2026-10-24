@@ -6,9 +6,13 @@ import { createClient } from '@supabase/supabase-js';
 export const revalidate = 86400;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  // Always normalize to non-www https://chasedsports.com so sitemap URLs never 308 redirect
-  const rawBaseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://chasedsports.com';
-  const baseUrl = rawBaseUrl.replace('://www.', '://').replace(/\/$/, '');
+  // Bulletproof sanitization: strips markdown brackets, quotes, and trailing slashes
+  const rawEnvUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://chasedsports.com';
+  const baseUrl = rawEnvUrl
+    .replace(/[\[\]()]/g, '')
+    .replace(/['"]/g, '')
+    .replace('://www.', '://')
+    .replace(/\/$/, '');
 
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -73,7 +77,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
           ? new Date(athlete.created_at)
           : new Date();
 
-      // Always prefer custom_slug so the sitemap URL matches the canonical URL on /athlete/[id]
       const canonicalIdentifier = athlete.custom_slug
         ? String(athlete.custom_slug).trim()
         : String(athlete.id).trim();
