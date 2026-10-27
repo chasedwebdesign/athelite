@@ -337,6 +337,9 @@ function SearchContent() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
+  // --- Quick-Launch Randomizer Seed ---
+  const [quickLaunchSeed, setQuickLaunchSeed] = useState<number>(0);
+
   // --- Infinite Scroll Pagination State ---
   const [visibleCount, setVisibleCount] = useState<number>(PAGE_SIZE);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
@@ -379,6 +382,11 @@ function SearchContent() {
   const [tuitionType, setTuitionType] = useState('in_state');
   const [maxTuition, setMaxTuition] = useState('');
   const [sortBy, setSortBy] = useState('');
+
+  // Trigger initial client-side randomize seed on mount
+  useEffect(() => {
+    setQuickLaunchSeed(Math.floor(Math.random() * 100000) + 1);
+  }, []);
 
   // --- STABILITY FIX: Keep latest filter values in a ref so executeSearch is 100% stable ---
   const latestFiltersRef = useRef({
@@ -1369,6 +1377,7 @@ function SearchContent() {
     );
   };
 
+  // --- GAMIFIED RANK BADGES (1ST: MYTHIC PURPLE/BLUE, 2ND: CRIMSON RED, 3RD: CYBER EMERALD) ---
   const getRankBadgeProps = (index: number, filter: MatchmakerCategory | null, states: string[], currentSortBy: string) => {
     if (index >= 5) return null;
     if (filter === 'fit' && !isCurrentSportStatBased) return null;
@@ -1386,25 +1395,52 @@ function SearchContent() {
     if (filter === 'roi') category = "Top ROI";
 
     let styling = "";
-    if (index === 0) styling = "bg-gradient-to-br from-yellow-400 to-amber-600 shadow-[0_0_30px_rgba(251,191,36,0.6)] border border-yellow-200 text-yellow-950";
-    else if (index === 1) styling = "bg-gradient-to-br from-slate-300 to-slate-500 shadow-[0_0_30px_rgba(203,213,225,0.6)] border border-slate-100 text-slate-900";
-    else if (index === 2) styling = "bg-gradient-to-br from-orange-400 to-orange-700 shadow-[0_0_30px_rgba(249,115,22,0.6)] border border-orange-300 text-orange-950";
-    else styling = "bg-gradient-to-br from-blue-400 to-indigo-600 shadow-[0_0_30px_rgba(99,102,241,0.6)] border border-blue-300 text-white";
+    let cardBorder = "";
+    let rankTag = `#${index + 1}`;
+    let icon: React.ReactNode = null;
+
+    if (index === 0) {
+      rankTag = "1ST";
+      styling = "bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-500 text-white border border-purple-300/60 shadow-[0_8px_25px_-4px_rgba(99,102,241,0.65)]";
+      cardBorder = "border-indigo-400/70 ring-1 ring-purple-500/20 hover:shadow-2xl hover:shadow-indigo-500/25 hover:-translate-y-1.5";
+      icon = <Crown className="w-3.5 h-3.5 text-cyan-200 shrink-0 fill-cyan-200/30" />;
+    } else if (index === 1) {
+      rankTag = "2ND";
+      styling = "bg-gradient-to-r from-rose-600 via-red-600 to-orange-500 text-white border border-rose-300/60 shadow-[0_8px_25px_-4px_rgba(225,29,72,0.6)]";
+      cardBorder = "border-rose-400/60 ring-1 ring-rose-500/15 hover:shadow-2xl hover:shadow-rose-500/20 hover:-translate-y-1.5";
+      icon = <Flame className="w-3.5 h-3.5 text-amber-200 shrink-0 fill-amber-200/30" />;
+    } else if (index === 2) {
+      rankTag = "3RD";
+      styling = "bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 text-white border border-emerald-300/60 shadow-[0_8px_25px_-4px_rgba(16,185,129,0.6)]";
+      cardBorder = "border-emerald-400/60 ring-1 ring-emerald-500/15 hover:shadow-2xl hover:shadow-emerald-500/20 hover:-translate-y-1.5";
+      icon = <Zap className="w-3.5 h-3.5 text-emerald-100 shrink-0 fill-emerald-100/30" />;
+    } else {
+      rankTag = `#${index + 1}`;
+      styling = "bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-cyan-300 border border-slate-700 shadow-[0_6px_20px_-4px_rgba(15,23,42,0.5)]";
+      cardBorder = "border-slate-300/80 hover:shadow-2xl hover:shadow-blue-500/15 hover:-translate-y-1.5";
+      icon = <Sparkles className="w-3 h-3 text-cyan-400 shrink-0" />;
+    }
 
     return {
-      text: `#${index + 1} ${category} in ${region}`,
-      styling
+      rankTag,
+      label: `${category} • ${region}`,
+      styling,
+      cardBorder,
+      icon
     };
   };
 
-  // --- DYNAMIC RECOMMENDED PRESETS BASED ON athlete_sports ---
+  // --- 3 RANDOMIZED QUICK-LAUNCH PRESETS BASED ON ATHLETE'S SELECTED SPORTS ---
   const recommendedPresets = useMemo(() => {
-    const sportsToFeature =
+    const sportsPool =
       athleteSelectedSports.length > 0
         ? athleteSelectedSports
         : ['Track & Field', 'Cross Country', 'Soccer', 'Basketball'];
 
-    const presets: Array<{
+    const formatShortSport = (sp: string) =>
+      sp === 'Swimming and Diving (combined)' ? 'Swim & Dive' : sp;
+
+    const allCandidates: Array<{
       id: string;
       label: string;
       isPrimaryFit?: boolean;
@@ -1414,13 +1450,14 @@ function SearchContent() {
       bonusFilter?: MatchmakerCategory | null;
     }> = [];
 
-    sportsToFeature.forEach((sport) => {
+    sportsPool.forEach((sport) => {
+      const shortSport = formatShortSport(sport);
       const statBased = isStatBasedSport(sport);
 
       if (statBased) {
-        presets.push({
+        allCandidates.push({
           id: `${sport}-fit`,
-          label: `My Best ${sport} Fits`,
+          label: `Best ${shortSport} Fit`,
           isPrimaryFit: true,
           sport,
           bonusFilter: 'fit',
@@ -1428,48 +1465,61 @@ function SearchContent() {
       }
 
       if (athleteState) {
-        presets.push({
+        allCandidates.push({
           id: `${sport}-state`,
-          label: `${sport} in ${athleteState}`,
+          label: `${shortSport} in ${athleteState}`,
           sport,
           states: [athleteState],
           bonusFilter: null,
         });
       } else {
-        presets.push({
+        allCandidates.push({
           id: `${sport}-west`,
-          label: `West Coast ${sport}`,
+          label: `West Coast ${shortSport}`,
           sport,
           states: ['OR', 'WA', 'CA', 'ID', 'AZ'],
           bonusFilter: null,
         });
       }
 
-      presets.push({
+      allCandidates.push({
         id: `${sport}-d1`,
-        label: `NCAA D1 ${sport}`,
+        label: `NCAA D1 ${shortSport}`,
         sport,
         division: 'NCAA D1',
         bonusFilter: null,
       });
 
-      presets.push({
+      allCandidates.push({
         id: `${sport}-cost`,
-        label: `Lowest Cost ${sport}`,
+        label: `Lowest Cost ${shortSport}`,
         sport,
         bonusFilter: 'cost',
       });
 
-      presets.push({
+      allCandidates.push({
         id: `${sport}-roi`,
-        label: `Highest ROI ${sport}`,
+        label: `Top ROI ${shortSport}`,
         sport,
         bonusFilter: 'roi',
       });
     });
 
-    return presets.slice(0, 8);
-  }, [athleteSelectedSports, athleteState]);
+    if (quickLaunchSeed === 0) {
+      return allCandidates.slice(0, 3);
+    }
+
+    // Seeded Fisher-Yates shuffle so re-renders are stable and clicking Shuffle deals 3 fresh presets
+    const shuffled = [...allCandidates];
+    let seed = quickLaunchSeed;
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      seed = (seed * 1664525 + 1013904223) % 4294967296;
+      const j = seed % (i + 1);
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+
+    return shuffled.slice(0, 3);
+  }, [athleteSelectedSports, athleteState, quickLaunchSeed]);
 
   const visibleUniversities = useMemo(() => {
     return sortedAndFilteredUniversities.slice(0, visibleCount);
@@ -1532,7 +1582,7 @@ function SearchContent() {
 
     return (
       <>
-        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-4 px-1">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-6 px-1">
           <div className="flex items-center gap-2 flex-wrap">
             <p className="text-xs font-black uppercase tracking-widest text-slate-400">
               Showing {visibleUniversities.length} of {sortedAndFilteredUniversities.length} Programs
@@ -1554,7 +1604,7 @@ function SearchContent() {
             </button>
           )}
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-8 pt-2">
           {visibleUniversities.map((uni, index) => {
             const { amount: tuitionToUse, isInState } = getCalculatedTuition(uni);
             const avgScholarship = uni.hasSport ? (uni.targetProgram?.average_scholarship || 0) : 0;
@@ -1573,21 +1623,26 @@ function SearchContent() {
             return (
               <article
                 key={uni.id}
-                className={`relative bg-white/80 backdrop-blur-2xl rounded-3xl p-6 shadow-xl shadow-slate-200/40 border flex flex-col h-full transition-all duration-300 group ${
+                className={`relative bg-white/85 backdrop-blur-2xl rounded-3xl p-6 shadow-xl shadow-slate-200/40 border flex flex-col h-full transition-all duration-300 group ${
                   isInSideBySide
                     ? 'ring-2 ring-blue-500 border-blue-400'
                     : rankBadge
-                    ? 'border-blue-300/50 hover:shadow-2xl hover:shadow-blue-500/20 hover:-translate-y-2'
-                    : 'border-slate-100/50 hover:shadow-2xl hover:shadow-blue-900/10 hover:-translate-y-2'
+                    ? rankBadge.cardBorder
+                    : 'border-slate-100/70 hover:shadow-2xl hover:shadow-blue-900/10 hover:-translate-y-1.5'
                 }`}
               >
                 {rankBadge && (
-                  <div className={`absolute -top-4 -left-4 z-20 px-5 py-2 rounded-full font-black text-sm tracking-tight ${rankBadge.styling}`}>
-                    {rankBadge.text}
+                  <div
+                    className={`absolute -top-3.5 left-6 z-20 inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-xs font-black tracking-wide ${rankBadge.styling}`}
+                  >
+                    {rankBadge.icon}
+                    <span className="uppercase tracking-wider">{rankBadge.rankTag}</span>
+                    <span className="opacity-40">•</span>
+                    <span className="font-extrabold tracking-tight">{rankBadge.label}</span>
                   </div>
                 )}
 
-                <div className="flex-grow pt-2">
+                <div className={`flex-grow ${rankBadge ? 'pt-3' : 'pt-1'}`}>
                   <h2 className="text-xl font-black text-slate-900 leading-tight mb-3 group-hover:text-blue-600 transition-colors flex flex-col items-start gap-2">
                     <Link
                       href={`/college/${uni.slug}${
@@ -2576,44 +2631,51 @@ function SearchContent() {
           </div>
         </section>
 
-        {/* --- QUICK-LAUNCH PRESET PILLS (Shown when no specific sport/school filter is active) --- */}
-        {!hasActiveFilters && (
-          <section aria-label="Recommended Filters" className="mb-6 animate-in fade-in duration-500">
-            <div className="bg-white/70 backdrop-blur-2xl border border-slate-200/60 rounded-3xl p-4 sm:p-5 shadow-sm flex flex-col items-center text-center">
-              <div className="text-[11px] font-black uppercase tracking-widest text-blue-600 flex items-center gap-1.5 mb-2.5">
-                <Crown className="w-3.5 h-3.5" />
-                {athleteSelectedSports.length > 0
-                  ? `Quick-Launch for Your ${athleteSelectedSports.length > 1 ? 'Sports' : 'Sport'} (${athleteSelectedSports.join(' & ')})`
-                  : 'Quick-Launch Recruiting Presets'}
+        {/* --- CLEAN 3-PILL RANDOMIZED QUICK-LAUNCH BAR --- */}
+        {!hasActiveFilters && recommendedPresets.length > 0 && (
+          <section aria-label="Quick Launch Searches" className="mb-6 animate-in fade-in duration-500">
+            <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-2.5 bg-white/75 backdrop-blur-2xl border border-slate-200/70 rounded-2xl px-4 py-3 shadow-sm max-w-3xl mx-auto">
+              <div className="flex items-center gap-1.5 mr-1">
+                <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
+                <span className="text-[11px] font-black uppercase tracking-widest text-slate-400">
+                  Quick Launch
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setQuickLaunchSeed((prev) => prev + 1)}
+                  className="p-1 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                  title="Shuffle Quick Searches"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                </button>
               </div>
-              <div className="flex flex-wrap justify-center gap-2 max-w-4xl">
-                {recommendedPresets.map((preset) => (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedSport(preset.sport);
-                      setSelectedDivision(preset.division || '');
-                      setSelectedStates(preset.states || []);
-                      setActiveBonusFilter(preset.bonusFilter || null);
-                      setHideAcademicOnly(true);
-                      executeSearch({
-                        selectedSport: preset.sport,
-                        selectedDivision: preset.division || '',
-                        selectedStates: preset.states || [],
-                      });
-                    }}
-                    className={
-                      preset.isPrimaryFit
-                        ? 'px-3.5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-black text-xs shadow-md hover:scale-105 transition-transform flex items-center gap-1.5'
-                        : 'px-3.5 py-2 rounded-xl bg-white border border-slate-200 hover:border-blue-400 text-slate-700 font-bold text-xs shadow-sm hover:text-blue-600 transition-all'
-                    }
-                  >
-                    {preset.isPrimaryFit && <Target className="w-3.5 h-3.5" />}
-                    {preset.label}
-                  </button>
-                ))}
-              </div>
+
+              {recommendedPresets.map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedSport(preset.sport);
+                    setSelectedDivision(preset.division || '');
+                    setSelectedStates(preset.states || []);
+                    setActiveBonusFilter(preset.bonusFilter || null);
+                    setHideAcademicOnly(true);
+                    executeSearch({
+                      selectedSport: preset.sport,
+                      selectedDivision: preset.division || '',
+                      selectedStates: preset.states || [],
+                    });
+                  }}
+                  className={
+                    preset.isPrimaryFit
+                      ? 'px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-500 text-white font-black text-xs shadow-md shadow-indigo-500/20 hover:scale-105 transition-all flex items-center gap-1.5'
+                      : 'px-3.5 py-1.5 rounded-xl bg-slate-50/90 hover:bg-white border border-slate-200/90 hover:border-indigo-300 text-slate-700 hover:text-indigo-600 font-bold text-xs shadow-sm hover:-translate-y-0.5 transition-all'
+                  }
+                >
+                  {preset.isPrimaryFit && <Target className="w-3.5 h-3.5" />}
+                  {preset.label}
+                </button>
+              ))}
             </div>
           </section>
         )}

@@ -50,80 +50,195 @@ export const getTierStyles = (score: number) => {
 };
 
 export const getEquippedGlow = (border?: string) => {
-  if (!border || border === 'none') return 'border-blue-500/20 shadow-[0_8px_32px_rgba(59,130,246,0.15)] bg-slate-900/60';
+  if (!border || border === 'none') {
+    return 'border-blue-500/25 shadow-[0_12px_40px_rgba(15,23,42,0.75)]';
+  }
   
   const b = border.toLowerCase();
-  if (b.includes('legend')) return 'border-amber-500/30 shadow-[0_8px_32px_rgba(245,158,11,0.15)] bg-amber-900/20';
-  if (b.includes('champion')) return 'border-red-500/30 shadow-[0_8px_32px_rgba(239,68,68,0.15)] bg-red-900/20';
-  if (b.includes('elite')) return 'border-purple-500/30 shadow-[0_8px_32px_rgba(168,85,247,0.15)] bg-purple-900/20';
-  if (b.includes('diamond')) return 'border-sky-500/30 shadow-[0_8px_32px_rgba(56,189,248,0.15)] bg-sky-900/20';
-  if (b.includes('pro')) return 'border-emerald-500/30 shadow-[0_8px_32px_rgba(16,185,129,0.15)] bg-emerald-900/20';
-  if (b.includes('mythic')) return 'border-fuchsia-500/30 shadow-[0_8px_32px_rgba(217,70,239,0.15)] bg-fuchsia-900/20';
+  if (b.includes('legend')) return 'border-amber-500/40 shadow-[0_12px_45px_rgba(245,158,11,0.22)]';
+  if (b.includes('champion')) return 'border-red-500/40 shadow-[0_12px_45px_rgba(239,68,68,0.22)]';
+  if (b.includes('elite')) return 'border-purple-500/40 shadow-[0_12px_45px_rgba(168,85,247,0.22)]';
+  if (b.includes('diamond')) return 'border-sky-400/40 shadow-[0_12px_45px_rgba(56,189,248,0.22)]';
+  if (b.includes('pro')) return 'border-emerald-500/40 shadow-[0_12px_45px_rgba(16,185,129,0.22)]';
+  if (b.includes('mythic')) return 'border-fuchsia-500/40 shadow-[0_12px_45px_rgba(217,70,239,0.25)]';
   
-  return 'border-blue-500/20 shadow-[0_8px_32px_rgba(59,130,246,0.15)] bg-slate-900/60';
+  return 'border-blue-500/25 shadow-[0_12px_40px_rgba(59,130,246,0.18)]';
 };
 
 const getThemeConfig = (cardType: string | null | undefined) => {
-  const safeCardType = cardType === 'default' || !cardType ? 'base' : cardType;
-  const isBase = safeCardType === 'base';
+  const safeCardType = !cardType || cardType === 'default' || cardType === 'none' ? 'base' : cardType.toLowerCase();
 
-  if (isBase) {
-    return {
-      isDark: false,
-      pageBg: 'bg-slate-50',
-      pagePattern: 'opacity-[0.03]',
-      heroCard: 'bg-white/80 backdrop-blur-2xl border-white shadow-[0_8px_30px_rgb(0,0,0,0.08)]',
-      heroName: 'text-slate-900',
-      heroMeta: 'text-slate-600 font-semibold',
-      heroDivider: 'text-slate-300',
-      btnPrimary: 'bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white shadow-lg shadow-blue-500/30 border-transparent',
-      btnSecondary: 'bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 shadow-sm',
-      sectionBg: 'bg-white/80 backdrop-blur-2xl',
-      sectionBorder: 'border-slate-200',
-      sectionShadow: 'shadow-xl shadow-slate-200/50',
-      subCardBg: 'bg-slate-50',
-      subCardBorder: 'border-slate-100',
-      textHeader: 'text-slate-900',
-      textSub: 'text-slate-500',
-      textMuted: 'text-slate-400',
-      iconColor: 'text-blue-600',
-    };
-  }
-
-  const map: Record<string, any> = {
-    obsidian: { glow: 'shadow-[0_0_30px_rgba(59,130,246,0.15)]', border: 'border-blue-500/30', accent: 'text-blue-400', borderHover: 'hover:border-blue-400', ring: 'focus:ring-blue-500' },
-    crimson: { glow: 'shadow-[0_0_30px_rgba(239,68,68,0.2)]', border: 'border-red-500/50', accent: 'text-red-400', borderHover: 'hover:border-red-400', ring: 'focus:ring-red-500' },
-    sapphire: { glow: 'shadow-[0_0_30px_rgba(59,130,246,0.2)]', border: 'border-blue-500/50', accent: 'text-blue-400', borderHover: 'hover:border-blue-400', ring: 'focus:ring-blue-500' },
-    hype: { glow: 'shadow-[0_0_30px_rgba(99,102,241,0.2)]', border: 'border-indigo-500/50', accent: 'text-indigo-400', borderHover: 'hover:border-indigo-400', ring: 'focus:ring-indigo-500' },
-    premium: { glow: 'shadow-[0_0_30px_rgba(245,158,11,0.2)]', border: 'border-amber-500/50', accent: 'text-amber-400', borderHover: 'hover:border-amber-400', ring: 'focus:ring-amber-500' },
-    amethyst: { glow: 'shadow-[0_0_30px_rgba(217,70,239,0.2)]', border: 'border-fuchsia-500/50', accent: 'text-fuchsia-400', borderHover: 'hover:border-fuchsia-400', ring: 'focus:ring-fuchsia-500' },
-    cyber: { glow: 'shadow-[0_0_30px_rgba(6,182,212,0.2)]', border: 'border-cyan-500/50', accent: 'text-cyan-400', borderHover: 'hover:border-cyan-400', ring: 'focus:ring-cyan-500' },
-    'mythic-flare': { glow: 'shadow-[0_0_40px_rgba(244,63,94,0.3)]', border: 'border-rose-500/50', accent: 'text-rose-400', borderHover: 'hover:border-rose-400', ring: 'focus:ring-rose-500' },
+  const map: Record<string, {
+    glow: string;
+    border: string;
+    accent: string;
+    accentBg: string;
+    accentBorder: string;
+    btnPrimary: string;
+    tabActive: string;
+    orbPrimary: string;
+    orbSecondary: string;
+    sectionBg: string;
+    subCardBg: string;
+    subCardBorder: string;
+  }> = {
+    base: {
+      glow: 'shadow-[0_12px_40px_rgba(2,6,23,0.75)]',
+      border: 'border-slate-800/90 hover:border-blue-500/30',
+      accent: 'text-cyan-400',
+      accentBg: 'bg-cyan-500/10',
+      accentBorder: 'border-cyan-500/30',
+      btnPrimary: 'bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white shadow-[0_8px_25px_rgba(37,99,235,0.35)] border border-cyan-400/30',
+      tabActive: 'bg-gradient-to-r from-blue-600 to-cyan-500 text-white shadow-[0_0_20px_rgba(37,99,235,0.5)]',
+      orbPrimary: 'bg-blue-600/15',
+      orbSecondary: 'bg-cyan-500/10',
+      sectionBg: 'bg-[#0B1221]/85 backdrop-blur-2xl',
+      subCardBg: 'bg-[#020617]/65',
+      subCardBorder: 'border-slate-800/80',
+    },
+    obsidian: {
+      glow: 'shadow-[0_0_35px_rgba(59,130,246,0.2)]',
+      border: 'border-blue-500/35',
+      accent: 'text-blue-400',
+      accentBg: 'bg-blue-500/10',
+      accentBorder: 'border-blue-500/30',
+      btnPrimary: 'bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white shadow-lg shadow-blue-500/30 border border-blue-400/50',
+      tabActive: 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-[0_0_20px_rgba(59,130,246,0.5)]',
+      orbPrimary: 'bg-blue-600/20',
+      orbSecondary: 'bg-indigo-500/15',
+      sectionBg: 'bg-[#090F1D]/85 backdrop-blur-3xl',
+      subCardBg: 'bg-blue-950/30',
+      subCardBorder: 'border-blue-500/20',
+    },
+    crimson: {
+      glow: 'shadow-[0_0_35px_rgba(239,68,68,0.22)]',
+      border: 'border-red-500/40',
+      accent: 'text-red-400',
+      accentBg: 'bg-red-500/10',
+      accentBorder: 'border-red-500/30',
+      btnPrimary: 'bg-gradient-to-r from-red-600 to-rose-500 hover:from-red-500 hover:to-rose-400 text-white shadow-lg shadow-red-500/30 border border-red-400/50',
+      tabActive: 'bg-gradient-to-r from-red-600 to-rose-500 text-white shadow-[0_0_20px_rgba(239,68,68,0.5)]',
+      orbPrimary: 'bg-red-600/20',
+      orbSecondary: 'bg-rose-500/15',
+      sectionBg: 'bg-[#14080C]/85 backdrop-blur-3xl',
+      subCardBg: 'bg-red-950/25',
+      subCardBorder: 'border-red-500/20',
+    },
+    sapphire: {
+      glow: 'shadow-[0_0_35px_rgba(14,165,233,0.22)]',
+      border: 'border-sky-500/45',
+      accent: 'text-sky-400',
+      accentBg: 'bg-sky-500/10',
+      accentBorder: 'border-sky-500/30',
+      btnPrimary: 'bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white shadow-lg shadow-sky-500/30 border border-sky-400/50',
+      tabActive: 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-[0_0_20px_rgba(14,165,233,0.5)]',
+      orbPrimary: 'bg-sky-500/20',
+      orbSecondary: 'bg-blue-600/15',
+      sectionBg: 'bg-[#081326]/85 backdrop-blur-3xl',
+      subCardBg: 'bg-sky-950/30',
+      subCardBorder: 'border-sky-500/25',
+    },
+    hype: {
+      glow: 'shadow-[0_0_35px_rgba(139,92,246,0.25)]',
+      border: 'border-indigo-500/45',
+      accent: 'text-indigo-400',
+      accentBg: 'bg-indigo-500/10',
+      accentBorder: 'border-indigo-500/30',
+      btnPrimary: 'bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 hover:from-indigo-500 hover:to-pink-400 text-white shadow-lg shadow-purple-500/30 border border-indigo-400/50',
+      tabActive: 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-[0_0_20px_rgba(139,92,246,0.5)]',
+      orbPrimary: 'bg-indigo-600/20',
+      orbSecondary: 'bg-pink-500/15',
+      sectionBg: 'bg-[#0D0B21]/85 backdrop-blur-3xl',
+      subCardBg: 'bg-indigo-950/30',
+      subCardBorder: 'border-indigo-500/25',
+    },
+    premium: {
+      glow: 'shadow-[0_0_35px_rgba(245,158,11,0.22)]',
+      border: 'border-amber-500/45',
+      accent: 'text-amber-400',
+      accentBg: 'bg-amber-500/10',
+      accentBorder: 'border-amber-500/30',
+      btnPrimary: 'bg-gradient-to-r from-amber-500 via-yellow-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 shadow-lg shadow-amber-500/30 border border-amber-300/60',
+      tabActive: 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 shadow-[0_0_20px_rgba(245,158,11,0.5)]',
+      orbPrimary: 'bg-amber-500/15',
+      orbSecondary: 'bg-yellow-500/10',
+      sectionBg: 'bg-[#141008]/85 backdrop-blur-3xl',
+      subCardBg: 'bg-amber-950/25',
+      subCardBorder: 'border-amber-500/25',
+    },
+    amethyst: {
+      glow: 'shadow-[0_0_35px_rgba(217,70,239,0.25)]',
+      border: 'border-fuchsia-500/45',
+      accent: 'text-fuchsia-400',
+      accentBg: 'bg-fuchsia-500/10',
+      accentBorder: 'border-fuchsia-500/30',
+      btnPrimary: 'bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 text-white shadow-lg shadow-fuchsia-500/30 border border-fuchsia-400/50',
+      tabActive: 'bg-gradient-to-r from-fuchsia-600 to-purple-600 text-white shadow-[0_0_20px_rgba(217,70,239,0.5)]',
+      orbPrimary: 'bg-fuchsia-600/20',
+      orbSecondary: 'bg-purple-600/15',
+      sectionBg: 'bg-[#130921]/85 backdrop-blur-3xl',
+      subCardBg: 'bg-fuchsia-950/25',
+      subCardBorder: 'border-fuchsia-500/25',
+    },
+    cyber: {
+      glow: 'shadow-[0_0_35px_rgba(6,182,212,0.25)]',
+      border: 'border-cyan-500/50',
+      accent: 'text-cyan-400',
+      accentBg: 'bg-cyan-500/10',
+      accentBorder: 'border-cyan-500/35',
+      btnPrimary: 'bg-gradient-to-r from-cyan-500 to-teal-500 hover:from-cyan-400 hover:to-teal-400 text-slate-950 shadow-lg shadow-cyan-500/30 border border-cyan-300/60',
+      tabActive: 'bg-gradient-to-r from-cyan-500 to-teal-400 text-slate-950 shadow-[0_0_20px_rgba(6,182,212,0.5)]',
+      orbPrimary: 'bg-cyan-500/20',
+      orbSecondary: 'bg-emerald-500/15',
+      sectionBg: 'bg-[#06161E]/85 backdrop-blur-3xl',
+      subCardBg: 'bg-cyan-950/30',
+      subCardBorder: 'border-cyan-500/25',
+    },
+    'mythic-flare': {
+      glow: 'shadow-[0_0_45px_rgba(244,63,94,0.3)]',
+      border: 'border-rose-500/50',
+      accent: 'text-rose-400',
+      accentBg: 'bg-rose-500/10',
+      accentBorder: 'border-rose-500/35',
+      btnPrimary: 'bg-gradient-to-r from-rose-600 via-pink-600 to-orange-500 hover:from-rose-500 hover:to-orange-400 text-white shadow-lg shadow-rose-500/35 border border-rose-400/50',
+      tabActive: 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-[0_0_20px_rgba(244,63,94,0.55)]',
+      orbPrimary: 'bg-rose-600/20',
+      orbSecondary: 'bg-orange-500/15',
+      sectionBg: 'bg-[#170912]/85 backdrop-blur-3xl',
+      subCardBg: 'bg-rose-950/30',
+      subCardBorder: 'border-rose-500/25',
+    },
   };
 
-  const t = map[safeCardType] || map.obsidian;
+  const t = map[safeCardType] || map.base;
   const isAnimated = ['hype', 'premium', 'crimson', 'sapphire', 'amethyst', 'cyber', 'mythic-flare'].includes(safeCardType);
   const animationClass = isAnimated ? 'animate-foil' : '';
 
   return {
+    cardKey: safeCardType,
     isDark: true,
-    pageBg: 'bg-slate-950',
-    pagePattern: 'opacity-10',
-    heroCard: `holo-card-${safeCardType} border-blue-500/20 shadow-2xl text-white ${animationClass}`,
-    heroName: 'text-white drop-shadow-md',
-    heroMeta: 'text-blue-100 font-medium',
-    heroDivider: 'text-white/40',
-    btnPrimary: 'bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white shadow-lg shadow-blue-500/30 border border-blue-400/50 backdrop-blur-md',
-    btnSecondary: 'bg-blue-900/30 hover:bg-blue-800/40 border border-blue-500/30 text-white shadow-sm backdrop-blur-md',
-    sectionBg: 'bg-[#0B1221]/80 backdrop-blur-3xl',
+    pageBg: 'bg-[#020617]',
+    pagePattern: 'opacity-25',
+    orbPrimary: t.orbPrimary,
+    orbSecondary: t.orbSecondary,
+    heroCard: `holo-card-${safeCardType} text-white ${animationClass}`,
+    heroName: 'text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.5)]',
+    heroMeta: 'text-slate-300 font-medium',
+    heroDivider: 'text-white/30',
+    btnPrimary: t.btnPrimary,
+    btnSecondary: 'bg-slate-900/80 hover:bg-slate-800/90 border border-white/15 hover:border-white/25 text-white shadow-md backdrop-blur-md',
+    tabActive: t.tabActive,
+    sectionBg: t.sectionBg,
     sectionBorder: t.border,
     sectionShadow: t.glow,
-    subCardBg: 'bg-blue-950/30',
-    subCardBorder: 'border-blue-500/20',
-    textHeader: 'text-white drop-shadow-md',
-    textSub: 'text-blue-100/80',
-    textMuted: 'text-blue-200/50',
+    subCardBg: t.subCardBg,
+    subCardBorder: t.subCardBorder,
+    textHeader: 'text-white',
+    textSub: 'text-slate-200',
+    textMuted: 'text-slate-400',
     iconColor: t.accent,
+    accentBg: t.accentBg,
+    accentBorder: t.accentBorder,
   };
 };
 
@@ -915,15 +1030,55 @@ function DashboardContent() {
   }, [sportStats, userSports, genderKey]);
 
   const readiness = useMemo(() => {
-    let score = 0; let nextQuest = "Profile complete! You are fully optimized for the Matchmaker.";
-    if (athleteProfile?.first_name && athleteProfile?.last_name) score += 10;
-    if (athleteProfile?.trust_level === 1) score += 10; else if (score >= 10) nextQuest = "Verify your account identity to earn your Verified Badge.";
-    if (athleteProfile?.high_school && athleteProfile?.state) score += 10; else if (score >= 20) nextQuest = "Search and join your High School team roster.";
-    if (gpa) score += 15; else if (score >= 30) nextQuest = "Add your Unweighted GPA below to boost your Matchmaker visibility.";
-    if (intendedMajor) score += 15; else if (score >= 45) nextQuest = "Define an Intended Major below to unlock academic matching.";
-    if (accolades.length > 0) score += 15; else if (score >= 60) nextQuest = "Log your first Season Accolade to prove your leadership.";
-    if (allAvailableMetrics.length > 0) score += 25; else if (score >= 75) nextQuest = "Sync a sport metric to activate the Recruit Engine.";
-    return { score: Math.min(100, score), nextQuest };
+    let score = 0;
+    let firstMissingQuest: string | null = null;
+
+    if (athleteProfile?.first_name && athleteProfile?.last_name) {
+      score += 10;
+    } else if (!firstMissingQuest) {
+      firstMissingQuest = "Add your first & last name in Profile Settings to initialize your card.";
+    }
+
+    if (athleteProfile?.trust_level === 1) {
+      score += 10;
+    } else if (!firstMissingQuest) {
+      firstMissingQuest = "Verify your account identity to earn your Verified Badge.";
+    }
+
+    if (athleteProfile?.high_school && athleteProfile?.state) {
+      score += 10;
+    } else if (!firstMissingQuest) {
+      firstMissingQuest = "Search and join your High School team roster.";
+    }
+
+    if (gpa) {
+      score += 15;
+    } else if (!firstMissingQuest) {
+      firstMissingQuest = "Add your Unweighted GPA in Recruiting Hub to boost Matchmaker visibility.";
+    }
+
+    if (intendedMajor) {
+      score += 15;
+    } else if (!firstMissingQuest) {
+      firstMissingQuest = "Define an Intended Major to unlock academic college matching.";
+    }
+
+    if (accolades.length > 0) {
+      score += 15;
+    } else if (!firstMissingQuest) {
+      firstMissingQuest = "Log your first Season Accolade to showcase your leadership.";
+    }
+
+    if (allAvailableMetrics.length > 0) {
+      score += 25;
+    } else if (!firstMissingQuest) {
+      firstMissingQuest = "Sync or log a sport metric/PR to activate the Recruit Engine.";
+    }
+
+    return {
+      score: Math.min(100, score),
+      nextQuest: firstMissingQuest || "Profile complete! You are fully optimized for the Matchmaker."
+    };
   }, [athleteProfile, gpa, intendedMajor, accolades, allAvailableMetrics]);
 
   useEffect(() => { if (selectedMetrics.length === 0 && allAvailableMetrics.length > 0) setSelectedMetrics(allAvailableMetrics.slice(0, 4).map(m => m.label)); }, [allAvailableMetrics, selectedMetrics.length]);
@@ -982,18 +1137,19 @@ function DashboardContent() {
     <div className="space-y-4 sm:space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300 relative z-10">
       
       {/* 🚀 UPGRADED ACTION GRID NAVIGATOR 🚀 */}
-      <div className={`${theme.sectionBg} rounded-[2rem] p-5 sm:p-7 ${theme.sectionShadow} border ${theme.sectionBorder} flex flex-col items-center justify-center transition-all duration-500 max-w-xl mx-auto w-full relative z-20`}>
+      <div className={`${theme.sectionBg} rounded-[2rem] p-5 sm:p-7 ${theme.sectionShadow} border ${theme.sectionBorder} flex flex-col items-center justify-center transition-all duration-500 max-w-xl mx-auto w-full relative z-20 overflow-hidden`}>
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent pointer-events-none" />
         
-        <Link href="/feed" className="w-full mb-3 flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl font-bold text-base sm:text-lg text-white transition-all shadow-lg bg-gradient-to-r from-blue-500 to-cyan-400 hover:scale-[1.01] active:scale-95">
+        <Link href="/feed" className={`w-full mb-3 flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-2xl font-bold text-base sm:text-lg transition-all hover:scale-[1.01] active:scale-95 ${theme.btnPrimary}`}>
           <TrendingUp className="w-5 h-5 shrink-0" /> Get Recruited
         </Link>
         
         <div className="grid grid-cols-2 gap-3 mb-3 w-full">
-          <Link href="/dashboard/email-builder" className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl font-semibold text-sm text-white transition-all shadow-md bg-gradient-to-r from-blue-600 to-blue-500 hover:scale-[1.01] active:scale-95">
-            <Mail className="w-4 h-4 shrink-0" /> Email Studio
+          <Link href="/dashboard/email-builder" className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl font-semibold text-sm text-white transition-all shadow-md bg-gradient-to-r from-slate-800/90 to-slate-900/90 hover:from-blue-600/30 hover:to-cyan-500/20 border border-white/10 hover:border-cyan-400/40 hover:scale-[1.01] active:scale-95">
+            <Mail className={`w-4 h-4 shrink-0 ${theme.iconColor}`} /> Email Studio
           </Link>
-          <Link href={`/athlete/${athleteProfile?.custom_slug || athleteProfile?.id}`} target="_blank" className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl font-semibold text-sm text-white transition-all shadow-md bg-gradient-to-r from-blue-500 to-cyan-500 hover:scale-[1.01] active:scale-95">
-            <Globe className="w-4 h-4 shrink-0" /> Public Profile
+          <Link href={`/athlete/${athleteProfile?.custom_slug || athleteProfile?.id}`} target="_blank" className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl font-semibold text-sm text-white transition-all shadow-md bg-gradient-to-r from-slate-800/90 to-slate-900/90 hover:from-blue-600/30 hover:to-cyan-500/20 border border-white/10 hover:border-cyan-400/40 hover:scale-[1.01] active:scale-95">
+            <Globe className={`w-4 h-4 shrink-0 ${theme.iconColor}`} /> Public Profile
           </Link>
         </div>
 
@@ -1002,7 +1158,7 @@ function DashboardContent() {
           <button
             type="button"
             onClick={() => { if (!athleteProfile?.high_school) setIsTeamJoinModalOpen(true); else router.push('/dashboard/team'); }}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl font-semibold text-sm text-white transition-all shadow-md bg-gradient-to-r from-blue-600 to-cyan-500 hover:scale-[1.01] active:scale-95 cursor-pointer"
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl font-semibold text-sm text-white transition-all shadow-md bg-gradient-to-r from-blue-600/90 to-cyan-500/90 hover:from-blue-500 hover:to-cyan-400 border border-cyan-400/30 hover:scale-[1.01] active:scale-95 cursor-pointer"
           >
             <Users className="w-4 h-4 shrink-0" /> Team HQ
           </button>
@@ -1010,7 +1166,7 @@ function DashboardContent() {
           <button
             type="button"
             onClick={() => goToTab('rewards')}
-            className="relative w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl font-semibold text-sm text-white transition-all shadow-md bg-gradient-to-r from-emerald-600 to-teal-500 hover:scale-[1.01] active:scale-95 cursor-pointer"
+            className="relative w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl font-semibold text-sm text-white transition-all shadow-md bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 border border-emerald-400/30 hover:scale-[1.01] active:scale-95 cursor-pointer"
           >
             <Gift className="w-4 h-4 shrink-0" />
             <span>Rewards</span>
@@ -1023,7 +1179,7 @@ function DashboardContent() {
         </div>
         
         {/* Quick Stats Bar */}
-        <div className={`w-full border-t ${theme.isDark ? 'border-white/10' : 'border-slate-300'} pt-5 flex flex-row items-center justify-around gap-4`}>
+        <div className="w-full border-t border-white/10 pt-5 flex flex-row items-center justify-around gap-4">
           <div className="flex flex-col items-center text-center">
             <span className={`text-2xl sm:text-3xl font-bold tabular-nums leading-none ${theme.textHeader}`}>
               {athleteProfile?.profile_views || 0}
@@ -1032,6 +1188,8 @@ function DashboardContent() {
               Profile Clicks
             </span>
           </div>
+
+          <div className="h-8 w-px bg-white/10" />
 
           <div className="flex flex-col items-center text-center">
             {isProUnlocked ? (
@@ -1051,9 +1209,11 @@ function DashboardContent() {
             </span>
           </div>
 
+          <div className="h-8 w-px bg-white/10" />
+
           <button
             onClick={() => { goToTab('social'); setSocialSubTab('analytics'); }}
-            className="w-11 h-11 rounded-2xl flex items-center justify-center transition-all hover:scale-105 shadow-xl bg-gradient-to-br from-blue-600 to-cyan-500 text-white shrink-0 border border-white/20 cursor-pointer"
+            className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-all hover:scale-105 shadow-xl shrink-0 cursor-pointer ${theme.btnPrimary}`}
             title="Open Full Analytics"
           >
             <BarChart3 className="w-5 h-5" />
@@ -1063,9 +1223,10 @@ function DashboardContent() {
 
       {/* 📊 INTEGRATED SCOUTING & COACH ANALYTICS HUB 📊 */}
       <div className={`${theme.sectionBg} rounded-2xl sm:rounded-[2rem] p-5 sm:p-7 ${theme.sectionShadow} border ${theme.sectionBorder} transition-all duration-500 relative overflow-hidden`}>
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 pb-4 border-b border-white/10">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-blue-600 to-cyan-500 flex items-center justify-center text-white shadow-[0_0_20px_rgba(37,99,235,0.35)] shrink-0">
+            <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${theme.btnPrimary}`}>
               <BarChart3 className="w-5 h-5" />
             </div>
             <div>
@@ -1092,35 +1253,35 @@ function DashboardContent() {
           <button
             type="button"
             onClick={() => { goToTab('social'); setSocialSubTab('analytics'); }}
-            className="text-xs font-semibold text-cyan-400 hover:text-cyan-300 flex items-center gap-1 self-start sm:self-auto cursor-pointer"
+            className={`text-xs font-semibold ${theme.iconColor} hover:opacity-80 flex items-center gap-1 self-start sm:self-auto cursor-pointer transition-opacity`}
           >
             Full Breakdown <ChevronRight className="w-4 h-4" />
           </button>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3.5 mb-5">
-          <div className="bg-gradient-to-br from-blue-600/20 to-indigo-600/20 border border-blue-500/30 rounded-2xl p-4 flex flex-col justify-between shadow-inner">
+          <div className="bg-gradient-to-br from-[#020617]/90 via-blue-950/40 to-indigo-950/40 border border-blue-500/30 rounded-2xl p-4 flex flex-col justify-between shadow-inner">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-medium text-blue-300">
+              <span className="text-xs font-semibold text-blue-300">
                 Profile Clicks
               </span>
-              <Eye className="w-4 h-4 text-cyan-400" />
+              <Eye className={`w-4 h-4 ${theme.iconColor}`} />
             </div>
             <div className="flex items-baseline gap-2">
               <span className="text-3xl font-bold tabular-nums text-white leading-none">
                 {athleteProfile?.profile_views || 0}
               </span>
-              <span className="text-xs font-normal text-blue-200/70">
+              <span className="text-xs font-medium text-slate-400">
                 All-time
               </span>
             </div>
           </div>
 
-          <div className="md:col-span-3 relative rounded-2xl overflow-hidden border border-white/10 bg-[#020617]/50 p-4">
+          <div className="md:col-span-3 relative rounded-2xl overflow-hidden border border-white/10 bg-[#020617]/75 p-4">
             {!isProUnlocked && (
-              <div className="absolute inset-0 z-20 bg-[#020617]/85 backdrop-blur-md flex flex-col sm:flex-row items-center justify-between gap-3 px-5 py-3 text-center sm:text-left">
+              <div className="absolute inset-0 z-20 bg-[#020617]/90 backdrop-blur-md flex flex-col sm:flex-row items-center justify-between gap-3 px-5 py-3 text-center sm:text-left">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-purple-500/20 border border-cyan-400/40 flex items-center justify-center shrink-0 hidden sm:flex">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-purple-500/20 border border-cyan-400/40 items-center justify-center shrink-0 hidden sm:flex">
                     <Lock className="w-4 h-4 text-cyan-300" />
                   </div>
                   <div>
@@ -1180,7 +1341,7 @@ function DashboardContent() {
           <div className="pt-4 border-t border-white/10">
             <div className="flex items-center justify-between mb-3">
               <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                <UserCircle2 className="w-4 h-4 text-cyan-400" /> Recent College Coach Viewers
+                <UserCircle2 className={`w-4 h-4 ${theme.iconColor}`} /> Recent College Coach Viewers
               </span>
               {allRecentViewers.length > 3 && (
                 <button
@@ -1196,7 +1357,7 @@ function DashboardContent() {
             {recentViewers.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {recentViewers.map((coach: any, idx: number) => (
-                  <div key={`home-coach-${idx}`} className="flex items-center justify-between p-3 rounded-xl bg-[#020617]/60 border border-white/10 hover:border-cyan-500/30 transition-all gap-2">
+                  <div key={`home-coach-${idx}`} className="flex items-center justify-between p-3 rounded-xl bg-[#020617]/75 border border-white/10 hover:border-cyan-500/30 transition-all gap-2">
                     <div className="flex items-center gap-2.5 min-w-0">
                       <AvatarWithBorder avatarUrl={coach.avatar_url} borderId="none" sizeClasses="w-9 h-9 shrink-0" userRole="coach" />
                       <div className="min-w-0">
@@ -1216,7 +1377,7 @@ function DashboardContent() {
                 ))}
               </div>
             ) : (
-              <p className="text-xs font-normal text-slate-400 italic bg-[#020617]/40 border border-dashed border-white/10 rounded-xl p-3.5 text-center">
+              <p className="text-xs font-normal text-slate-400 italic bg-[#020617]/60 border border-dashed border-white/10 rounded-xl p-3.5 text-center">
                 No verified college coach views recorded yet. Boost your profile on the Featured Feed to get discovered!
               </p>
             )}
@@ -1283,11 +1444,12 @@ function DashboardContent() {
 
       {/* 🚀 INLINE WEEKLY STREAK WIDGET 🚀 */}
       <div className={`${theme.sectionBg} rounded-2xl sm:rounded-[2rem] p-5 sm:p-6 ${theme.sectionShadow} border ${theme.sectionBorder} transition-all duration-500 relative overflow-hidden group`}>
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
         <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 blur-[40px] rounded-full pointer-events-none"></div>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5 relative z-10">
           <div>
             <h3 className={`text-lg sm:text-xl font-bold tracking-tight flex items-center gap-2 ${theme.textHeader}`}>
-              <Flame className="w-5 h-5 text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]" /> Current Login Streak
+              <Flame className={`w-5 h-5 ${theme.iconColor} drop-shadow-[0_0_8px_rgba(34,211,238,0.6)]`} /> Current Login Streak
             </h3>
             <p className={`text-xs sm:text-sm font-normal ${theme.textMuted} mt-0.5`}>
               Cycle {Math.floor(Math.max(0, streak) / 28) + 1} • {((1 + (Math.floor(Math.max(0, streak) / 28) * 0.5)) * proPointMultiplier).toFixed(1)}x Multiplier {athleteProfile?.is_premium && '(3x PRO)'}
@@ -1302,16 +1464,16 @@ function DashboardContent() {
                 className="relative bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 font-bold text-xs px-4 py-2.5 rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.4)] hover:scale-105 transition-transform flex items-center gap-1.5 cursor-pointer"
               >
                 <Gift className="w-4 h-4" />
-                <span>Claim Today's Loot</span>
+                <span>Claim Today&apos;s Loot</span>
                 <span className="ml-1 w-5 h-5 rounded-full bg-rose-600 text-white text-[10px] font-bold flex items-center justify-center shadow">
                   1
                 </span>
               </button>
             )}
 
-            <div className="bg-cyan-500/10 border border-cyan-500/30 px-3.5 py-2 rounded-xl flex items-center justify-center sm:justify-start gap-2 shrink-0">
-              <span className="text-xs font-medium text-cyan-400/80">Day</span>
-              <span className="text-lg font-bold tabular-nums text-cyan-400 leading-none">{streak}</span>
+            <div className={`${theme.accentBg} border ${theme.accentBorder} px-3.5 py-2 rounded-xl flex items-center justify-center sm:justify-start gap-2 shrink-0`}>
+              <span className={`text-xs font-medium ${theme.iconColor} opacity-80`}>Day</span>
+              <span className={`text-lg font-bold tabular-nums ${theme.iconColor} leading-none`}>{streak}</span>
             </div>
           </div>
         </div>
@@ -1335,37 +1497,39 @@ function DashboardContent() {
               <div
                 key={dayNum}
                 onClick={() => { if (isToday && canClaimDaily) goToTab('rewards'); }}
-                className={`relative snap-start scroll-ml-4 p-3 rounded-2xl border-2 flex flex-col items-center justify-between gap-2 text-center transition-all min-w-[78px] flex-1 ${
+                className={`relative snap-start scroll-ml-4 p-3 rounded-2xl border flex flex-col items-center justify-between gap-2 text-center transition-all min-w-[82px] flex-1 ${
                   isPast
-                    ? 'bg-[#020617]/50 border-blue-900/30 opacity-60'
+                    ? 'bg-[#020617]/50 border-slate-800/70 opacity-60'
                     : isToday && canClaimDaily
-                      ? 'bg-emerald-900/30 border-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.35)] scale-[1.02] z-10 cursor-pointer'
+                      ? 'bg-gradient-to-b from-emerald-950/70 to-[#020617]/90 border-2 border-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.3)] scale-[1.02] z-10 cursor-pointer'
                       : isToday
-                        ? 'bg-cyan-900/20 border-cyan-400/50 shadow-[0_0_15px_rgba(34,211,238,0.3)] scale-[1.02] z-10'
-                        : theme.isDark
-                          ? 'bg-blue-950/20 border-blue-500/10'
-                          : 'bg-white border-blue-100'
+                        ? 'bg-gradient-to-b from-cyan-950/60 to-[#020617]/90 border-2 border-cyan-400/60 shadow-[0_0_18px_rgba(34,211,238,0.25)] scale-[1.02] z-10'
+                        : 'bg-[#020617]/75 border-white/10 hover:border-white/20'
                 }`}
               >
-                {isPast && <div className="absolute top-1.5 right-1.5"><CheckCircle2 className="w-3 h-3 text-cyan-500"/></div>}
+                {isPast && <div className="absolute top-1.5 right-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-cyan-400"/></div>}
                 {isToday && canClaimDaily && (
                   <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-rose-600 text-white text-[9px] font-bold flex items-center justify-center shadow">
                     1
                   </span>
                 )}
-                <span className={`text-[11px] font-semibold shrink-0 ${isToday ? 'text-cyan-400' : theme.textMuted}`}>Day {dayNum}</span>
+                <span className={`text-[11px] font-semibold shrink-0 ${isToday && canClaimDaily ? 'text-emerald-300' : isToday ? 'text-cyan-300' : 'text-slate-400'}`}>
+                  Day {dayNum}
+                </span>
 
-                <div className={`w-8 h-8 rounded-full ${theme.isDark ? 'bg-[#020617]/80 border-blue-900/50' : 'bg-blue-50 border-blue-100'} flex items-center justify-center shrink-0 border ${rewardData.glow && !isPast ? rewardData.glow : ''}`}>
+                <div className={`w-9 h-9 rounded-full bg-[#0B1221] border border-white/10 flex items-center justify-center shrink-0 ${rewardData.glow && !isPast ? rewardData.glow : ''}`}>
                   {rewardData.tier && !isPast ? (
                     <LootBoxVisual tier={rewardData.tier} size="sm" />
                   ) : (
-                    <div className={`w-4 h-4 shrink-0 ${isPast ? 'text-blue-500/50' : rewardData.iconColor}`}>
+                    <div className={`w-4 h-4 shrink-0 ${isPast ? 'text-slate-500' : rewardData.iconColor}`}>
                       <rewardData.Icon className="w-full h-full" />
                     </div>
                   )}
                 </div>
 
-                <span className={`font-bold tabular-nums mt-auto text-xs ${isToday ? 'text-cyan-400' : theme.isDark ? 'text-blue-300' : 'text-blue-500'}`}>+{totalReward}</span>
+                <span className={`font-bold tabular-nums mt-auto text-xs ${isToday && canClaimDaily ? 'text-emerald-400' : isToday ? 'text-cyan-400' : 'text-blue-300'}`}>
+                  +{totalReward}
+                </span>
               </div>
             );
           })}
@@ -1373,11 +1537,11 @@ function DashboardContent() {
       </div>
 
       {unclaimedRewardsCount > 0 && (
-        <div className="bg-gradient-to-r from-emerald-600/20 via-teal-500/15 to-cyan-500/10 border border-emerald-500/50 p-4 sm:p-5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between shadow-[0_0_20px_rgba(16,185,129,0.2)] gap-4 animate-in zoom-in-95 duration-300">
+        <div className="bg-gradient-to-r from-emerald-950/80 via-[#0B1221] to-teal-950/60 border border-emerald-500/40 p-4 sm:p-5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between shadow-[0_0_25px_rgba(16,185,129,0.2)] gap-4 animate-in zoom-in-95 duration-300">
           <div className="flex items-center gap-4">
-            <div className="relative bg-emerald-500/20 p-3 rounded-full shadow-inner shrink-0">
+            <div className="relative bg-emerald-500/20 border border-emerald-500/30 p-3 rounded-2xl shadow-inner shrink-0">
               <Gift className="w-6 h-6 text-emerald-400" />
-              <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-rose-600 text-white text-[10px] font-bold flex items-center justify-center shadow">
+              <span className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-rose-600 text-white text-[10px] font-bold flex items-center justify-center shadow">
                 {unclaimedRewardsCount}
               </span>
             </div>
@@ -1397,15 +1561,16 @@ function DashboardContent() {
       )}
 
       {/* 🎓 CLEAN, UNCRAMPED TARGET COLLEGES BOARD (ZERO TEXT TRUNCATION) 🎓 */}
-      <div className={`${theme.sectionBg} rounded-2xl sm:rounded-[2rem] ${theme.sectionShadow} border ${theme.sectionBorder} overflow-hidden transition-all duration-300`}>
+      <div className={`${theme.sectionBg} rounded-2xl sm:rounded-[2rem] ${theme.sectionShadow} border ${theme.sectionBorder} overflow-hidden transition-all duration-300 relative`}>
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
         <button
           type="button"
           onClick={() => setIsCollegesOpen(!isCollegesOpen)}
-          className={`w-full flex items-center justify-between p-5 md:p-7 bg-transparent hover:${theme.subCardBg} transition-colors gap-3.5 cursor-pointer`}
+          className="w-full flex items-center justify-between p-5 md:p-7 bg-transparent hover:bg-white/[0.02] transition-colors gap-3.5 cursor-pointer"
         >
           <div className="flex items-center gap-3.5 text-left min-w-0 flex-1">
-            <div className={`w-11 h-11 sm:w-13 sm:h-13 rounded-2xl border flex items-center justify-center shrink-0 shadow-[0_0_15px_rgba(59,130,246,0.2)] ${theme.isDark ? 'bg-blue-600/20 border-blue-500/40' : 'bg-blue-100 border-blue-300'}`}>
-              <Bookmark className={`w-5 h-5 ${theme.isDark ? 'text-blue-400 fill-blue-400/30' : 'text-blue-600 fill-blue-600/30'}`} />
+            <div className={`w-11 h-11 sm:w-13 sm:h-13 rounded-2xl border flex items-center justify-center shrink-0 shadow-[0_0_15px_rgba(59,130,246,0.2)] ${theme.accentBg} ${theme.accentBorder}`}>
+              <Bookmark className={`w-5 h-5 ${theme.iconColor}`} />
             </div>
 
             <div className="min-w-0 flex-1">
@@ -1413,7 +1578,7 @@ function DashboardContent() {
                 <h2 className={`text-lg sm:text-xl font-bold tracking-tight ${theme.textHeader}`}>
                   Target Colleges Board
                 </h2>
-                <span className="bg-blue-500/20 border border-blue-500/30 text-cyan-300 text-xs font-semibold px-2.5 py-0.5 rounded-full">
+                <span className={`${theme.accentBg} border ${theme.accentBorder} ${theme.iconColor} text-xs font-semibold px-2.5 py-0.5 rounded-full`}>
                   {savedColleges.length}
                 </span>
               </div>
@@ -1433,7 +1598,7 @@ function DashboardContent() {
         </button>
 
         {isCollegesOpen && (
-          <div className={`p-4 sm:p-6 md:p-7 border-t ${theme.isDark ? 'border-blue-500/20 bg-[#020617]/50' : 'border-blue-200 bg-blue-50/50'} animate-in fade-in slide-in-from-top-4 duration-300`}>
+          <div className="p-4 sm:p-6 md:p-7 border-t border-white/10 bg-[#020617]/55 animate-in fade-in slide-in-from-top-4 duration-300">
             
             {/* Top Controls: Single-Line Segmented Sort Pills + Find More Colleges CTA */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
@@ -1484,7 +1649,7 @@ function DashboardContent() {
 
               <Link
                 href="/search"
-                className="text-xs sm:text-sm font-semibold w-full sm:w-auto px-5 py-2.5 rounded-xl transition-all shadow-md flex items-center gap-2 justify-center bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white shrink-0"
+                className={`text-xs sm:text-sm font-semibold w-full sm:w-auto px-5 py-2.5 rounded-xl transition-all flex items-center gap-2 justify-center shrink-0 ${theme.btnPrimary}`}
               >
                 <span>Find More Colleges</span>
                 <Search className="w-4 h-4" />
@@ -1498,11 +1663,7 @@ function DashboardContent() {
                   return (
                     <div
                       key={savedId}
-                      className={`rounded-2xl p-4 sm:p-5 border transition-all duration-300 flex flex-col justify-between gap-4 relative group ${
-                        theme.isDark
-                          ? 'bg-[#0B1221]/90 border-blue-500/20 hover:border-cyan-400/40 shadow-lg'
-                          : 'bg-white border-slate-200 hover:border-blue-300 shadow-sm'
-                      }`}
+                      className="rounded-2xl p-4 sm:p-5 border transition-all duration-300 flex flex-col justify-between gap-4 relative group bg-[#0B1221]/90 border-white/10 hover:border-cyan-400/40 shadow-lg"
                     >
                       {/* Top Header: School Logo + Full Name + Match Pill + Delete Button */}
                       <div className="flex items-start justify-between gap-3">
@@ -1510,9 +1671,7 @@ function DashboardContent() {
                           href={`/college/${college.slug}?sport=${primarySportQuery}`}
                           className="flex items-start gap-3 min-w-0 flex-1 group/title"
                         >
-                          <div className={`w-11 h-11 rounded-xl border flex items-center justify-center shrink-0 overflow-hidden mt-0.5 ${
-                            theme.isDark ? 'border-blue-500/30 bg-[#020617]' : 'border-blue-200 bg-blue-50'
-                          }`}>
+                          <div className="w-11 h-11 rounded-xl border border-blue-500/30 bg-[#020617] flex items-center justify-center shrink-0 overflow-hidden mt-0.5">
                             {college.logo_url ? (
                               <img src={college.logo_url} className="w-7 h-7 object-contain" alt={college.name} />
                             ) : (
@@ -1552,16 +1711,12 @@ function DashboardContent() {
                       </div>
 
                       {/* Unified 3-Column Metrics Strip (Full Width Per Column = Zero Number Truncation) */}
-                      <div className={`grid grid-cols-3 divide-x rounded-xl py-3 px-1 border text-center ${
-                        theme.isDark
-                          ? 'bg-[#020617]/70 border-white/10 divide-white/10'
-                          : 'bg-slate-50 border-slate-200 divide-slate-200'
-                      }`}>
+                      <div className="grid grid-cols-3 divide-x rounded-xl py-3 px-1 border text-center bg-[#020617]/75 border-white/10 divide-white/10">
                         <div className="px-1.5 flex flex-col justify-center">
                           <span className="text-[11px] font-medium text-slate-400 mb-1 whitespace-nowrap">
                             Net Tuition
                           </span>
-                          <span className={`text-sm sm:text-base font-bold tabular-nums leading-tight whitespace-nowrap ${theme.isDark ? 'text-white' : 'text-slate-900'}`}>
+                          <span className="text-sm sm:text-base font-bold tabular-nums leading-tight whitespace-nowrap text-white">
                             {stats.tuitionStr}
                           </span>
                         </div>
@@ -1570,7 +1725,7 @@ function DashboardContent() {
                           <span className="text-[11px] font-medium text-slate-400 mb-1 whitespace-nowrap">
                             10-Yr Salary
                           </span>
-                          <span className={`text-sm sm:text-base font-bold tabular-nums leading-tight whitespace-nowrap ${theme.isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>
+                          <span className="text-sm sm:text-base font-bold tabular-nums leading-tight whitespace-nowrap text-emerald-400">
                             {stats.salaryStr}
                           </span>
                         </div>
@@ -1609,13 +1764,13 @@ function DashboardContent() {
                 })}
               </div>
             ) : (
-              <div className={`text-center py-10 sm:py-12 rounded-2xl border border-dashed flex flex-col items-center justify-center ${theme.isDark ? 'bg-[#020617]/50 border-blue-500/30' : 'bg-slate-50 border-slate-300'}`}>
+              <div className="text-center py-10 sm:py-12 rounded-2xl border border-dashed flex flex-col items-center justify-center bg-[#020617]/60 border-blue-500/30">
                 <School className={`w-12 h-12 mb-3 ${theme.textMuted}`} />
                 <h4 className={`text-lg font-bold mb-1 ${theme.textHeader}`}>Your College Board is Empty</h4>
                 <p className={`text-xs sm:text-sm font-normal max-w-sm mb-5 px-4 leading-relaxed ${theme.textMuted}`}>
                   Use the College Finder to match your PRs and academics against D1, D2, D3, and NAIA programs.
                 </p>
-                <Link href="/search" className="font-semibold text-xs py-3 px-6 rounded-xl transition-all shadow-[0_0_20px_rgba(37,99,235,0.3)] bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white">
+                <Link href="/search" className={`font-semibold text-xs py-3 px-6 rounded-xl transition-all ${theme.btnPrimary}`}>
                   Open College Finder
                 </Link>
               </div>
@@ -1636,35 +1791,37 @@ function DashboardContent() {
     );
   }
 
-  let backgroundEffects = <div className={`absolute top-0 right-0 w-[500px] h-[500px] ${theme.isDark ? 'bg-cyan-400/10' : 'bg-blue-500/10'} blur-[100px] rounded-full pointer-events-none z-0 mix-blend-screen`}></div>;
-
-  if (theme.isDark) {
-    backgroundEffects = (
-      <>
-        {['hype', 'premium', 'mythic-flare'].includes(athleteProfile?.equipped_card || '') && <div className="holo-glare rounded-[2.5rem]"></div>}
-        {['hype', 'premium', 'crimson', 'sapphire', 'amethyst', 'cyber', 'mythic-flare'].includes(athleteProfile?.equipped_card || '') && <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-[0.03] mix-blend-overlay pointer-events-none rounded-[2.5rem]"></div>}
-        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-cyan-400/10 blur-[100px] rounded-full pointer-events-none z-0 mix-blend-screen"></div>
-      </>
-    );
-  }
+  const equippedCardKey = theme.cardKey;
+  const backgroundEffects = (
+    <>
+      {['hype', 'premium', 'mythic-flare'].includes(equippedCardKey) && <div className="holo-glare"></div>}
+      {['hype', 'premium', 'crimson', 'sapphire', 'amethyst', 'cyber', 'mythic-flare'].includes(equippedCardKey) && (
+        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-[0.04] mix-blend-overlay pointer-events-none"></div>
+      )}
+      <div className={`absolute -top-24 right-0 w-[480px] h-[480px] ${theme.orbPrimary} blur-[110px] rounded-full pointer-events-none z-0 mix-blend-screen`}></div>
+      <div className={`absolute -bottom-24 left-10 w-[360px] h-[360px] ${theme.orbSecondary} blur-[100px] rounded-full pointer-events-none z-0 mix-blend-screen`}></div>
+    </>
+  );
 
   return (
     <main className={`min-h-screen ${theme.pageBg} font-sans pb-24 md:pb-12 text-slate-200 relative overflow-x-clip transition-colors duration-500`}>
       
-      {/* 🚀 UPGRADED GRID & HEAVY GLASSMORPHISM BASE 🚀 */}
+      {/* 🚀 UPGRADED GRID & THEME-AWARE AMBIENT LIGHTING BASE 🚀 */}
       <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden bg-[#020617]">
-        <div className={`absolute inset-0 blue-grid-bg ${theme.pagePattern} opacity-40`}></div>
-        <div className={`absolute top-[-10%] left-[-10%] w-[60vw] h-[60vw] ${theme.isDark ? 'bg-blue-600/15' : 'bg-blue-400/15'} blur-[140px] rounded-full transition-colors duration-500 mix-blend-screen`}></div>
-        <div className={`absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] ${theme.isDark ? 'bg-cyan-500/10' : 'bg-cyan-400/10'} blur-[120px] rounded-full transition-colors duration-500 mix-blend-screen`}></div>
+        <div className={`absolute inset-0 blue-grid-bg ${theme.pagePattern}`}></div>
+        <div className={`absolute top-[-10%] left-[-10%] w-[60vw] h-[60vw] ${theme.orbPrimary} blur-[140px] rounded-full transition-colors duration-700 mix-blend-screen`}></div>
+        <div className={`absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] ${theme.orbSecondary} blur-[130px] rounded-full transition-colors duration-700 mix-blend-screen`}></div>
       </div>
 
       {!loading && athleteProfile && athleteProfile.trust_level !== 1 && (
-        <div className="relative z-40 w-full bg-[#0B1221] border-b border-blue-500/30 text-white px-4 py-3 flex flex-col sm:flex-row items-center justify-center gap-4 shadow-[0_4px_30px_rgba(59,130,246,0.15)]">
+        <div className="relative z-40 w-full bg-[#0B1221]/95 backdrop-blur-md border-b border-blue-500/30 text-white px-4 py-2.5 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 shadow-[0_4px_30px_rgba(59,130,246,0.15)]">
           <div className="flex items-center gap-2.5">
             <span className="flex h-2 w-2 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_8px_rgba(34,211,238,0.8)]"></span>
-            <p className="text-sm font-normal text-blue-200"><strong className="text-white font-bold">Action Required:</strong> Your profile identity is unverified.</p>
+            <p className="text-xs sm:text-sm font-normal text-blue-200"><strong className="text-white font-bold">Action Required:</strong> Your profile identity is unverified.</p>
           </div>
-          <button onClick={() => setIsEmailVerificationModalOpen(true)} className="bg-blue-500/20 hover:bg-blue-500/40 border border-blue-400/30 text-white text-xs font-semibold px-4 py-1.5 rounded-full transition-all active:scale-[0.98] flex items-center gap-1.5">Verify Now <ChevronRight className="w-3.5 h-3.5" /></button>
+          <button onClick={() => setIsEmailVerificationModalOpen(true)} className="bg-blue-500/20 hover:bg-blue-500/40 border border-blue-400/30 text-white text-xs font-semibold px-4 py-1.5 rounded-full transition-all active:scale-[0.98] flex items-center gap-1.5 cursor-pointer">
+            Verify Now <ChevronRight className="w-3.5 h-3.5" />
+          </button>
         </div>
       )}
 
@@ -1748,9 +1905,9 @@ function DashboardContent() {
         .blue-grid-bg {
           background-size: 40px 40px;
           background-image: 
-            linear-gradient(to right, rgba(59, 130, 246, 0.15) 1px, transparent 1px),
-            linear-gradient(to bottom, rgba(59, 130, 246, 0.15) 1px, transparent 1px);
-          mask-image: radial-gradient(ellipse 80% 50% at 50% 0%, #000 70%, transparent 100%);
+            linear-gradient(to right, rgba(59, 130, 246, 0.14) 1px, transparent 1px),
+            linear-gradient(to bottom, rgba(59, 130, 246, 0.14) 1px, transparent 1px);
+          mask-image: radial-gradient(ellipse 80% 55% at 50% 0%, #000 70%, transparent 100%);
         }
 
         @keyframes shimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
@@ -1765,14 +1922,19 @@ function DashboardContent() {
         }
         .animate-pulse-glow { animation: pulse-glow 2.5s ease-in-out infinite; }
         
-        .holo-card-base { background: transparent; }
+        .holo-card-base {
+          background:
+            radial-gradient(circle at 85% 15%, rgba(6, 182, 212, 0.14) 0%, transparent 45%),
+            radial-gradient(circle at 15% 85%, rgba(37, 99, 235, 0.18) 0%, transparent 50%),
+            linear-gradient(135deg, #020617 0%, #0B132B 50%, #09152E 100%);
+        }
         .holo-card-obsidian { background: linear-gradient(135deg, #020617 0%, #1e3a8a 25%, #000000 50%, #020617 75%, #0f172a 100%); background-size: 300% 300%; }
         .holo-card-crimson { background: linear-gradient(135deg, #450a0a 0%, #dc2626 50%, #450a0a 100%); background-size: 300% 300%; }
         .holo-card-sapphire { background: linear-gradient(135deg, #172554 0%, #0ea5e9 50%, #172554 100%); background-size: 300% 300%; }
         
         .holo-card-hype { 
           background: 
-            linear-gradient(135deg, rgba(255,255,255,0.15) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.15) 75%, transparent 75%, transparent 100%),
+            linear-gradient(135deg, rgba(255,255,255,0.12) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.12) 50%, rgba(255,255,255,0.12) 75%, transparent 75%, transparent 100%),
             linear-gradient(135deg, #4f46e5 0%, #9333ea 25%, #ec4899 50%, #3b82f6 75%, #4f46e5 100%); 
           background-size: 40px 40px, 300% 300%; 
         }
@@ -1780,7 +1942,7 @@ function DashboardContent() {
         .holo-card-premium { 
           background: 
             repeating-linear-gradient(45deg, rgba(255,255,255,0.05) 0px, rgba(255,255,255,0.05) 2px, transparent 2px, transparent 6px),
-            linear-gradient(135deg, #b45309 0%, #f59e0b 25%, #fef08a 50%, #d97706 75%, #78350f 100%); 
+            linear-gradient(135deg, #78350f 0%, #b45309 25%, #f59e0b 50%, #92400e 75%, #451a03 100%); 
           background-size: 100% 100%, 300% 300%; 
         }
 
@@ -1813,22 +1975,22 @@ function DashboardContent() {
         }
         
         .animate-foil { animation: foilShift 15s ease-in-out infinite; }
-        .holo-glare { position: absolute; inset: 0; background: linear-gradient(105deg, transparent 20%, rgba(255,255,255,0.4) 25%, transparent 30%); background-size: 200% auto; animation: shimmerGlare 8s infinite linear; pointer-events: none; z-index: 10; mix-blend-mode: overlay;}
+        .holo-glare { position: absolute; inset: 0; background: linear-gradient(105deg, transparent 20%, rgba(255,255,255,0.35) 25%, transparent 30%); background-size: 200% auto; animation: shimmerGlare 8s infinite linear; pointer-events: none; z-index: 10; mix-blend-mode: overlay;}
       `}} />
 
       {/* 🚨 DYNAMIC PAGE HEADER THEME CONFIG 🚨 */}
-      <div className={`pb-12 md:pb-20 px-4 md:px-6 relative transition-all duration-500 z-20 pt-6 md:pt-10 border-b border-blue-500/20 shadow-[0_10px_30px_rgba(59,130,246,0.1)] ${theme.heroCard} ${getEquippedGlow(athleteProfile?.equipped_border)}`}>
+      <div className={`pb-10 md:pb-14 px-4 md:px-6 relative overflow-hidden transition-all duration-500 z-20 pt-6 md:pt-10 border-b ${theme.heroCard} ${getEquippedGlow(athleteProfile?.equipped_border)}`}>
         {backgroundEffects}
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center md:items-start justify-between gap-5 md:gap-8 relative z-20">
           <div className="flex flex-col md:flex-row items-center md:items-start gap-4 sm:gap-6 w-full">
             <div className="relative w-24 h-24 md:w-36 md:h-36 shrink-0 flex items-center justify-center group cursor-pointer" onClick={() => !isUploadingAvatar && fileInputRef.current?.click()}>
               <svg className="absolute inset-0 w-full h-full -rotate-90 pointer-events-none" viewBox="0 0 144 144">
-                <circle cx="72" cy="72" r={66} stroke="currentColor" strokeWidth="6" fill="transparent" className="text-blue-500/20" />
-                <circle cx="72" cy="72" r={66} stroke="currentColor" strokeWidth="6" fill="transparent" className={readiness.score === 100 ? "text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]" : "text-blue-500"} strokeDasharray={2 * Math.PI * 66} strokeDashoffset={(2 * Math.PI * 66) - (readiness.score / 100) * (2 * Math.PI * 66)} strokeLinecap="round" style={{ transition: 'stroke-dashoffset 1s ease-in-out' }} />
+                <circle cx="72" cy="72" r={66} stroke="currentColor" strokeWidth="6" fill="transparent" className="text-white/10" />
+                <circle cx="72" cy="72" r={66} stroke="currentColor" strokeWidth="6" fill="transparent" className={readiness.score === 100 ? "text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]" : "text-cyan-400"} strokeDasharray={2 * Math.PI * 66} strokeDashoffset={(2 * Math.PI * 66) - (readiness.score / 100) * (2 * Math.PI * 66)} strokeLinecap="round" style={{ transition: 'stroke-dashoffset 1s ease-in-out' }} />
               </svg>
               <div className="relative z-10 flex items-center justify-center w-20 h-20 md:w-32 md:h-32">
-                <AvatarWithBorder avatarUrl={athleteProfile?.avatar_url} borderId={athleteProfile?.equipped_border} sizeClasses="w-full h-full absolute inset-0 shadow-xl" />
-                <div className={`absolute inset-1 rounded-full bg-[#020617]/70 flex flex-col items-center justify-center text-white transition-all backdrop-blur-[2px] ${isUploadingAvatar ? 'opacity-100 z-20' : 'opacity-0 group-hover:opacity-100 z-20'}`}>
+                <AvatarWithBorder avatarUrl={athleteProfile?.avatar_url} borderId={athleteProfile?.equipped_border} sizeClasses="w-full h-full absolute inset-0 shadow-2xl" />
+                <div className={`absolute inset-1 rounded-full bg-[#020617]/75 flex flex-col items-center justify-center text-white transition-all backdrop-blur-[2px] ${isUploadingAvatar ? 'opacity-100 z-20' : 'opacity-0 group-hover:opacity-100 z-20'}`}>
                   {isUploadingAvatar ? <RefreshCw className="w-5 h-5 sm:w-6 sm:h-6 animate-spin text-cyan-400" /> : <div className="flex flex-col items-center gap-1"><Camera className="w-5 h-5 sm:w-6 sm:h-6 text-cyan-400" /><span className="text-[10px] font-semibold text-cyan-400">Upload</span></div>}
                 </div>
               </div>
@@ -1841,10 +2003,12 @@ function DashboardContent() {
                   {athleteProfile?.first_name ? `${athleteProfile.first_name} ${athleteProfile.last_name}` : 'Welcome, Athlete'}
                 </h1>
                 <div className="flex items-center justify-center gap-2 flex-wrap">
-                  <button onClick={() => router.push('/dashboard/profile')} className="bg-blue-500/10 hover:bg-blue-500/20 p-2 rounded-lg transition-colors border border-blue-400/30 shrink-0 shadow-sm" title="Update Profile Details"><Edit3 className="w-4 h-4 text-cyan-400" /></button>
-                  <div className="bg-[#0B1221]/80 backdrop-blur-md border border-cyan-500/30 px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-[0_0_15px_rgba(34,211,238,0.2)]">
+                  <button onClick={() => router.push('/dashboard/profile')} className="bg-white/10 hover:bg-white/20 p-2 rounded-xl transition-colors border border-white/15 shrink-0 shadow-sm cursor-pointer" title="Update Profile Details">
+                    <Edit3 className="w-4 h-4 text-cyan-300" />
+                  </button>
+                  <div className="bg-[#020617]/75 backdrop-blur-md border border-cyan-500/35 px-3 py-1.5 rounded-xl flex items-center gap-1.5 shadow-[0_0_15px_rgba(34,211,238,0.2)]">
                     <Points className="w-4 h-4 text-cyan-400" />
-                    <span className="text-sm font-bold tabular-nums text-cyan-400">{coins.toLocaleString()} pts</span>
+                    <span className="text-sm font-bold tabular-nums text-cyan-300">{coins.toLocaleString()} pts</span>
                   </div>
                   {athleteProfile?.is_premium && (
                     <span className="bg-gradient-to-r from-cyan-400 via-purple-500 to-pink-500 text-white text-[11px] font-bold px-3 py-1 rounded-full shadow-[0_0_15px_rgba(168,85,247,0.4)] flex items-center gap-1">
@@ -1855,15 +2019,24 @@ function DashboardContent() {
                 </div>
               </div>
 
-              <p className={`text-sm sm:text-base md:text-lg font-medium flex flex-wrap items-center justify-center md:justify-start gap-1 sm:gap-2 mb-4 ${theme.heroMeta}`}>
-                <MapPin className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400" /> {athleteProfile?.high_school || 'General Athlete Profile'} {athleteProfile?.grad_year && ` • Class of ${athleteProfile.grad_year}`}
+              <p className={`text-sm sm:text-base font-medium flex flex-wrap items-center justify-center md:justify-start gap-1.5 sm:gap-2 mb-4 ${theme.heroMeta}`}>
+                <MapPin className={`w-4 h-4 ${theme.iconColor}`} />
+                <span>{athleteProfile?.high_school || 'General Athlete Profile'}</span>
+                {athleteProfile?.grad_year && <span>• Class of {athleteProfile.grad_year}</span>}
               </p>
               
               {readiness.score < 100 && (
-                <div className="bg-[#0B1221]/80 backdrop-blur-md border border-blue-500/30 rounded-xl sm:rounded-2xl p-3 inline-flex flex-col sm:flex-row items-center sm:items-start gap-3 sm:gap-4 max-w-lg w-full text-center sm:text-left shadow-[0_0_20px_rgba(59,130,246,0.15)] relative overflow-hidden group mb-4 sm:mb-5 animate-in fade-in zoom-in-95 duration-300">
+                <div className="bg-[#020617]/75 backdrop-blur-xl border border-white/15 rounded-2xl p-3.5 inline-flex flex-col sm:flex-row items-center sm:items-center gap-3.5 max-w-lg w-full text-center sm:text-left shadow-[0_8px_30px_rgba(0,0,0,0.45)] relative overflow-hidden group animate-in fade-in zoom-in-95 duration-300">
                   <div className="absolute top-0 right-0 w-24 h-24 bg-cyan-500/10 blur-[20px] rounded-full pointer-events-none"></div>
-                  <div className="w-10 h-10 rounded-full border-2 border-cyan-500/50 flex items-center justify-center shrink-0 relative bg-[#020617] shadow-[0_0_10px_rgba(34,211,238,0.3)]"><span className="text-[11px] font-bold tabular-nums text-cyan-400">{readiness.score}%</span></div>
-                  <div><p className="text-[11px] font-semibold text-blue-300/80 mb-0.5">Recruit Quest</p><p className="text-xs font-medium text-blue-100 leading-snug pr-0 sm:pr-2">{readiness.nextQuest}</p></div>
+                  <div className="w-11 h-11 rounded-full border-2 border-cyan-400/60 flex items-center justify-center shrink-0 relative bg-[#0B1221] shadow-[0_0_12px_rgba(34,211,238,0.25)]">
+                    <span className="text-xs font-bold tabular-nums text-cyan-300">{readiness.score}%</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-center sm:justify-start gap-2 mb-0.5">
+                      <p className="text-[11px] font-bold uppercase tracking-wider text-cyan-400">Recruit Quest</p>
+                    </div>
+                    <p className="text-xs font-medium text-slate-200 leading-snug">{readiness.nextQuest}</p>
+                  </div>
                 </div>
               )}
             </div>
@@ -1871,19 +2044,45 @@ function DashboardContent() {
         </div>
       </div>
 
-      {/* 🚀 FLOATING TAB NAVIGATOR (z-30 & top-24) 🚀 */}
-      <div className="sticky top-24 z-30 w-full flex justify-center px-4 mt-4 sm:mt-6 animate-in slide-in-from-bottom-4 duration-500 pointer-events-none">
-        <div className="bg-[#E2E8F0] p-1.5 rounded-full shadow-[0_10px_40px_rgba(0,0,0,0.2)] inline-flex gap-2 pointer-events-auto border border-white">
-          <button onClick={() => goToTab('home')} className={`px-6 py-3 rounded-full transition-all flex items-center justify-center min-w-[4rem] cursor-pointer ${activeTab === 'home' ? 'bg-[#3B82F6] text-white shadow-lg scale-105' : 'text-[#94A3B8] hover:text-[#3B82F6]'}`}>
-            <LayoutDashboard className="w-5 h-5 shrink-0" strokeWidth={2.5} />
+      {/* 🚀 DARK-GLASS FLOATING TAB NAVIGATOR (z-30 & top-20) 🚀 */}
+      <div className="sticky top-20 z-30 w-full flex justify-center px-4 -mt-6 sm:-mt-7 mb-2 animate-in slide-in-from-bottom-4 duration-500 pointer-events-none">
+        <div className="bg-[#0B1221]/90 backdrop-blur-2xl p-1.5 rounded-full shadow-[0_12px_40px_rgba(0,0,0,0.65)] inline-flex items-center gap-1.5 pointer-events-auto border border-white/15">
+          <button
+            onClick={() => goToTab('home')}
+            className={`px-4 sm:px-5 py-2.5 rounded-full transition-all flex items-center justify-center gap-2 text-xs sm:text-sm font-bold cursor-pointer ${
+              activeTab === 'home'
+                ? `${theme.tabActive} scale-[1.02]`
+                : 'text-slate-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <LayoutDashboard className="w-4 h-4 shrink-0" strokeWidth={2.5} />
+            <span className="hidden xs:inline sm:inline">Homebase</span>
           </button>
-          <button onClick={() => goToTab('social')} className={`px-6 py-3 rounded-full transition-all flex items-center justify-center min-w-[4rem] cursor-pointer ${activeTab === 'social' ? 'bg-[#3B82F6] text-white shadow-lg scale-105' : 'text-[#94A3B8] hover:text-[#3B82F6]'}`}>
-            <ImageIcon className="w-5 h-5 shrink-0" strokeWidth={2.5} />
+
+          <button
+            onClick={() => goToTab('social')}
+            className={`px-4 sm:px-5 py-2.5 rounded-full transition-all flex items-center justify-center gap-2 text-xs sm:text-sm font-bold cursor-pointer ${
+              activeTab === 'social'
+                ? `${theme.tabActive} scale-[1.02]`
+                : 'text-slate-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <ImageIcon className="w-4 h-4 shrink-0" strokeWidth={2.5} />
+            <span className="hidden xs:inline sm:inline">Recruiting Hub</span>
           </button>
-          <button onClick={() => goToTab('rewards')} className={`relative px-6 py-3 rounded-full transition-all flex items-center justify-center min-w-[4rem] cursor-pointer ${activeTab === 'rewards' ? 'bg-[#3B82F6] text-white shadow-lg scale-105' : 'text-[#94A3B8] hover:text-[#3B82F6]'}`}>
-            <Gift className="w-5 h-5 shrink-0" strokeWidth={2.5} />
+
+          <button
+            onClick={() => goToTab('rewards')}
+            className={`relative px-4 sm:px-5 py-2.5 rounded-full transition-all flex items-center justify-center gap-2 text-xs sm:text-sm font-bold cursor-pointer ${
+              activeTab === 'rewards'
+                ? `${theme.tabActive} scale-[1.02]`
+                : 'text-slate-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <Gift className="w-4 h-4 shrink-0" strokeWidth={2.5} />
+            <span className="hidden xs:inline sm:inline">Rewards</span>
             {unclaimedRewardsCount > 0 && (
-              <span className="absolute -top-1 -right-1 min-w-[20px] h-[20px] px-1 rounded-full bg-rose-600 text-white text-[10px] font-bold flex items-center justify-center shadow-[0_0_10px_rgba(225,29,72,0.9)] border-2 border-white">
+              <span className=" -top-1 -right-1 min-w-[20px] h-[20px] px-1 rounded-full bg-rose-600 text-white text-[10px] font-bold flex items-center justify-center shadow-[0_0_10px_rgba(225,29,72,0.9)] border-2 border-[#0B1221]">
                 {unclaimedRewardsCount}
               </span>
             )}
@@ -1954,7 +2153,7 @@ function DashboardContent() {
                             ))
                           ) : <div className="p-4 text-center"><p className="text-sm font-semibold text-blue-400 mb-2">No matching schools found.</p></div>}
                         </div>
-                        <div className="border-t border-blue-900 bg-[#020617] p-3"><button onClick={() => { setNewTeamName(teamSearchQuery); setShowAddTeamForm(true); }} className="w-full bg-blue-600/20 hover:bg-blue-600/40 border border-blue-500/30 text-cyan-400 font-semibold py-2.5 rounded-lg text-sm flex items-center justify-center gap-2 transition-colors"><Plus className="w-4 h-4" /> Don't see your school? Add it here</button></div>
+                        <div className="border-t border-blue-900 bg-[#020617] p-3"><button onClick={() => { setNewTeamName(teamSearchQuery); setShowAddTeamForm(true); }} className="w-full bg-blue-600/20 hover:bg-blue-600/40 border border-blue-500/30 text-cyan-400 font-semibold py-2.5 rounded-lg text-sm flex items-center justify-center gap-2 transition-colors"><Plus className="w-4 h-4" /> Don&apos;t see your school? Add it here</button></div>
                       </div>
                     )}
                     {teamForm.city && teamForm.state && <p className="text-xs font-semibold text-cyan-400 mt-2 flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" /> Verified Location: {teamForm.city}, {teamForm.state}</p>}

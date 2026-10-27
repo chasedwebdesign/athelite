@@ -38,6 +38,25 @@ const getCardStyles = (cardId: string | null | undefined) => {
   };
 };
 
+// Calculates the 5-year active recruiting window based on the annual June 22nd rollover
+const getEligibleGradYearBounds = (now = new Date()) => {
+  const currentYear = now.getFullYear();
+  // Month index 5 = June (June 22nd at 00:00:00)
+  const june22Cutoff = new Date(currentYear, 5, 22, 0, 0, 0, 0);
+  const minGradYear = now >= june22Cutoff ? currentYear + 1 : currentYear;
+  const maxGradYear = minGradYear + 4; // e.g., 2027 through 2031
+  return { minGradYear, maxGradYear };
+};
+
+// Resolves the athlete's profile URL using custom_slug (with fallback to id)
+const getAthleteProfileUrl = (athlete: any) => {
+  const slug = typeof athlete?.custom_slug === 'string' ? athlete.custom_slug.trim() : '';
+  if (slug && slug !== 'default') {
+    return `/athlete/${slug}`;
+  }
+  return `/athlete/${athlete.id}`;
+};
+
 export default function NetworkPage() {
   const supabase = createClient();
   const pathname = usePathname();
@@ -50,11 +69,25 @@ export default function NetworkPage() {
   const [filterAthleteState, setFilterAthleteState] = useState('');
   const [filterGradYear, setFilterGradYear] = useState('');
   const [filterSport, setFilterSport] = useState('');
-  const [showMobileFilters, setShowMobileFilters] = useState(false); 
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const [gradYearBounds, setGradYearBounds] = useState(() => getEligibleGradYearBounds());
+
+  // Timer to keep the June 22nd class cutoff synced in real time
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const updated = getEligibleGradYearBounds();
+      setGradYearBounds(prev =>
+        prev.minGradYear !== updated.minGradYear || prev.maxGradYear !== updated.maxGradYear
+          ? updated
+          : prev
+      );
+    }, 60_000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => { 
     fetchUserAndNetwork(); 
-  }, []); 
+  }, [gradYearBounds.minGradYear, gradYearBounds.maxGradYear]); 
 
   async function fetchUserAndNetwork() {
     const { data: { session } } = await supabase.auth.getSession();
@@ -78,14 +111,18 @@ export default function NetworkPage() {
         .order('school_name');
       if (data) setCoachesList(data);
     } else {
+      const { minGradYear, maxGradYear } = getEligibleGradYearBounds();
       const { data } = await supabase
         .from('athletes')
         .select(`
-          id, first_name, last_name, high_school, state, avatar_url, grad_year, is_premium, equipped_border, equipped_card, last_login_date,
+          id, custom_slug, first_name, last_name, high_school, state, avatar_url, grad_year, trust_level, is_premium, equipped_border, equipped_card, last_login_date,
           athlete_sports (sport_name, position, custom_fit_score)
         `)
         .not('first_name', 'is', null)
-        .order('trust_level', { ascending: false })
+        .gt('trust_level', 0)
+        .gte('grad_year', minGradYear)
+        .lte('grad_year', maxGradYear)
+        .order('last_login_date', { ascending: false, nullsFirst: false })
         .limit(300);
       if (data) setRecruitsList(data);
     }
@@ -103,6 +140,14 @@ export default function NetworkPage() {
     return Array.from(set).sort();
   }, [recruitsList]);
 
+  const eligibleGradYearOptions = useMemo<number[]>(() => {
+    const years: number[] = [];
+    for (let y = gradYearBounds.minGradYear; y <= gradYearBounds.maxGradYear; y++) {
+      years.push(y);
+    }
+    return years;
+  }, [gradYearBounds]);
+
   const filteredDirectory = useMemo(() => {
     if (viewerRole !== 'coach') {
       return coachesList.filter((c: any) =>
@@ -112,18 +157,48 @@ export default function NetworkPage() {
         c.sport?.toLowerCase().includes(searchQuery.toLowerCase())
       );
     } else {
-      return recruitsList.filter((athlete: any) => {
-        const fullName = `${athlete.first_name || ''} ${athlete.last_name || ''}`.trim().toLowerCase();
-        const schoolName = (athlete.high_school || '').toLowerCase();
-        const q = searchQuery.toLowerCase();
-        const searchMatch = !searchQuery || fullName.includes(q) || schoolName.includes(q);
-        const stateMatch = !filterAthleteState || athlete.state === filterAthleteState;
-        const gradYearMatch = !filterGradYear || athlete.grad_year?.toString() === filterGradYear;
-        const sportMatch = !filterSport || athlete.athlete_sports?.some((s: any) => s.sport_name === filterSport);
-        return searchMatch && stateMatch && gradYearMatch && sportMatch;
-      });
+      const { minGradYear, maxGradYear } = gradYearBounds;
+
+      return recruitsList
+        .filter((athlete: any) => {
+          // 1. Must be verified (trust_level > 0)
+          const isVerified = Number(athlete.trust_level ?? 0) > 0;
+          if (!isVerified) return false;
+
+          // 2. Must fall within current eligible graduation class window (e.g., 2027 - 2031)
+          const gradYearNum = Number(athlete.grad_year);
+          const isCurrentClass =
+            !Number.isNaN(gradYearNum) &&
+            gradYearNum >= minGradYear &&
+            gradYearNum <= maxGradYear;
+          if (!isCurrentClass) return false;
+
+          // 3. Search & dropdown filters
+          const fullName = `${athlete.first_name || ''} ${athlete.last_name || ''}`.trim().toLowerCase();
+          const schoolName = (athlete.high_school || '').toLowerCase();
+          const q = searchQuery.toLowerCase();
+          const searchMatch = !searchQuery || fullName.includes(q) || schoolName.includes(q);
+          const stateMatch = !filterAthleteState || athlete.state === filterAthleteState;
+          const gradYearMatch = !filterGradYear || gradYearNum.toString() === filterGradYear;
+          const sportMatch = !filterSport || athlete.athlete_sports?.some((s: any) => s.sport_name === filterSport);
+
+          return searchMatch && stateMatch && gradYearMatch && sportMatch;
+        })
+        .sort((a: any, b: any) => {
+          // Most recent login at the top; null/invalid dates pushed to the bottom
+          const timeA = a.last_login_date ? new Date(a.last_login_date).getTime() : 0;
+          const timeB = b.last_login_date ? new Date(b.last_login_date).getTime() : 0;
+          const validTimeA = Number.isNaN(timeA) ? 0 : timeA;
+          const validTimeB = Number.isNaN(timeB) ? 0 : timeB;
+
+          if (validTimeB !== validTimeA) {
+            return validTimeB - validTimeA;
+          }
+          // Tiebreaker: higher trust_level first
+          return Number(b.trust_level ?? 0) - Number(a.trust_level ?? 0);
+        });
     }
-  }, [viewerRole, coachesList, recruitsList, searchQuery, filterAthleteState, filterGradYear, filterSport]);
+  }, [viewerRole, coachesList, recruitsList, searchQuery, filterAthleteState, filterGradYear, filterSport, gradYearBounds]);
 
   return (
     <main className="min-h-screen bg-[#06090F] text-white font-sans pb-32 relative selection:bg-blue-500/30 overflow-hidden">
@@ -206,7 +281,7 @@ export default function NetworkPage() {
                   <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500 group-focus-within:text-indigo-400" />
                   <input
                     type="text"
-                    placeholder={viewerRole === 'coach' ? "Search athletes or high schools..." : "Search college coaches or schools..."}
+                    placeholder={viewerRole === 'coach' ? "Search verified athletes or high schools..." : "Search college coaches or schools..."}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="w-full bg-[#06090F] border border-white/10 hover:border-white/20 rounded-[1.5rem] pl-14 pr-6 py-4 text-white font-bold focus:outline-none focus:border-indigo-500/50 transition-colors"
@@ -253,9 +328,11 @@ export default function NetworkPage() {
                   onChange={e => setFilterGradYear(e.target.value)}
                   className="w-full bg-[#06090F] border border-white/10 text-white text-sm font-bold rounded-xl px-4 py-3.5 focus:outline-none appearance-none cursor-pointer"
                 >
-                  <option value="" className="bg-slate-900">Any Class</option>
-                  {Array.from(new Set(recruitsList.map(r => r.grad_year).filter(Boolean))).sort().map(y => (
-                    <option key={y as string} value={y as string} className="bg-slate-900">Class of {y as string}</option>
+                  <option value="" className="bg-slate-900">
+                    Any Class ({String(gradYearBounds.minGradYear).slice(-2)}–{String(gradYearBounds.maxGradYear).slice(-2)})
+                  </option>
+                  {eligibleGradYearOptions.map(y => (
+                    <option key={y} value={String(y)} className="bg-slate-900">Class of {y}</option>
                   ))}
                 </select>
               </div>
@@ -319,6 +396,8 @@ export default function NetworkPage() {
               filteredDirectory.map((athlete: any) => {
                 const cardStyles = getCardStyles(athlete.equipped_card);
                 const lastSeen = formatLastSeen(athlete.last_login_date);
+                const profileUrl = getAthleteProfileUrl(athlete);
+
                 return (
                   <div
                     key={athlete.id}
@@ -327,12 +406,12 @@ export default function NetworkPage() {
                     {cardStyles.hasGlare && <div className="holo-glare rounded-[2rem] z-0"></div>}
 
                     <div className="flex items-start gap-4 mb-5 relative z-10">
-                      <Link href={`/athlete/${athlete.id}`} className="shrink-0 hover:scale-105 transition-transform block shadow-xl rounded-full bg-slate-900 border-2 border-white/20">
+                      <Link href={profileUrl} className="shrink-0 hover:scale-105 transition-transform block shadow-xl rounded-full bg-slate-900 border-2 border-white/20">
                         <AvatarWithBorder avatarUrl={athlete.avatar_url || ''} sizeClasses="w-16 h-16 shadow-md" borderId={athlete.equipped_border || 'none'} />
                       </Link>
                       <div className="min-w-0 pt-1 w-full">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <Link href={`/athlete/${athlete.id}`} className="text-left font-bold text-lg text-white group-hover:text-indigo-400 transition-colors leading-tight truncate">
+                          <Link href={profileUrl} className="text-left font-bold text-lg text-white group-hover:text-indigo-400 transition-colors leading-tight truncate">
                             {athlete.first_name} {athlete.last_name}
                           </Link>
                           {athlete.is_premium && (
@@ -359,7 +438,7 @@ export default function NetworkPage() {
                       {/* 🚨 DUAL ACTIONS FOR COACHES 🚨 */}
                       <div className="flex gap-2 w-full">
                         <Link 
-                          href={`/athlete/${athlete.id}`} 
+                          href={profileUrl} 
                           className="flex-1 bg-black/30 hover:bg-black/50 text-white border border-white/10 font-black py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5 text-xs"
                         >
                           <UserCircle2 className="w-4 h-4" /> Profile

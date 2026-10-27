@@ -274,11 +274,24 @@ export default function ProfilePage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!isMounted) return; 
 
-      if (!session) { router.push('/login'); return; }
+      if (!session) {
+        router.push('/login');
+        return;
+      }
       const authEmail = session?.user?.email || '';
 
-      const { data: athleteData } = await supabase.from('athletes').select('*').eq('id', session.user.id).maybeSingle();
+      // Check both coaches and athletes tables in parallel
+      const [{ data: coachData }, { data: athleteData }] = await Promise.all([
+        supabase.from('coaches').select('id').eq('id', session.user.id).maybeSingle(),
+        supabase.from('athletes').select('*').eq('id', session.user.id).maybeSingle()
+      ]);
       if (!isMounted) return;
+
+      // Redirect coaches directly to their coach dashboard
+      if (coachData) {
+        router.replace('/dashboard/coach');
+        return;
+      }
 
       if (athleteData) {
         // Hydrate Basic Identity & Location Form
@@ -294,7 +307,7 @@ export default function ProfilePage() {
         });
 
         if (athleteData.custom_slug) {
-            setSlugStatus('available');
+          setSlugStatus('available');
         }
 
         // Hydrate Academic Portfolio
@@ -307,8 +320,8 @@ export default function ProfilePage() {
           if (typeof val === 'string') return `${val}${suffixCat}`.trim();
           if (typeof val === 'object') {
             if (val.type === 'HS_Team' || val.type === 'Club_Team') {
-               const teamType = val.type === 'HS_Team' ? 'HS Team' : 'Club';
-               return `${val.placement} - ${val.level} ${teamType}${suffixCat}`;
+              const teamType = val.type === 'HS_Team' ? 'HS Team' : 'Club';
+              return `${val.placement} - ${val.level} ${teamType}${suffixCat}`;
             }
             if (val.type === 'Individual') return `${val.placement} - ${val.level} Ind.${suffixCat}`;
             if (val.type === 'Honor') return `${val.text}${suffixCat}`;
@@ -327,8 +340,8 @@ export default function ProfilePage() {
             
             if (parsedResume.accolades && Array.isArray(parsedResume.accolades)) {
               parsedResume.accolades.forEach((a: any) => {
-                 const cleanText = sanitizeAccoladeText(a, 'General');
-                 if (cleanText) masterAccolades.push({ text: cleanText, category: 'General' });
+                const cleanText = sanitizeAccoladeText(a, 'General');
+                if (cleanText) masterAccolades.push({ text: cleanText, category: 'General' });
               });
             }
           } catch (e: any) {
@@ -349,10 +362,10 @@ export default function ProfilePage() {
               try { parsedMetaContext = row.meta_context ? (typeof row.meta_context === 'string' ? JSON.parse(row.meta_context) : row.meta_context) : {}; } catch (e: any) {}
               
               if (parsedMetaContext.accolades && Array.isArray(parsedMetaContext.accolades)) {
-                 parsedMetaContext.accolades.forEach((a: any) => {
-                   const cleanText = sanitizeAccoladeText(a, row.sport_name);
-                   if (cleanText) masterAccolades.push({ text: cleanText, category: row.sport_name });
-                 });
+                parsedMetaContext.accolades.forEach((a: any) => {
+                  const cleanText = sanitizeAccoladeText(a, row.sport_name);
+                  if (cleanText) masterAccolades.push({ text: cleanText, category: row.sport_name });
+                });
               }
 
               mappedSportStats[row.sport_name] = {
@@ -436,11 +449,11 @@ export default function ProfilePage() {
             list.push({ id: `track-${m.name}-${metricIdx}`, label: m.name, value: m.value, source: 'Track', score, ...styles, levelUpMessage });
             
           } else if (sport === 'Swimming & Diving') {
-             const evalResult = evaluateMetric(genderKey, sport, m.name, m.value, 'Varsity');
-             const score = m.score || evalResult?.score || stats.calculatedRating || 0; 
-             const styles = getTierStyles(score);
-             const levelUpMessage = score >= 95 ? "👑 MAX TIER REACHED. Elite standard metrics." : `Earn a faster time to reach the ${styles.nextTier} bracket.`;
-             list.push({ id: `swim-${m.name}-${metricIdx}`, label: m.name, value: m.value, source: 'Swim', score, ...styles, levelUpMessage });
+            const evalResult = evaluateMetric(genderKey, sport, m.name, m.value, 'Varsity');
+            const score = m.score || evalResult?.score || stats.calculatedRating || 0; 
+            const styles = getTierStyles(score);
+            const levelUpMessage = score >= 95 ? "👑 MAX TIER REACHED. Elite standard metrics." : `Earn a faster time to reach the ${styles.nextTier} bracket.`;
+            list.push({ id: `swim-${m.name}-${metricIdx}`, label: m.name, value: m.value, source: 'Swim', score, ...styles, levelUpMessage });
 
           } else {
             const evalResult = evaluateMetric(genderKey, sport, m.name, m.value, stats.level || 'Varsity');
@@ -460,9 +473,9 @@ export default function ProfilePage() {
   }, [sportStats, userSports, genderKey]);
 
   useEffect(() => {
-     if (selectedMetrics.length === 0 && allAvailableMetrics.length > 0) {
-        setSelectedMetrics(allAvailableMetrics.slice(0, 4).map(m => m.label));
-     }
+    if (selectedMetrics.length === 0 && allAvailableMetrics.length > 0) {
+      setSelectedMetrics(allAvailableMetrics.slice(0, 4).map(m => m.label));
+    }
   }, [allAvailableMetrics, selectedMetrics.length]);
 
   const readiness = useMemo(() => {
@@ -487,11 +500,11 @@ export default function ProfilePage() {
       
       // Keep username synchronized if base name changes structurally
       if (profileForm.custom_slug && !profileForm.custom_slug.startsWith(baseName)) {
-          setProfileForm(prev => ({ ...prev, custom_slug: baseName }));
-          setSlugStatus(baseName === athleteProfile?.custom_slug ? 'available' : 'checking');
+        setProfileForm(prev => ({ ...prev, custom_slug: baseName }));
+        setSlugStatus(baseName === athleteProfile?.custom_slug ? 'available' : 'checking');
       } else if (!profileForm.custom_slug && !isSlugManuallyEdited) {
-          setProfileForm(prev => ({ ...prev, custom_slug: baseName }));
-          setSlugStatus(baseName === athleteProfile?.custom_slug ? 'available' : 'checking');
+        setProfileForm(prev => ({ ...prev, custom_slug: baseName }));
+        setSlugStatus(baseName === athleteProfile?.custom_slug ? 'available' : 'checking');
       }
     }
   }, [profileForm.first_name, profileForm.last_name]);
@@ -532,14 +545,14 @@ export default function ProfilePage() {
 
   // --- PAGE LEAVE VALIDATION (Passive Banner Check) ---
   const isProfileComplete = Boolean(
-      profileForm.first_name && 
-      profileForm.last_name && 
-      profileForm.grad_year && profileForm.grad_year.length === 4 &&
-      profileForm.city && 
-      profileForm.state && 
-      profileForm.gender && 
-      profileForm.custom_slug && 
-      slugStatus === 'available'
+    profileForm.first_name && 
+    profileForm.last_name && 
+    profileForm.grad_year && profileForm.grad_year.length === 4 &&
+    profileForm.city && 
+    profileForm.state && 
+    profileForm.gender && 
+    profileForm.custom_slug && 
+    slugStatus === 'available'
   );
 
   // Dynamic Validation Styling Helper
@@ -569,7 +582,7 @@ export default function ProfilePage() {
 
     // Verification check intercept
     if (athleteProfile?.trust_level !== 1) {
-      showToast("Verify email to view portfolio.", "error"); // Cleaned up toast message for mobile
+      showToast("Verify email to view portfolio.", "error");
       setIsEmailVerificationModalOpen(true);
       return;
     }
@@ -689,10 +702,10 @@ export default function ProfilePage() {
       }));
 
       if (isSlugChanged) {
-         setSlugCooldown(15);
-         showToast("Username updated. Synchronizing public URL...", "success");
+        setSlugCooldown(15);
+        showToast("Username updated. Synchronizing public URL...", "success");
       } else {
-         showToast("Profile details updated.", "success");
+        showToast("Profile details updated.", "success");
       }
     } catch (err: any) {
       showToast(err.message || "Failed to save profile.", "error");
@@ -773,8 +786,8 @@ export default function ProfilePage() {
     setSelectedAccolades(prev => prev.filter(a => a !== accObj.text));
 
     if (accObj.category === 'General') {
-       const generalAccs = newAccs.filter(a => a.category === 'General').map(a => a.text);
-       autoSavePortfolio({ accolades: generalAccs });
+      const generalAccs = newAccs.filter(a => a.category === 'General').map(a => a.text);
+      autoSavePortfolio({ accolades: generalAccs });
     }
     showToast("Honor removed from record.", "success");
   };
@@ -857,7 +870,7 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {/* Toast System (Updated to rounded-2xl to fix mobile wrapping circle UI bug) */}
+      {/* Toast System */}
       {toast && (
         <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[9999] animate-in slide-in-from-top-5 fade-in duration-300 w-full max-w-sm px-4">
           <div className={`rounded-2xl px-6 py-4 shadow-2xl flex items-center gap-3 font-bold text-sm border mx-auto ${toast.type === 'error' ? 'bg-red-900 text-white border-red-700' : 'bg-slate-900 text-white border-slate-700'}`}>
@@ -1201,7 +1214,7 @@ export default function ProfilePage() {
                         )}
                      </div>
                      
-                     {/* Locked Email Block (Updated with direct Fallback and Verify Option) */}
+                     {/* Locked Email Block */}
                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 sm:col-span-2 flex items-center justify-between gap-4 group">
                        <div className="min-w-0 flex-1">
                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Contact Email</label>
@@ -1349,8 +1362,8 @@ export default function ProfilePage() {
                                <div key={`sel-acc-${i}`} className={`flex items-center justify-between pr-2 rounded-xl border transition-all ${selectedAccolades.includes(acc.text) ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-100 hover:border-slate-300'}`}>
                                   <button onClick={() => handleToggleAccolade(acc.text)} className="flex-1 flex items-center justify-between p-3 text-left">
                                      <div className="flex items-center gap-2 truncate pr-2">
-                                       <span className={`text-[9px] font-black uppercase tracking-widest text-white px-2 py-0.5 rounded shadow-sm shrink-0 ${acc.category === 'General' ? 'bg-slate-800' : 'bg-blue-600'}`}>{acc.category === 'General' ? 'Academic' : 'Athletic'}</span>
-                                       <span className="text-xs font-bold text-slate-800 truncate">{acc.text}</span>
+                                        <span className={`text-[9px] font-black uppercase tracking-widest text-white px-2 py-0.5 rounded shadow-sm shrink-0 ${acc.category === 'General' ? 'bg-slate-800' : 'bg-blue-600'}`}>{acc.category === 'General' ? 'Academic' : 'Athletic'}</span>
+                                        <span className="text-xs font-bold text-slate-800 truncate">{acc.text}</span>
                                      </div>
                                      {selectedAccolades.includes(acc.text) ? <CheckSquare className="w-5 h-5 text-emerald-500 shrink-0" /> : <Square className="w-5 h-5 text-slate-300 shrink-0" />}
                                   </button>

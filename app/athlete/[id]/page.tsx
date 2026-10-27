@@ -31,66 +31,107 @@ interface ServerAthleteSeoData {
   trust_level: number;
   avatar_url: string | null;
   custom_slug: string | null;
-  sports: string[] | null;
   saved_resume: string | null;
   active_sports: ServerAthleteSport[];
 }
 
-async function getAthleteSeoData(idParam: string): Promise<ServerAthleteSeoData | null> {
+interface AthleteLookupResult {
+  athlete: ServerAthleteSeoData | null;
+   definitelyNotFound: boolean;
+}
+
+async function getAthleteSeoData(idParam: string): Promise<AthleteLookupResult> {
   const id = decodeURIComponent(idParam).trim();
+  if (!id) {
+    return { athlete: null, definitelyNotFound: true };
+  }
+
   const isUUID = UUID_REGEX.test(id);
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  if (!supabaseUrl || !supabaseKey) return null;
+  if (!supabaseUrl || !supabaseKey) {
+    console.error('❌ [AthletePage SEO] Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY');
+    return { athlete: null, definitelyNotFound: false };
+  }
 
-  const column = isUUID ? 'id' : 'custom_slug';
-  const athleteUrl = `${supabaseUrl}/rest/v1/athletes?${column}=eq.${encodeURIComponent(id)}&select=id,first_name,last_name,high_school,state,grad_year,gender,trust_level,avatar_url,custom_slug,sports,saved_resume`;
+  const headers = {
+    apikey: supabaseKey,
+    Authorization: `Bearer ${supabaseKey}`,
+  };
 
   try {
-    const res = await fetch(athleteUrl, {
-      headers: {
-        apikey: supabaseKey,
-        Authorization: `Bearer ${supabaseKey}`,
-      },
-      next: { revalidate: 1800 },
+    // 1. Query athlete using select=* so PostgREST never 400s on column mismatches
+    const column = isUUID ? 'id' : 'custom_slug';
+    const primaryUrl = `${supabaseUrl}/rest/v1/athletes?${column}=eq.${encodeURIComponent(id)}&select=*`;
+
+    const res = await fetch(primaryUrl, {
+      headers,
+      cache: 'no-store',
     });
 
-    if (!res.ok) return null;
-    const data = await res.json();
-    const athlete = data?.[0];
-    if (!athlete) return null;
+    if (!res.ok) {
+      const errBody = await res.text();
+      console.error(`❌ [AthletePage SEO] Supabase query error (${res.status}):`, errBody);
+      return { athlete: null, definitelyNotFound: false };
+    }
 
-    // Fetch active sports & PR metrics on the server so Googlebot sees full stats in raw HTML
-    const sportsUrl = `${supabaseUrl}/rest/v1/athlete_sports?athlete_id=eq.${encodeURIComponent(athlete.id)}&is_active=eq.true&select=sport_name,position,level_of_play,athleticism_tier,metrics`;
+    let data = await res.json();
+    let athlete = data?.[0];
+
+    // 2. If lookup was by custom_slug and exact case didn't match, try case-insensitive ilike
+    if (!athlete && !isUUID) {
+      const fallbackSlugUrl = `${supabaseUrl}/rest/v1/athletes?custom_slug=ilike.${encodeURIComponent(id)}&select=*`;
+      const fallbackRes = await fetch(fallbackSlugUrl, {
+        headers,
+        cache: 'no-store',
+      });
+
+      if (fallbackRes.ok) {
+        const fallbackData = await fallbackRes.json();
+        athlete = fallbackData?.[0];
+      }
+    }
+
+    // 3. Confirm true 404 ONLY when Supabase responded 200 OK with 0 matching rows
+    if (!athlete) {
+      return { athlete: null, definitelyNotFound: true };
+    }
+
+    // 4. Fetch active sports & PR metrics on the server so Googlebot sees full stats in raw HTML
+    const sportsUrl = `${supabaseUrl}/rest/v1/athlete_sports?athlete_id=eq.${encodeURIComponent(
+      athlete.id
+    )}&is_active=eq.true&select=*`;
+
     const sportsRes = await fetch(sportsUrl, {
-      headers: {
-        apikey: supabaseKey,
-        Authorization: `Bearer ${supabaseKey}`,
-      },
-      next: { revalidate: 1800 },
+      headers,
+      cache: 'no-store',
     });
 
     const activeSports: ServerAthleteSport[] = sportsRes.ok ? await sportsRes.json() : [];
 
     return {
-      ...athlete,
-      active_sports: activeSports || [],
+      athlete: {
+        ...athlete,
+        active_sports: activeSports || [],
+      },
+      definitelyNotFound: false,
     };
   } catch (error) {
-    return null;
+    console.error('❌ [AthletePage SEO] Unexpected fetch exception:', error);
+    return { athlete: null, definitelyNotFound: false };
   }
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params;
-  const athlete = await getAthleteSeoData(id);
+  const { athlete } = await getAthleteSeoData(id);
 
   if (!athlete) {
     return {
-      title: 'Athlete Portfolio Not Found | ChasedSports',
-      description: 'This athletic portfolio could not be found or has been removed.',
+      title: 'Athlete Portfolio | ChasedSports',
+      description: 'View official high school athletic recruiting portfolios, verified PRs, and rankings on ChasedSports.',
       robots: { index: false, follow: false },
     };
   }
@@ -98,15 +139,15 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   // 🚨 STRICT INDEXING RULE: Only index verified athletes (trust_level === 1)
   const isVerified = Number(athlete.trust_level) === 1;
 
-  const fullName = `${athlete.first_name} ${athlete.last_name}`.trim();
+  const fullName = `${athlete.first_name || ''} ${athlete.last_name || ''}`.trim() || 'Student-Athlete';
   const topMetricsSummary = athlete.active_sports
     ?.flatMap((s) => s.metrics || [])
     .slice(0, 4)
     .map((m) => `${m.name}: ${m.value}`)
     .join(', ');
 
-  const title = `${fullName} | ${athlete.high_school} (${athlete.state}) Track & Field Recruiting Profile | ChasedSports`;
-  const description = `${fullName} (Class of ${athlete.grad_year || '202X'}) official verified athletic recruiting portfolio from ${athlete.high_school} in ${athlete.state}.${
+  const title = `${fullName} | ${athlete.high_school || 'High School'} (${athlete.state || 'US'}) Track & Field Recruiting Profile | ChasedSports`;
+  const description = `${fullName} (Class of ${athlete.grad_year || '202X'}) official verified athletic recruiting portfolio from ${athlete.high_school || 'High School'} in ${athlete.state || 'US'}.${
     topMetricsSummary ? ` Verified PRs & Stats: ${topMetricsSummary}.` : ''
   } View national rankings, recruiting standards, and highlight film on ChasedSports.`;
 
@@ -120,10 +161,10 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
     keywords: [
       fullName,
       `${fullName} Track and Field`,
-      `${fullName} ${athlete.high_school}`,
+      `${fullName} ${athlete.high_school || ''}`.trim(),
       `${fullName} Recruiting Profile`,
       `${fullName} PRs`,
-      `${athlete.high_school} Track and Field`,
+      `${athlete.high_school || ''} Track and Field`.trim(),
       `ChasedSports ${fullName}`,
     ],
     robots: {
@@ -162,20 +203,26 @@ export default async function AthletePage({ params }: { params: Promise<{ id: st
   const decodedId = decodeURIComponent(id).trim();
   const isUUID = UUID_REGEX.test(decodedId);
 
-  const athlete = await getAthleteSeoData(decodedId);
+  const { athlete, definitelyNotFound } = await getAthleteSeoData(decodedId);
 
-  // 🚨 Return a real HTTP 404 when athlete doesn't exist to prevent Google Soft 404 penalties
-  if (!athlete) {
+  // 🚨 Return a real HTTP 404 ONLY when Supabase confirms the athlete row does not exist
+  if (definitelyNotFound) {
     notFound();
   }
 
-  // 🚨 Consolidate duplicate URLs: If accessed via UUID and athlete has a custom_slug, 308 redirect to custom_slug
-  if (isUUID && athlete.custom_slug && String(athlete.custom_slug).trim() !== '') {
-    permanentRedirect(`/athlete/${encodeURIComponent(String(athlete.custom_slug).trim())}`);
+  // If a transient server/env error occurred, still render AthleteClient so the browser can load the profile
+  if (!athlete) {
+    return <AthleteClient />;
   }
 
-  const fullName = `${athlete.first_name} ${athlete.last_name}`.trim();
-  const canonicalSlug = athlete.custom_slug ? String(athlete.custom_slug).trim() : athlete.id;
+  // 🚨 Consolidate duplicate URLs: If accessed via UUID and athlete has a valid custom_slug, 308 redirect to custom_slug
+  const cleanCustomSlug = athlete.custom_slug ? String(athlete.custom_slug).trim() : '';
+  if (isUUID && cleanCustomSlug !== '' && cleanCustomSlug.toLowerCase() !== decodedId.toLowerCase()) {
+    permanentRedirect(`/athlete/${encodeURIComponent(cleanCustomSlug)}`);
+  }
+
+  const fullName = `${athlete.first_name || ''} ${athlete.last_name || ''}`.trim();
+  const canonicalSlug = cleanCustomSlug !== '' ? cleanCustomSlug : athlete.id;
   const profileUrl = `${BASE_SITE_URL}/athlete/${encodeURIComponent(canonicalSlug)}`;
   const absoluteAvatarUrl = getAbsoluteUrl(athlete.avatar_url) || `${BASE_SITE_URL}/icon.png`;
 
@@ -207,7 +254,7 @@ export default async function AthletePage({ params }: { params: Promise<{ id: st
       knowsAbout:
         athlete.active_sports?.length > 0
           ? athlete.active_sports.map((s) => s.sport_name)
-          : athlete.sports || ['Track & Field', 'Cross Country', 'Athletics'],
+          : ['Track & Field', 'Cross Country', 'Athletics'],
       ...(allMetrics.length > 0 && {
         additionalProperty: allMetrics.map((m) => ({
           '@type': 'PropertyValue',

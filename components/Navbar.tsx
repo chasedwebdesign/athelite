@@ -234,7 +234,7 @@ export default function Navbar() {
         setIsAthlete(false);
         setIsAuthLoading(false);
 
-        if (pathname === '/') {
+        if (pathname === '/' || pathname.startsWith('/dashboard/team')) {
           router.replace('/dashboard/coach');
         }
       } else {
@@ -383,7 +383,7 @@ export default function Navbar() {
               <Flame className="w-4 h-4 mr-1.5" /> <span className="hidden lg:inline">Feed</span>
             </Link>
 
-            {session && (
+            {session && isAthlete && (
               <Link href="/dashboard/team" className={`text-sm font-bold flex items-center whitespace-nowrap transition-colors ${isActive('/dashboard/team') ? 'text-emerald-600' : 'text-slate-500 hover:text-emerald-600'}`}>
                 <Shield className="w-4 h-4 mr-1.5" /> <span className="hidden lg:inline">Teams</span>
               </Link>
@@ -598,12 +598,12 @@ export default function Navbar() {
                 <span className="font-bold text-slate-700 text-sm">College Finder</span>
               </Link>
 
-              <Link href="/feed" onClick={closeMobileMenu} className={`border p-4 rounded-2xl flex flex-col items-center justify-center gap-2 transition-colors ${session ? 'col-span-1' : 'col-span-2'} ${isActive('/feed') ? 'bg-orange-50 border-orange-200' : 'bg-slate-50 hover:bg-orange-50 border-slate-100'}`}>
+              <Link href="/feed" onClick={closeMobileMenu} className={`border p-4 rounded-2xl flex flex-col items-center justify-center gap-2 transition-colors ${session && isAthlete ? 'col-span-1' : 'col-span-2'} ${isActive('/feed') ? 'bg-orange-50 border-orange-200' : 'bg-slate-50 hover:bg-orange-50 border-slate-100'}`}>
                 <Flame className="w-6 h-6 text-orange-500" />
                 <span className="font-bold text-slate-700 text-sm">Feed</span>
               </Link>
 
-              {session && (
+              {session && isAthlete && (
                 <Link href="/dashboard/team" onClick={closeMobileMenu} className={`border p-4 rounded-2xl flex flex-col items-center justify-center gap-2 transition-colors col-span-1 ${isActive('/dashboard/team') ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 hover:bg-emerald-50 border-slate-100'}`}>
                   <Shield className="w-6 h-6 text-emerald-500" />
                   <span className="font-bold text-slate-700 text-sm">Team HQ</span>
